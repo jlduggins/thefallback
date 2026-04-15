@@ -256,6 +256,38 @@
         </div>
       </section>
 
+      <!-- Journey Detail Panel -->
+      <div id="journey-detail-panel" style="
+  display:none;
+  position:fixed;
+  z-index:600;
+  background:var(--bg,#f2f0eb);
+  overflow:hidden;
+  flex-direction:column;
+  /* Desktop: sits to the right of the drawer */
+  top:0; bottom:0;
+  left:320px; right:0;
+  max-width:380px;
+  border-right:1px solid var(--border);
+  box-shadow:4px 0 20px rgba(0,0,0,0.1);
+">
+  <!-- Content injected by Trips.openJourneyDetail() -->
+</div>
+
+<!-- Mobile: override to full-height panel from bottom -->
+<style>
+@media (max-width: 640px) {
+  #journey-detail-panel {
+    left: 0 !important;
+    right: 0 !important;
+    max-width: 100% !important;
+    top: 60px !important;
+    border-right: none !important;
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.15) !important;
+  }
+}
+</style>
+
       <!-- ═══════════════════════════════════════════════════════════════════
            TRIPS VIEW
            ═══════════════════════════════════════════════════════════════════ -->
