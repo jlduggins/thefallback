@@ -10,12 +10,12 @@ import { getFirestore, collection, doc, setDoc, getDoc, deleteDoc, updateDoc, on
 
 // Firebase config
 const firebaseConfig = {
-  apiKey: "AIzaSyAXrhjv1t3520X7QKiVI0qqeMAvpWS5Rdw",
-  authDomain: "gen-lang-client-0165143367.firebaseapp.com",
-  projectId: "gen-lang-client-0165143367",
-  storageBucket: "gen-lang-client-0165143367.firebasestorage.app",
+  apiKey:            "AIzaSyAXrhjv1t3520X7QKiVI0qqeMAvpWS5Rdw",
+  authDomain:        "gen-lang-client-0165143367.firebaseapp.com",
+  projectId:         "gen-lang-client-0165143367",
+  storageBucket:     "gen-lang-client-0165143367.firebasestorage.app",
   messagingSenderId: "659366672596",
-  appId: "1:659366672596:web:9a8fe8502a0769fdafe341"
+  appId:             "1:659366672596:web:9a8fe8502a0769fdafe341"
 };
 
 // Initialize Firebase
