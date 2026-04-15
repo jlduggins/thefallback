@@ -1,0 +1,325 @@
+/**
+ * The Fallback v2 - Responsive Styles
+ * Mobile and desktop breakpoints
+ */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MOBILE FIRST (Default styles are mobile)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Small phones */
+@media (max-width: 374px) {
+  :root {
+    --text-3xl: 22px;
+    --text-2xl: 18px;
+    --space-4: 14px;
+  }
+  
+  .nearby-card {
+    min-width: 120px;
+  }
+  
+  .trip-stat {
+    padding: var(--space-2);
+  }
+  
+  .trip-stat-value {
+    font-size: var(--text-base);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TABLET (768px+)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@media (min-width: 768px) {
+  /* App layout becomes horizontal with sidebar */
+  #app.authenticated {
+    flex-direction: row;
+  }
+  
+  #main-content {
+    padding-bottom: 0;
+  }
+  
+  /* Views can have side panels */
+  .view {
+    flex-direction: row;
+  }
+  
+  /* Explore view: left panel + map */
+  #view-explore {
+    flex-direction: row;
+  }
+  
+  #view-explore .explore-panel {
+    width: var(--panel-width);
+    flex-shrink: 0;
+    border-right: 1px solid var(--color-border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  
+  #view-explore .explore-map {
+    flex: 1;
+    position: relative;
+  }
+  
+  /* Saved view: full map with floating panels */
+  #view-saved .locations-sheet {
+    position: absolute;
+    left: var(--space-4);
+    bottom: var(--space-4);
+    right: auto;
+    width: 320px;
+    max-height: calc(100% - var(--space-8));
+    border-radius: var(--radius-xl);
+  }
+  
+  /* Location detail slides from right */
+  #location-detail {
+    position: absolute;
+    right: var(--space-4);
+    top: var(--space-4);
+    bottom: var(--space-4);
+    width: 340px;
+    border-radius: var(--radius-xl);
+    transform: translateX(calc(100% + var(--space-4)));
+  }
+  
+  #location-detail.visible {
+    transform: translateX(0);
+  }
+  
+  /* Trips view: wider cards */
+  .trips-list {
+    max-width: 600px;
+  }
+  
+  .current-trip-card {
+    padding: var(--space-6);
+  }
+  
+  /* Settings view: centered content */
+  #view-settings .view-content {
+    max-width: 600px;
+    margin: 0 auto;
+  }
+  
+  /* Modals: use center style instead of sheet */
+  .modal-sheet {
+    bottom: auto;
+    left: 50%;
+    top: 50%;
+    right: auto;
+    width: 90%;
+    max-width: 480px;
+    max-height: 85vh;
+    border-radius: var(--radius-xl);
+    transform: translate(-50%, -50%) scale(0.95);
+  }
+  
+  .modal-sheet.visible {
+    transform: translate(-50%, -50%) scale(1);
+  }
+  
+  .modal-sheet .modal-handle {
+    display: none;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   DESKTOP (1024px+)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@media (min-width: 1024px) {
+  /* Wider panels */
+  #view-explore .explore-panel {
+    width: 360px;
+  }
+  
+  #view-saved .locations-sheet {
+    width: 360px;
+  }
+  
+  #location-detail {
+    width: 380px;
+  }
+  
+  /* Larger nearby cards */
+  .nearby-card {
+    min-width: 180px;
+  }
+  
+  .nearby-card-image {
+    height: 100px;
+  }
+  
+  /* Trip cards in grid */
+  .trips-list {
+    max-width: 800px;
+  }
+  
+  .trips-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-4);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LARGE DESKTOP (1440px+)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@media (min-width: 1440px) {
+  #view-explore .explore-panel {
+    width: 400px;
+  }
+  
+  .nearby-scroll {
+    flex-wrap: wrap;
+  }
+  
+  .nearby-card {
+    min-width: 200px;
+    flex: 1;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LANDSCAPE PHONE
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@media (max-height: 500px) and (orientation: landscape) {
+  #bottom-nav {
+    height: 56px;
+    padding-bottom: var(--space-2);
+  }
+  
+  .nav-item-add .add-btn {
+    width: 48px;
+    height: 48px;
+  }
+  
+  .nav-item-add {
+    margin-top: -16px;
+  }
+  
+  .modal-sheet {
+    max-height: 95vh;
+  }
+  
+  .view-header {
+    padding: var(--space-3);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   HOVER STATES (non-touch devices)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@media (hover: hover) {
+  .nav-item:hover {
+    color: var(--color-primary);
+  }
+  
+  .location-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+  }
+  
+  .nearby-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+  }
+  
+  .chip:hover {
+    background: var(--color-border);
+  }
+  
+  .btn:hover {
+    transform: translateY(-1px);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TOUCH OPTIMIZATIONS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@media (hover: none) {
+  /* Larger touch targets */
+  .btn {
+    min-height: 44px;
+  }
+  
+  .input {
+    min-height: 44px;
+  }
+  
+  .nav-item {
+    min-width: 48px;
+  }
+  
+  /* Remove hover effects that might stick */
+  .location-card:hover {
+    transform: none;
+    box-shadow: var(--shadow-sm);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   REDUCED MOTION
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   HIGH CONTRAST MODE
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@media (prefers-contrast: high) {
+  :root {
+    --color-border: #666;
+    --color-text-muted: #555;
+  }
+  
+  .btn-outline {
+    border-width: 2px;
+  }
+  
+  .location-card {
+    border: 1px solid var(--color-border);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PRINT STYLES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@media print {
+  #bottom-nav,
+  #sidebar-nav,
+  .map-controls,
+  .modal-backdrop,
+  .modal {
+    display: none !important;
+  }
+  
+  body {
+    background: white;
+  }
+  
+  .view {
+    display: block !important;
+    overflow: visible !important;
+  }
+}
