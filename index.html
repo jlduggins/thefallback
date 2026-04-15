@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#2d5a47">
+  <title>The Fallback</title>
+  
+  <!-- Icons -->
+  <link rel="icon" type="image/png" href="./icons/logo.png">
+  <link rel="apple-touch-icon" href="./icons/logo.png">
+  <link rel="manifest" href="./manifest.json">
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700&display=swap" rel="stylesheet">
+  
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  
+  <!-- App Styles -->
+  <link rel="stylesheet" href="./css/tokens.css">
+  <link rel="stylesheet" href="./css/base.css">
+  <link rel="stylesheet" href="./css/layout.css">
+  <link rel="stylesheet" href="./css/components.css">
+  <link rel="stylesheet" href="./css/responsive.css">
+</head>
+<body>
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       LOADING SCREEN
+       ═══════════════════════════════════════════════════════════════════════ -->
+  <div id="loading-screen">
+    <div class="logo">
+      <img src="./icons/logo.png" alt="">
+      <div class="logo-text">
+        <span class="the">The</span> <span class="fallback">Fallback</span>
+      </div>
+    </div>
+    <div class="spinner"></div>
+    <div class="loading-text">Loading your adventures...</div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       LOGIN SCREEN
+       ═══════════════════════════════════════════════════════════════════════ -->
+  <div id="login-screen">
+    <div class="logo">
+      <img src="./icons/logo.png" alt="">
+      <div class="logo-text">
+        <span class="the">The</span> <span class="fallback">Fallback</span>
+      </div>
+    </div>
+    <p class="tagline">Plan your route. Save your spots.<br>Always have a backup.</p>
+    <button class="google-btn" onclick="signIn()">
+      <svg width="20" height="20" viewBox="0 0 24 24">
+        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+      </svg>
+      Sign in with Google
+    </button>
+    <div class="login-error"></div>
+    <p class="privacy-note">Your data stays private and syncs across devices</p>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       MAIN APP
+       ═══════════════════════════════════════════════════════════════════════ -->
+  <div id="app">
+    <!-- Sidebar Navigation (Desktop) -->
+    <nav id="sidebar-nav">
+      <div class="sidebar-logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/>
+          <circle cx="12" cy="10" r="3"/>
+        </svg>
+      </div>
+      <div class="sidebar-nav-items">
+        <button class="sidebar-nav-item active" data-view="explore" title="Explore">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>
+          </svg>
+        </button>
+        <button class="sidebar-nav-item" data-view="saved" title="Saved">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/>
+            <circle cx="12" cy="10" r="3"/>
+          </svg>
+        </button>
+        <button class="sidebar-nav-item" data-view="trips" title="Trips">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <polyline points="12 6 12 12 16 14"/>
+          </svg>
+        </button>
+        <button class="sidebar-nav-item" data-view="settings" title="Settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
+          </svg>
+        </button>
+      </div>
+    </nav>
+
+    <!-- Main Content Area -->
+    <main id="main-content">
+      <!-- ═══════════════════════════════════════════════════════════════════
+           EXPLORE VIEW (Home)
+           ═══════════════════════════════════════════════════════════════════ -->
+      <section id="view-explore" class="view active">
+        <header class="view-header">
+          <div class="header-row">
+            <div class="brand">
+              <img src="./icons/logo.png" alt="" class="brand-logo">
+              <div class="brand-text">
+                <span class="the">The</span> <span class="fallback">Fallback</span>
+              </div>
+            </div>
+            <button class="btn btn-ghost btn-icon" onclick="State.setView('settings')">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
+              </svg>
+            </button>
+          </div>
+          
+          <!-- Trip Status Card -->
+          <div id="trip-status-card" class="trip-status-card">
+            <div class="trip-status-header">
+              <div>
+                <div class="trip-status-label">No active trip</div>
+                <div class="trip-status-destination">Start planning your route</div>
+              </div>
+            </div>
+          </div>
+        </header>
+        
+        <div class="view-content">
+          <!-- Nearby Section -->
+          <div class="section-header">
+            <span class="section-title">Nearby Spots</span>
+            <button class="section-action" onclick="State.setView('saved')">See all</button>
+          </div>
+          <div id="nearby-scroll" class="nearby-scroll">
+            <!-- Populated by JS -->
+          </div>
+          
+          <!-- Map Preview -->
+          <div class="map-preview" onclick="State.setView('saved')">
+            <button class="map-preview-btn">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/>
+                <line x1="8" y1="2" x2="8" y2="18"/>
+                <line x1="16" y1="6" x2="16" y2="22"/>
+              </svg>
+              Open Map
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════════════
+           SAVED VIEW (Map + List)
+           ═══════════════════════════════════════════════════════════════════ -->
+      <section id="view-saved" class="view">
+        <!-- Map Container -->
+        <div class="map-container">
+          <div id="map"></div>
+          
+          <!-- Map Header -->
+          <div class="map-header">
+            <div class="map-brand">
+              <button class="map-brand-menu btn btn-ghost btn-icon-sm">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="3" y1="12" x2="21" y2="12"/>
+                  <line x1="3" y1="6" x2="21" y2="6"/>
+                  <line x1="3" y1="18" x2="21" y2="18"/>
+                </svg>
+              </button>
+              <div class="map-brand-text">
+                <span class="the">The</span> <span class="fallback">Fallback</span>
+              </div>
+            </div>
+            <div id="marker-count" class="map-count">
+              <strong>0</strong> <span>locations</span>
+            </div>
+          </div>
+          
+          <!-- Map Controls -->
+          <div class="map-controls">
+            <button class="map-control-btn" onclick="MapModule.zoomIn()" title="Zoom in">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="5" x2="12" y2="19"/>
+                <line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+            </button>
+            <button class="map-control-btn" onclick="MapModule.zoomOut()" title="Zoom out">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+            </button>
+            <button class="map-control-btn" onclick="MapModule.centerOnUser()" title="My location">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>
+              </svg>
+            </button>
+            <button class="map-control-btn" onclick="MapModule.toggleSatellite()" title="Toggle satellite">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="7" height="7"/>
+                <rect x="14" y="3" width="7" height="7"/>
+                <rect x="14" y="14" width="7" height="7"/>
+                <rect x="3" y="14" width="7" height="7"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        
+        <!-- Locations Sheet -->
+        <div class="locations-sheet">
+          <div class="sheet-handle"></div>
+          <div class="sheet-header">
+            <span class="sheet-title">Saved Locations</span>
+            <div class="filter-chips">
+              <button class="chip active">All</button>
+              <button class="chip">Nearby</button>
+              <button class="chip">Visited</button>
+            </div>
+          </div>
+          <div id="locations-list" class="sheet-content">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+        
+        <!-- Location Detail Panel -->
+        <div id="location-detail" class="modal-sheet">
+          <div class="modal-handle"></div>
+          <div class="modal-header">
+            <span class="modal-title">Location Details</span>
+            <button class="modal-close" onclick="Entries.closeDetail()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+          <div id="location-detail-content" class="modal-body">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════════════
+           TRIPS VIEW
+           ═══════════════════════════════════════════════════════════════════ -->
+      <section id="view-trips" class="view">
+        <header class="view-header">
+          <h1 class="view-title">Trips</h1>
+          <button class="btn btn-ghost btn-icon" onclick="Trips.openFuelSettingsModal()">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
+            </svg>
+          </button>
+        </header>
+        <div class="view-content">
+          <div id="trips-list" class="trips-list">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══════════════════════════════════════════════════════════════════
+           SETTINGS VIEW
+           ═══════════════════════════════════════════════════════════════════ -->
+      <section id="view-settings" class="view">
+        <header class="view-header">
+          <h1 class="view-title">Settings</h1>
+        </header>
+        <div class="view-content">
+          <!-- User Info -->
+          <div class="user-info">
+            <div id="user-avatar" class="user-avatar">U</div>
+            <div class="user-details">
+              <div id="user-display-name" class="user-name">User</div>
+              <div id="user-email" class="user-email">email@example.com</div>
+            </div>
+          </div>
+          
+          <!-- Fuel Settings -->
+          <div class="settings-section">
+            <div class="settings-section-title">Vehicle</div>
+            <div class="settings-row" onclick="Trips.openFuelSettingsModal()">
+              <span class="settings-row-label">Fuel settings</span>
+              <span id="fuel-summary" class="settings-row-value">Diesel · 18 mpg · $3.89/gal</span>
+            </div>
+          </div>
+          
+          <!-- Account -->
+          <div class="settings-section">
+            <div class="settings-section-title">Account</div>
+            <div class="settings-row">
+              <span class="settings-row-label">Version</span>
+              <span class="settings-row-value">2.0.0</span>
+            </div>
+          </div>
+          
+          <!-- Sign Out -->
+          <button class="btn btn-outline" style="width: 100%; margin-top: var(--space-4);" onclick="signOut()">
+            Sign Out
+          </button>
+        </div>
+      </section>
+    </main>
+
+    <!-- Bottom Navigation (Mobile) -->
+    <nav id="bottom-nav">
+      <button class="nav-item active" data-view="explore">
+        <div class="nav-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>
+          </svg>
+        </div>
+        <span class="nav-label">Explore</span>
+      </button>
+      <button class="nav-item" data-view="saved">
+        <div class="nav-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/>
+            <circle cx="12" cy="10" r="3"/>
+          </svg>
+        </div>
+        <span class="nav-label">Saved</span>
+      </button>
+      <div class="nav-item-add">
+        <button id="nav-add-btn" class="add-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+            <line x1="12" y1="5" x2="12" y2="19"/>
+            <line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+        </button>
+      </div>
+      <button class="nav-item" data-view="trips">
+        <div class="nav-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/>
+            <polyline points="12 6 12 12 16 14"/>
+          </svg>
+        </div>
+        <span class="nav-label">Trips</span>
+      </button>
+      <button class="nav-item" data-view="settings">
+        <div class="nav-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
+          </svg>
+        </div>
+        <span class="nav-label">Settings</span>
+      </button>
+    </nav>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       MODALS
+       ═══════════════════════════════════════════════════════════════════════ -->
+  
+  <!-- Modal Backdrop -->
+  <div id="modal-backdrop" class="modal-backdrop" onclick="UI.closeAllModals()"></div>
+
+  <!-- Add/Edit Location Modal -->
+  <div id="modal-add-location" class="modal modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div>
+        <h2 class="modal-title">Add Location</h2>
+        <p class="modal-subtitle">Drag the pin on the map to set location</p>
+      </div>
+      <button class="modal-close" onclick="UI.closeAddModal()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <!-- Basic Info -->
+      <div class="form-group">
+        <label class="input-label">Name *</label>
+        <input type="text" id="f-name" class="input" placeholder="e.g., Dispersed spot near town">
+      </div>
+      
+      <div class="form-group">
+        <label class="input-label">Address</label>
+        <input type="text" id="f-address" class="input" placeholder="Address or landmark">
+      </div>
+      
+      <div class="form-group">
+        <label class="input-label">Coordinates</label>
+        <input type="text" id="f-coords" class="input" placeholder="Drag pin or enter: lat, lng">
+      </div>
+      
+      <div class="form-row">
+        <div class="form-group">
+          <label class="input-label">Type</label>
+          <select id="f-type" class="input">
+            <option value="Dispersed">Dispersed</option>
+            <option value="National Park">National Park</option>
+            <option value="National Forest">National Forest</option>
+            <option value="State Park">State Park</option>
+            <option value="BLM">BLM Land</option>
+            <option value="Private">Private</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="input-label">Status</label>
+          <select id="f-status" class="input">
+            <option value="planned">Planned</option>
+            <option value="visited">Visited</option>
+            <option value="saved">Saved for Later</option>
+          </select>
+        </div>
+      </div>
+      
+      <div class="form-group">
+        <label class="input-label">Cost per night</label>
+        <input type="number" id="f-cost" class="input" placeholder="0 for free">
+      </div>
+      
+      <!-- Rating -->
+      <div class="form-group">
+        <label class="input-label">Rating</label>
+        <div class="star-rating">
+          <span class="star" data-value="1">★</span>
+          <span class="star" data-value="2">★</span>
+          <span class="star" data-value="3">★</span>
+          <span class="star" data-value="4">★</span>
+          <span class="star" data-value="5">★</span>
+        </div>
+      </div>
+      
+      <!-- Amenities -->
+      <div class="form-group">
+        <label class="input-label">Amenities & Tags</label>
+        <div class="toggle-chips">
+          <label class="toggle-chip" data-amenity="hasPotableWater">
+            <input type="checkbox" name="hasPotableWater">
+            💧 Water
+          </label>
+          <label class="toggle-chip" data-amenity="hasDumpStation">
+            <input type="checkbox" name="hasDumpStation">
+            🚽 Dump
+          </label>
+          <label class="toggle-chip" data-amenity="hasHookups">
+            <input type="checkbox" name="hasHookups">
+            ⚡ Hookups
+          </label>
+          <label class="toggle-chip" data-amenity="hasTrash">
+            <input type="checkbox" name="hasTrash">
+            🗑️ Trash
+          </label>
+          <label class="toggle-chip" data-amenity="hasPets">
+            <input type="checkbox" name="hasPets">
+            🐾 Pets
+          </label>
+          <label class="toggle-chip" data-amenity="needs4x4">
+            <input type="checkbox" name="needs4x4">
+            🚙 4x4
+          </label>
+          <label class="toggle-chip" data-amenity="needsReservations">
+            <input type="checkbox" name="needsReservations">
+            🎫 Reservations
+          </label>
+        </div>
+      </div>
+      
+      <div class="form-group">
+        <label class="input-label">Notes</label>
+        <textarea id="f-notes" class="input" rows="3" placeholder="Any helpful notes..."></textarea>
+      </div>
+      
+      <div class="form-group">
+        <label class="input-label">Link</label>
+        <input type="url" id="f-link" class="input" placeholder="https://...">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" style="flex: 1;" onclick="Entries.saveEntry()">Save Location</button>
+    </div>
+  </div>
+
+  <!-- Delete Confirmation Modal -->
+  <div id="modal-delete-confirm" class="modal modal-center">
+    <div class="modal-header">
+      <h2 class="modal-title">Delete Location?</h2>
+    </div>
+    <div class="modal-body">
+      <p>Are you sure you want to delete <strong id="delete-location-name"></strong>? This cannot be undone.</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="UI.closeDeleteConfirm()">Cancel</button>
+      <button class="btn btn-primary" style="background: var(--color-error);" onclick="UI.confirmDelete()">Delete</button>
+    </div>
+  </div>
+
+  <!-- New Journey Modal -->
+  <div id="modal-new-journey" class="modal modal-center">
+    <div class="modal-header">
+      <h2 class="modal-title">New Journey</h2>
+      <button class="modal-close" onclick="Trips.closeNewJourneyModal()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="input-label">Journey Name</label>
+        <input type="text" id="journey-name" class="input" placeholder="e.g., Summer Road Trip 2025">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="Trips.closeNewJourneyModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="Trips.saveNewJourney()">Create</button>
+    </div>
+  </div>
+
+  <!-- Fuel Settings Modal -->
+  <div id="modal-fuel-settings" class="modal modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <h2 class="modal-title">Fuel Settings</h2>
+      <button class="modal-close" onclick="Trips.closeFuelSettingsModal()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="input-label">Fuel Type</label>
+        <select id="fuel-type" class="input">
+          <option value="Diesel">Diesel</option>
+          <option value="Regular">Regular Gas</option>
+          <option value="Premium">Premium Gas</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="input-label">Average MPG</label>
+        <input type="number" id="fuel-mpg" class="input" value="18" step="0.1">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="input-label">Price per</label>
+          <input type="number" id="fuel-price" class="input" value="3.89" step="0.01">
+        </div>
+        <div class="form-group">
+          <label class="input-label">Unit</label>
+          <select id="fuel-price-unit" class="input">
+            <option value="gal">Gallon</option>
+            <option value="L">Liter</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="input-label">Backup Search Radius (miles)</label>
+        <input type="number" id="backup-radius" class="input" value="30">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" style="flex: 1;" onclick="Trips.saveFuelSettings()">Save</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       TOASTS & BANNERS
+       ═══════════════════════════════════════════════════════════════════════ -->
+  <div id="toast-container" class="toast-container"></div>
+  <div id="offline-banner">You're offline. Changes will sync when connected.</div>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       SCRIPTS
+       ═══════════════════════════════════════════════════════════════════════ -->
+  <script src="./config.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <script src="./js/state.js"></script>
+  <script src="./js/firebase.js"></script>
+  <script src="./js/map.js"></script>
+  <script src="./js/ui.js"></script>
+  <script src="./js/entries.js"></script>
+  <script src="./js/trips.js"></script>
+  <script src="./js/app.js"></script>
+</body>
+</html>
