@@ -4,6 +4,9 @@
  */
 
 const Entries = {
+  // Current filter
+  currentFilter: 'all',
+  
   // ═══════════════════════════════════════════════════════════════════════════
   // INITIALIZATION
   // ═══════════════════════════════════════════════════════════════════════════
@@ -19,6 +22,30 @@ const Entries = {
     
     // Form event listeners
     this.initForm();
+    
+    // Filter chip listeners
+    this.initFilters();
+  },
+  
+  initFilters() {
+    const filterContainer = document.getElementById('location-filters');
+    if (!filterContainer) return;
+    
+    filterContainer.addEventListener('click', (e) => {
+      const chip = e.target.closest('.chip');
+      if (!chip) return;
+      
+      const filter = chip.dataset.filter;
+      if (!filter) return;
+      
+      // Update active state
+      filterContainer.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+      chip.classList.add('active');
+      
+      // Apply filter
+      this.currentFilter = filter;
+      this.renderSavedList();
+    });
   },
   
   updateSelectedCard(selectedId) {
@@ -114,14 +141,30 @@ const Entries = {
     const container = document.getElementById('locations-list');
     if (!container) return;
     
-    const entries = State.entries;
+    let entries = State.entries;
+    
+    // Apply filter
+    if (this.currentFilter === 'nearby') {
+      if (State.userLat && State.userLng) {
+        entries = State.getNearbyEntries(State.userLat, State.userLng, 50);
+      }
+    } else if (this.currentFilter === 'planned') {
+      entries = entries.filter(e => e.status === 'planned');
+    } else if (this.currentFilter === 'visited') {
+      entries = entries.filter(e => e.status === 'visited');
+    }
+    // 'all' shows everything
     
     if (entries.length === 0) {
+      const emptyMessage = this.currentFilter === 'all' 
+        ? 'Tap the + button to add your first camping spot'
+        : `No ${this.currentFilter} locations`;
+      
       container.innerHTML = `
         <div class="empty-state">
           <div class="empty-state-icon">🗺</div>
-          <div class="empty-state-title">No locations yet</div>
-          <div class="empty-state-text">Tap the + button to add your first camping spot</div>
+          <div class="empty-state-title">No locations</div>
+          <div class="empty-state-text">${emptyMessage}</div>
         </div>
       `;
       return;

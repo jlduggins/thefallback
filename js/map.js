@@ -150,16 +150,17 @@ const MapModule = {
   
   getMarkerColor(entry) {
     // Color based on type
+    // Blue = State, Red = Dispersed, Green = Federal (NP/NF/BLM), Grey = Other
     const colors = {
-      'National Park': '#2d5a47',
-      'National Forest': '#3d7a5f',
-      'State Park': '#4a8f6f',
-      'BLM': '#c9a45c',
-      'Dispersed': '#8b9a91',
-      'Private': '#6b7c74',
-      'Other': '#5a6360'
+      'National Park': '#2d5a47',      // Green (Federal)
+      'National Forest': '#2d5a47',    // Green (Federal)
+      'BLM': '#2d5a47',                // Green (Federal)
+      'State Park': '#3b82f6',         // Blue (State)
+      'Dispersed': '#dc2626',          // Red (Dispersed)
+      'Private': '#6b7280',            // Grey (Other)
+      'Other': '#6b7280'               // Grey (Other)
     };
-    return colors[entry.type] || '#2d5a47';
+    return colors[entry.type] || '#6b7280';
   },
   
   highlightMarker(id) {
