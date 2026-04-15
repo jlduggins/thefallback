@@ -1,25 +1,15 @@
 /**
  * The Fallback v2 - Firebase Module
  * Authentication and Firestore database operations
+ * Uses modular SDK to support named database
  */
 
-const Firebase = {
-  // References
-  auth: null,
-  db: null,
-  user: null,
-  
-  // Subscription cleanup
-  entriesUnsub: null,
-  journeysUnsub: null,
-  
-  // ═══════════════════════════════════════════════════════════════════════════
-  // INITIALIZATION
-  // ═══════════════════════════════════════════════════════════════════════════
-  
-  init() {
-    // Firebase config
-    const firebaseConfig = {
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut, browserLocalPersistence, setPersistence } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+import { getFirestore, collection, doc, setDoc, getDoc, deleteDoc, updateDoc, onSnapshot, query, where, getDocs, writeBatch, enableIndexedDbPersistence } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+// Firebase config
+const firebaseConfig = {
   apiKey: "AIzaSyAXrhjv1t3520X7QKiVI0qqeMAvpWS5Rdw",
   authDomain: "gen-lang-client-0165143367.firebaseapp.com",
   projectId: "gen-lang-client-0165143367",
@@ -28,23 +18,49 @@ const Firebase = {
   appId: "1:659366672596:web:9a8fe8502a0769fdafe341"
 };
 
-    
-    // Initialize Firebase
-    firebase.initializeApp(firebaseConfig);
-    this.auth = firebase.auth();
-    this.db = firebase.firestore();
-    
-    // Enable offline persistence
-    this.db.enablePersistence({ synchronizeTabs: true }).catch(err => {
-      if (err.code === 'failed-precondition') {
-        console.warn('Firestore persistence unavailable: multiple tabs open');
-      } else if (err.code === 'unimplemented') {
-        console.warn('Firestore persistence unavailable: browser not supported');
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app, 'ai-studio-c0969653-1687-41bd-9dbc-30380f72c788');
+const googleProvider = new GoogleAuthProvider();
+
+// Set persistence
+setPersistence(auth, browserLocalPersistence).catch(err => console.warn('Auth persistence error:', err));
+
+// Enable offline persistence
+enableIndexedDbPersistence(db).catch(err => {
+  if (err.code === 'failed-precondition') {
+    console.warn('Firestore persistence unavailable: multiple tabs open');
+  } else if (err.code === 'unimplemented') {
+    console.warn('Firestore persistence unavailable: browser not supported');
+  }
+});
+
+const Firebase = {
+  // State
+  user: null,
+  entriesUnsub: null,
+  journeysUnsub: null,
+  
+  // ═══════════════════════════════════════════════════════════════════════════
+  // INITIALIZATION
+  // ═══════════════════════════════════════════════════════════════════════════
+  
+  init() {
+    // Handle redirect result
+    getRedirectResult(auth).then(result => {
+      if (result && result.user) {
+        console.log('Redirect sign-in successful');
+      }
+    }).catch(err => {
+      if (err.code && err.code !== 'auth/no-current-user') {
+        console.error('Redirect error:', err);
+        State.emit('auth:error', err.message);
       }
     });
     
     // Listen for auth state changes
-    this.auth.onAuthStateChanged(user => this.handleAuthChange(user));
+    onAuthStateChanged(auth, user => this.handleAuthChange(user));
   },
   
   // ═══════════════════════════════════════════════════════════════════════════
@@ -67,18 +83,20 @@ const Firebase = {
   
   async signInWithGoogle() {
     try {
-      const provider = new firebase.auth.GoogleAuthProvider();
-      provider.setCustomParameters({ prompt: 'select_account' });
-      await this.auth.signInWithPopup(provider);
+      await signInWithPopup(auth, googleProvider);
     } catch (err) {
-      console.error('Sign in error:', err);
-      State.emit('auth:error', err.message);
+      if (err.code === 'auth/popup-blocked' || err.code === 'auth/popup-closed-by-user' || err.code === 'auth/cancelled-popup-request') {
+        signInWithRedirect(auth, googleProvider);
+      } else {
+        console.error('Sign in error:', err);
+        State.emit('auth:error', err.message);
+      }
     }
   },
   
   async signOut() {
     try {
-      await this.auth.signOut();
+      await signOut(auth);
     } catch (err) {
       console.error('Sign out error:', err);
     }
@@ -109,46 +127,42 @@ const Firebase = {
     if (!uid) return;
     
     // Subscribe to entries
-    this.entriesUnsub = this.db
-      .collection('entries')
-      .where('uid', '==', uid)
-      .onSnapshot(snapshot => {
-        const entries = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-        State.setEntries(entries);
-      }, err => {
-        console.error('Entries subscription error:', err);
-      });
+    const entriesQuery = query(collection(db, 'entries'), where('uid', '==', uid));
+    this.entriesUnsub = onSnapshot(entriesQuery, snapshot => {
+      const entries = snapshot.docs.map(d => ({
+        id: d.id,
+        ...d.data()
+      }));
+      State.setEntries(entries);
+    }, err => {
+      console.error('Entries subscription error:', err);
+    });
     
     // Subscribe to journeys
-    this.journeysUnsub = this.db
-      .collection('journeys')
-      .where('uid', '==', uid)
-      .onSnapshot(snapshot => {
-        const journeys = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
-        
-        // Sort: pinned first, then by creation date
-        journeys.sort((a, b) => {
-          if (a.pinned && !b.pinned) return -1;
-          if (!a.pinned && b.pinned) return 1;
-          return (b.createdAt || 0) - (a.createdAt || 0);
-        });
-        
-        State.setJourneys(journeys);
-        
-        // Set current journey if we have a pinned one
-        const pinned = journeys.find(j => j.pinned);
-        if (pinned && !State.currentJourneyId) {
-          State.setCurrentJourney(pinned.id);
-        }
-      }, err => {
-        console.error('Journeys subscription error:', err);
+    const journeysQuery = query(collection(db, 'journeys'), where('uid', '==', uid));
+    this.journeysUnsub = onSnapshot(journeysQuery, snapshot => {
+      const journeys = snapshot.docs.map(d => ({
+        id: d.id,
+        ...d.data()
+      }));
+      
+      // Sort: pinned first, then by creation date
+      journeys.sort((a, b) => {
+        if (a.pinned && !b.pinned) return -1;
+        if (!a.pinned && b.pinned) return 1;
+        return (b.createdAt || 0) - (a.createdAt || 0);
       });
+      
+      State.setJourneys(journeys);
+      
+      // Set current journey if we have a pinned one
+      const pinned = journeys.find(j => j.pinned);
+      if (pinned && !State.currentJourneyId) {
+        State.setCurrentJourney(pinned.id);
+      }
+    }, err => {
+      console.error('Journeys subscription error:', err);
+    });
   },
   
   unsubscribeFromData() {
@@ -176,20 +190,25 @@ const Firebase = {
       updatedAt: Date.now()
     };
     
-    if (entry.id) {
+    // Remove id from data (it's the doc id, not a field)
+    const docId = entry.id;
+    delete data.id;
+    
+    if (docId) {
       // Update existing
-      await this.db.collection('entries').doc(entry.id).update(data);
-      return entry.id;
+      await setDoc(doc(db, 'entries', docId), data, { merge: true });
+      return docId;
     } else {
       // Create new
       data.createdAt = Date.now();
-      const docRef = await this.db.collection('entries').add(data);
-      return docRef.id;
+      const newId = State.genId();
+      await setDoc(doc(db, 'entries', newId), data);
+      return newId;
     }
   },
   
   async deleteEntry(id) {
-    await this.db.collection('entries').doc(id).delete();
+    await deleteDoc(doc(db, 'entries', id));
   },
   
   // ═══════════════════════════════════════════════════════════════════════════
@@ -206,39 +225,40 @@ const Firebase = {
       updatedAt: Date.now()
     };
     
-    if (journey.id) {
-      await this.db.collection('journeys').doc(journey.id).update(data);
-      return journey.id;
+    const docId = journey.id;
+    delete data.id;
+    
+    if (docId) {
+      await setDoc(doc(db, 'journeys', docId), data, { merge: true });
+      return docId;
     } else {
       data.createdAt = Date.now();
       data.legs = data.legs || [];
-      const docRef = await this.db.collection('journeys').add(data);
-      return docRef.id;
+      const newId = State.genId();
+      await setDoc(doc(db, 'journeys', newId), data);
+      return newId;
     }
   },
   
   async deleteJourney(id) {
-    await this.db.collection('journeys').doc(id).delete();
+    await deleteDoc(doc(db, 'journeys', id));
   },
   
   async pinJourney(id) {
     const uid = this.getUserId();
     if (!uid) return;
     
-    // Unpin all other journeys for this user
-    const batch = this.db.batch();
-    const journeysSnapshot = await this.db
-      .collection('journeys')
-      .where('uid', '==', uid)
-      .where('pinned', '==', true)
-      .get();
+    // Get all pinned journeys and unpin them
+    const pinnedQuery = query(collection(db, 'journeys'), where('uid', '==', uid), where('pinned', '==', true));
+    const pinnedSnapshot = await getDocs(pinnedQuery);
     
-    journeysSnapshot.docs.forEach(doc => {
-      batch.update(doc.ref, { pinned: false });
+    const batch = writeBatch(db);
+    pinnedSnapshot.docs.forEach(d => {
+      batch.update(d.ref, { pinned: false });
     });
     
     // Pin the selected journey
-    batch.update(this.db.collection('journeys').doc(id), { pinned: true });
+    batch.update(doc(db, 'journeys', id), { pinned: true });
     
     await batch.commit();
     State.setCurrentJourney(id);
@@ -249,7 +269,7 @@ const Firebase = {
     if (!journey) throw new Error('Journey not found');
     
     const legs = [...(journey.legs || []), leg];
-    await this.db.collection('journeys').doc(journeyId).update({ legs });
+    await updateDoc(doc(db, 'journeys', journeyId), { legs });
   },
   
   async updateLeg(journeyId, legIndex, legData) {
@@ -258,7 +278,7 @@ const Firebase = {
     
     const legs = [...(journey.legs || [])];
     legs[legIndex] = { ...legs[legIndex], ...legData };
-    await this.db.collection('journeys').doc(journeyId).update({ legs });
+    await updateDoc(doc(db, 'journeys', journeyId), { legs });
   },
   
   async deleteLeg(journeyId, legIndex) {
@@ -267,9 +287,9 @@ const Firebase = {
     
     const legs = [...(journey.legs || [])];
     legs.splice(legIndex, 1);
-    await this.db.collection('journeys').doc(journeyId).update({ legs });
+    await updateDoc(doc(db, 'journeys', journeyId), { legs });
   }
 };
 
-// Export
+// Export to window for other modules
 window.Firebase = Firebase;
