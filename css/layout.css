@@ -120,6 +120,14 @@
   font-weight: var(--font-bold);
 }
 
+#login-screen .logo-text .the {
+  color: var(--color-text-inverse);
+}
+
+#login-screen .logo-text .fallback {
+  color: var(--color-accent);
+}
+
 #login-screen .tagline {
   color: rgba(255, 255, 255, 0.7);
   font-size: var(--text-lg);
@@ -406,8 +414,8 @@
 }
 
 #view-explore .brand-logo {
-  width: 36px;
   height: 36px;
+  width: auto;
 }
 
 #view-explore .brand-text {
