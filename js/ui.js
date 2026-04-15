@@ -76,8 +76,25 @@ const UI = {
     });
     
     // Initialize map if showing saved view
-    if (viewName === 'saved' && !State.mapReady) {
-      setTimeout(() => MapModule.init('map'), 100);
+    if (viewName === 'saved') {
+      if (!State.mapReady) {
+        setTimeout(() => {
+          MapModule.init('map');
+          // Render markers after map is ready
+          setTimeout(() => {
+            MapModule.renderMarkers();
+            if (State.entries.length > 0) {
+              MapModule.fitAllMarkers();
+            }
+          }, 200);
+        }, 100);
+      } else {
+        // Map already initialized, just make sure markers are rendered
+        setTimeout(() => {
+          MapModule.map.invalidateSize();
+          MapModule.renderMarkers();
+        }, 100);
+      }
     }
   },
   

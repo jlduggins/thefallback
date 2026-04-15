@@ -11,11 +11,27 @@ const Entries = {
   init() {
     // Subscribe to state changes
     State.on('entries:changed', () => this.renderAll());
-    State.on('entry:selected', id => this.showDetail(id));
+    State.on('entry:selected', id => {
+      this.updateSelectedCard(id);
+      // Don't show detail panel - just highlight the card and marker
+    });
     State.on('dragpin:moved', ({ lat, lng }) => this.updateCoords(lat, lng));
     
     // Form event listeners
     this.initForm();
+  },
+  
+  updateSelectedCard(selectedId) {
+    // Update all location cards to reflect selection state
+    document.querySelectorAll('.location-card').forEach(card => {
+      const isSelected = card.dataset.id === selectedId;
+      card.classList.toggle('selected', isSelected);
+      
+      // Scroll selected card into view
+      if (isSelected) {
+        card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    });
   },
   
   initForm() {
@@ -117,11 +133,17 @@ const Entries = {
     container.querySelectorAll('.location-card').forEach(card => {
       card.addEventListener('click', () => {
         const id = card.dataset.id;
-        State.selectEntry(id);
         
-        const entry = State.getEntry(id);
-        if (entry) {
-          MapModule.flyTo(entry.lat, entry.lng, 14);
+        // Toggle selection - click again to deselect
+        if (State.selectedEntryId === id) {
+          State.selectEntry(null);
+          MapModule.fitAllMarkers();
+        } else {
+          State.selectEntry(id);
+          const entry = State.getEntry(id);
+          if (entry && entry.lat && entry.lng) {
+            MapModule.flyTo(entry.lat, entry.lng, 14);
+          }
         }
       });
     });

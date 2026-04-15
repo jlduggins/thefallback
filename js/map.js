@@ -115,13 +115,37 @@ const MapModule = {
     // Store entry reference
     marker._entryId = entry.id;
     
+    // Create popup content
+    const costText = entry.cost === 0 ? 'Free!' : entry.cost ? `$${entry.cost}/night` : '';
+    const statusText = entry.status ? State.STATUS_LABELS[entry.status] || entry.status : '';
+    const popupContent = `
+      <div class="marker-popup">
+        <div class="marker-popup-name">${this.escapeHtml(entry.name)}</div>
+        ${statusText ? `<div class="marker-popup-status">· ${statusText}</div>` : ''}
+        ${costText ? `<div class="marker-popup-cost">${costText}</div>` : ''}
+        <button class="marker-popup-btn" onclick="Entries.openEditForm(State.getEntry('${entry.id}'))">Edit / View Details</button>
+      </div>
+    `;
+    
+    marker.bindPopup(popupContent, {
+      className: 'custom-popup',
+      closeButton: true,
+      maxWidth: 280
+    });
+    
     // Click handler
     marker.on('click', () => {
       State.selectEntry(entry.id);
-      this.flyTo(entry.lat, entry.lng, 12);
     });
     
     return marker;
+  },
+  
+  escapeHtml(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
   },
   
   getMarkerColor(entry) {
