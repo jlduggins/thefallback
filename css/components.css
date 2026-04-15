@@ -177,6 +177,7 @@
 
 .location-card.selected {
   box-shadow: 0 0 0 2px var(--color-primary);
+  background: var(--color-primary-muted);
 }
 
 .location-card-image {
@@ -499,6 +500,13 @@
   border: 3px solid white;
   border-radius: 50%;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  transition: transform 0.2s ease;
+}
+
+.marker-pin.selected {
+  transform: scale(1.3);
+  border-color: var(--color-accent);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 
 .marker-pin.current {
@@ -507,6 +515,63 @@
 
 .marker-pin.backup {
   background: var(--color-marker-backup);
+}
+
+/* Custom popup styles */
+.custom-popup .leaflet-popup-content-wrapper {
+  border-radius: var(--radius-lg) !important;
+  padding: 0 !important;
+  overflow: hidden;
+}
+
+.custom-popup .leaflet-popup-content {
+  margin: 0 !important;
+  min-width: 200px;
+}
+
+.custom-popup .leaflet-popup-tip {
+  background: white;
+}
+
+.marker-popup {
+  padding: var(--space-4);
+}
+
+.marker-popup-name {
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
+  color: var(--color-text);
+  margin-bottom: var(--space-1);
+}
+
+.marker-popup-status {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-1);
+}
+
+.marker-popup-cost {
+  font-size: var(--text-base);
+  color: var(--color-text);
+  margin-bottom: var(--space-3);
+}
+
+.marker-popup-btn {
+  display: block;
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-primary);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.marker-popup-btn:hover {
+  background: var(--color-primary-light);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
