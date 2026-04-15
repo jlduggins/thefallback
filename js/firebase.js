@@ -10,12 +10,12 @@ import { getFirestore, collection, doc, setDoc, getDoc, deleteDoc, updateDoc, on
 
 // Firebase config
 const firebaseConfig = {
-  apiKey:            "AIzaSyAXrhjv1t3520X7QKiVI0qqeMAvpWS5Rdw",
-  authDomain:        "gen-lang-client-0165143367.firebaseapp.com",
-  projectId:         "gen-lang-client-0165143367",
-  storageBucket:     "gen-lang-client-0165143367.firebasestorage.app",
+  apiKey: "AIzaSyAXrhjv1t3520X7QKiVI0qqeMAvpWS5Rdw",
+  authDomain: "gen-lang-client-0165143367.firebaseapp.com",
+  projectId: "gen-lang-client-0165143367",
+  storageBucket: "gen-lang-client-0165143367.firebasestorage.app",
   messagingSenderId: "659366672596",
-  appId:             "1:659366672596:web:9a8fe8502a0769fdafe341"
+  appId: "1:659366672596:web:9a8fe8502a0769fdafe341"
 };
 
 // Initialize Firebase
@@ -126,9 +126,9 @@ const Firebase = {
     const uid = this.getUserId();
     if (!uid) return;
     
-    // Subscribe to entries
-    const entriesQuery = query(collection(db, 'entries'), where('uid', '==', uid));
-    this.entriesUnsub = onSnapshot(entriesQuery, snapshot => {
+    // Subscribe to entries (stored as /users/{uid}/logs/)
+    const entriesRef = collection(db, 'users', uid, 'logs');
+    this.entriesUnsub = onSnapshot(entriesRef, snapshot => {
       const entries = snapshot.docs.map(d => ({
         id: d.id,
         ...d.data()
@@ -138,9 +138,9 @@ const Firebase = {
       console.error('Entries subscription error:', err);
     });
     
-    // Subscribe to journeys
-    const journeysQuery = query(collection(db, 'journeys'), where('uid', '==', uid));
-    this.journeysUnsub = onSnapshot(journeysQuery, snapshot => {
+    // Subscribe to journeys (stored as /users/{uid}/journeys/)
+    const journeysRef = collection(db, 'users', uid, 'journeys');
+    this.journeysUnsub = onSnapshot(journeysRef, snapshot => {
       const journeys = snapshot.docs.map(d => ({
         id: d.id,
         ...d.data()
@@ -196,19 +196,21 @@ const Firebase = {
     
     if (docId) {
       // Update existing
-      await setDoc(doc(db, 'entries', docId), data, { merge: true });
+      await setDoc(doc(db, 'users', uid, 'logs', docId), data, { merge: true });
       return docId;
     } else {
       // Create new
       data.createdAt = Date.now();
       const newId = State.genId();
-      await setDoc(doc(db, 'entries', newId), data);
+      await setDoc(doc(db, 'users', uid, 'logs', newId), data);
       return newId;
     }
   },
   
   async deleteEntry(id) {
-    await deleteDoc(doc(db, 'entries', id));
+    const uid = this.getUserId();
+    if (!uid) throw new Error('Not authenticated');
+    await deleteDoc(doc(db, 'users', uid, 'logs', id));
   },
   
   // ═══════════════════════════════════════════════════════════════════════════
@@ -229,19 +231,21 @@ const Firebase = {
     delete data.id;
     
     if (docId) {
-      await setDoc(doc(db, 'journeys', docId), data, { merge: true });
+      await setDoc(doc(db, 'users', uid, 'journeys', docId), data, { merge: true });
       return docId;
     } else {
       data.createdAt = Date.now();
       data.legs = data.legs || [];
       const newId = State.genId();
-      await setDoc(doc(db, 'journeys', newId), data);
+      await setDoc(doc(db, 'users', uid, 'journeys', newId), data);
       return newId;
     }
   },
   
   async deleteJourney(id) {
-    await deleteDoc(doc(db, 'journeys', id));
+    const uid = this.getUserId();
+    if (!uid) throw new Error('Not authenticated');
+    await deleteDoc(doc(db, 'users', uid, 'journeys', id));
   },
   
   async pinJourney(id) {
@@ -249,7 +253,8 @@ const Firebase = {
     if (!uid) return;
     
     // Get all pinned journeys and unpin them
-    const pinnedQuery = query(collection(db, 'journeys'), where('uid', '==', uid), where('pinned', '==', true));
+    const journeysRef = collection(db, 'users', uid, 'journeys');
+    const pinnedQuery = query(journeysRef, where('pinned', '==', true));
     const pinnedSnapshot = await getDocs(pinnedQuery);
     
     const batch = writeBatch(db);
@@ -258,36 +263,42 @@ const Firebase = {
     });
     
     // Pin the selected journey
-    batch.update(doc(db, 'journeys', id), { pinned: true });
+    batch.update(doc(db, 'users', uid, 'journeys', id), { pinned: true });
     
     await batch.commit();
     State.setCurrentJourney(id);
   },
   
   async addLeg(journeyId, leg) {
+    const uid = this.getUserId();
+    if (!uid) throw new Error('Not authenticated');
     const journey = State.getJourney(journeyId);
     if (!journey) throw new Error('Journey not found');
     
     const legs = [...(journey.legs || []), leg];
-    await updateDoc(doc(db, 'journeys', journeyId), { legs });
+    await updateDoc(doc(db, 'users', uid, 'journeys', journeyId), { legs });
   },
   
   async updateLeg(journeyId, legIndex, legData) {
+    const uid = this.getUserId();
+    if (!uid) throw new Error('Not authenticated');
     const journey = State.getJourney(journeyId);
     if (!journey) throw new Error('Journey not found');
     
     const legs = [...(journey.legs || [])];
     legs[legIndex] = { ...legs[legIndex], ...legData };
-    await updateDoc(doc(db, 'journeys', journeyId), { legs });
+    await updateDoc(doc(db, 'users', uid, 'journeys', journeyId), { legs });
   },
   
   async deleteLeg(journeyId, legIndex) {
+    const uid = this.getUserId();
+    if (!uid) throw new Error('Not authenticated');
     const journey = State.getJourney(journeyId);
     if (!journey) throw new Error('Journey not found');
     
     const legs = [...(journey.legs || [])];
     legs.splice(legIndex, 1);
-    await updateDoc(doc(db, 'journeys', journeyId), { legs });
+    await updateDoc(doc(db, 'users', uid, 'journeys', journeyId), { legs });
   }
 };
 
