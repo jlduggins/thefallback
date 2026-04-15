@@ -2,8 +2,8 @@
   "name": "The Fallback",
   "short_name": "The Fallback",
   "description": "Route planning for life on the move",
-  "start_url": "/road-tripping/",
-  "scope": "/road-tripping/",
+  "start_url": "/thefallback/",
+  "scope": "/thefallback/",
   "display": "standalone",
   "background_color": "#3d5a4c",
   "theme_color": "#3d5a4c",
@@ -28,7 +28,7 @@
       "name": "Log Location",
       "short_name": "Log",
       "description": "Quickly log a new camping location",
-      "url": "/road-tripping/?action=log",
+      "url": "/thefallback/?action=log",
       "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
     }
   ]
