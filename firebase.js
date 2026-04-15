@@ -21,9 +21,9 @@ const Firebase = {
     // Firebase config
     const firebaseConfig = {
       apiKey: "AIzaSyDUXDB9p9XfGnQ6n1hS4BfoFdVKoLB_5pE",
-      authDomain: "road-tripping-app.firebaseapp.com",
-      projectId: "road-tripping-app",
-      storageBucket: "road-tripping-app.firebasestorage.app",
+      authDomain: "thefallback-app.firebaseapp.com",
+      projectId: "thefallback-app",
+      storageBucket: "thefallback-app.firebasestorage.app",
       messagingSenderId: "155aborede557992851",
       appId: "1:155557992851:web:9abd2b6bf87db5cd9bb9dc"
     };
