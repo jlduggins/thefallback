@@ -755,8 +755,9 @@
 
 .sheet-header {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-3);
   padding: 0 var(--space-4) var(--space-3);
   flex-shrink: 0;
 }
