@@ -53,7 +53,7 @@
         <span class="the">The</span> <span class="fallback">Fallback</span>
       </div>
     </div>
-    <p class="tagline">Plan your route. Save your spots.<br>Always have a backup.</p>
+    <p class="tagline">Route planning for life on the move.</p>
     <button class="google-btn" onclick="signIn()">
       <svg width="20" height="20" viewBox="0 0 24 24">
         <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
@@ -592,15 +592,12 @@
        ═══════════════════════════════════════════════════════════════════════ -->
   <script src="./config.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
   <script src="./js/state.js"></script>
-  <script src="./js/firebase.js"></script>
+  <script type="module" src="./js/firebase.js"></script>
   <script src="./js/map.js"></script>
   <script src="./js/ui.js"></script>
   <script src="./js/entries.js"></script>
   <script src="./js/trips.js"></script>
-  <script src="./js/app.js"></script>
+  <script type="module" src="./js/app.js"></script>
 </body>
 </html>
