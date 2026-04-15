@@ -20,13 +20,14 @@ const Firebase = {
   init() {
     // Firebase config
     const firebaseConfig = {
-      apiKey: "AIzaSyDUXDB9p9XfGnQ6n1hS4BfoFdVKoLB_5pE",
-      authDomain: "road-tripping-app.firebaseapp.com",
-      projectId: "road-tripping-app",
-      storageBucket: "road-tripping-app.firebasestorage.app",
-      messagingSenderId: "155aborede557992851",
-      appId: "1:155557992851:web:9abd2b6bf87db5cd9bb9dc"
-    };
+  apiKey: "AIzaSyAXrhjv1t3520X7QKiVI0qqeMAvpWS5Rdw",
+  authDomain: "gen-lang-client-0165143367.firebaseapp.com",
+  projectId: "gen-lang-client-0165143367",
+  storageBucket: "gen-lang-client-0165143367.firebasestorage.app",
+  messagingSenderId: "659366672596",
+  appId: "1:659366672596:web:9a8fe8502a0769fdafe341"
+};
+
     
     // Initialize Firebase
     firebase.initializeApp(firebaseConfig);
