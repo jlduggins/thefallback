@@ -226,10 +226,11 @@
           <div class="sheet-handle"></div>
           <div class="sheet-header">
             <span class="sheet-title">Saved Locations</span>
-            <div class="filter-chips">
-              <button class="chip active">All</button>
-              <button class="chip">Nearby</button>
-              <button class="chip">Visited</button>
+            <div class="filter-chips" id="location-filters">
+              <button class="chip active" data-filter="all">All</button>
+              <button class="chip" data-filter="nearby">Nearby</button>
+              <button class="chip" data-filter="planned">Planned</button>
+              <button class="chip" data-filter="visited">Visited</button>
             </div>
           </div>
           <div id="locations-list" class="sheet-content">
