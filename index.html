@@ -7,21 +7,13 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#2d5a47">
   <title>The Fallback</title>
-  
-  <!-- Icons -->
   <link rel="icon" type="image/png" href="./icons/logo.png">
   <link rel="apple-touch-icon" href="./icons/logo.png">
   <link rel="manifest" href="./manifest.json">
-  
-  <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700&display=swap" rel="stylesheet">
-  
-  <!-- Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  
-  <!-- App Styles -->
   <link rel="stylesheet" href="./css/tokens.css">
   <link rel="stylesheet" href="./css/base.css">
   <link rel="stylesheet" href="./css/layout.css">
@@ -30,29 +22,21 @@
 </head>
 <body>
 
-  <!-- ═══════════════════════════════════════════════════════════════════════
-       LOADING SCREEN
-       ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- LOADING SCREEN -->
   <div id="loading-screen">
     <div class="logo">
       <img src="./icons/logo.png" alt="">
-      <div class="logo-text">
-        <span class="the">The</span> <span class="fallback">Fallback</span>
-      </div>
+      <div class="logo-text"><span class="the">The</span> <span class="fallback">Fallback</span></div>
     </div>
     <div class="spinner"></div>
     <div class="loading-text">Loading your adventures...</div>
   </div>
 
-  <!-- ═══════════════════════════════════════════════════════════════════════
-       LOGIN SCREEN
-       ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- LOGIN SCREEN -->
   <div id="login-screen">
     <div class="logo">
       <img src="./icons/logo.png" alt="">
-      <div class="logo-text">
-        <span class="the">The</span> <span class="fallback">Fallback</span>
-      </div>
+      <div class="logo-text"><span class="the">The</span> <span class="fallback">Fallback</span></div>
     </div>
     <p class="tagline">Route planning for life on the move.</p>
     <button class="google-btn" onclick="signIn()">
@@ -68,10 +52,9 @@
     <p class="privacy-note">Your data stays private and syncs across devices</p>
   </div>
 
-  <!-- ═══════════════════════════════════════════════════════════════════════
-       MAIN APP
-       ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- MAIN APP -->
   <div id="app">
+
     <!-- Sidebar Navigation (Desktop) -->
     <nav id="sidebar-nav">
       <div class="sidebar-logo">
@@ -82,56 +65,34 @@
       </div>
       <div class="sidebar-nav-items">
         <button class="sidebar-nav-item active" data-view="explore" title="Explore">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"/>
-            <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>
-          </svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
         </button>
-        <button class="sidebar-nav-item" data-view="saved" title="Saved">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/>
-            <circle cx="12" cy="10" r="3"/>
-          </svg>
+        <button class="sidebar-nav-item" data-view="saved" title="Map">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
         </button>
         <button class="sidebar-nav-item" data-view="trips" title="Trips">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="10"/>
-            <polyline points="12 6 12 12 16 14"/>
-          </svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
         </button>
         <button class="sidebar-nav-item" data-view="settings" title="Settings">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="12" cy="12" r="3"/>
-            <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
-          </svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
         </button>
       </div>
     </nav>
 
-    <!-- Main Content Area -->
     <main id="main-content">
 
-      <!-- ═══════════════════════════════════════════════════════════════════
-           EXPLORE VIEW (Home)
-           ═══════════════════════════════════════════════════════════════════ -->
+      <!-- ═══════════════ EXPLORE VIEW ═══════════════ -->
       <section id="view-explore" class="view active">
         <header class="view-header">
           <div class="header-row">
             <div class="brand">
               <img src="./icons/logo.png" alt="" class="brand-logo">
-              <div class="brand-text">
-                <span class="the">The</span> <span class="fallback">Fallback</span>
-              </div>
+              <div class="brand-text"><span class="the">The</span> <span class="fallback">Fallback</span></div>
             </div>
             <button class="btn btn-ghost btn-icon" onclick="State.setView('settings')">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="3"/>
-                <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
-              </svg>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
             </button>
           </div>
-          
-          <!-- Trip Status Card -->
           <div id="trip-status-card" class="trip-status-card">
             <div class="trip-status-header">
               <div>
@@ -141,120 +102,111 @@
             </div>
           </div>
         </header>
-        
         <div class="view-content">
-          <!-- Nearby Section -->
           <div class="section-header">
             <span class="section-title">Nearby Spots</span>
             <button class="section-action" onclick="State.setView('saved')">See all</button>
           </div>
-          <div id="nearby-scroll" class="nearby-scroll">
-            <!-- Populated by JS -->
-          </div>
-          
-          <!-- Map Preview -->
+          <div id="nearby-scroll" class="nearby-scroll"></div>
           <div class="map-preview" onclick="State.setView('saved')">
             <button class="map-preview-btn">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/>
-                <line x1="8" y1="2" x2="8" y2="18"/>
-                <line x1="16" y1="6" x2="16" y2="22"/>
-              </svg>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
               Open Map
             </button>
           </div>
         </div>
       </section>
 
-      <!-- ═══════════════════════════════════════════════════════════════════
-           SAVED VIEW (Map + List)
-           ═══════════════════════════════════════════════════════════════════ -->
+      <!-- ═══════════════ SAVED VIEW (Map) ═══════════════ -->
       <section id="view-saved" class="view">
-        <!-- Map Container -->
         <div class="map-container">
           <div id="map"></div>
-          
-          <!-- Map Header -->
+          <!-- Map floating header -->
           <div class="map-header">
-            <div class="map-search-bar">
-              <input type="text" id="search-inp" class="map-search-input" placeholder="Search locations…" oninput="Entries && Entries.filterEntries && Entries.filterEntries()">
-              <button class="btn btn-ghost btn-icon map-locate-btn" onclick="MapModule && MapModule.locateMe && MapModule.locateMe()" title="My location">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="6"/>
-                  <line x1="12" y1="18" x2="12" y2="22"/><line x1="2" y1="12" x2="6" y2="12"/>
-                  <line x1="18" y1="12" x2="22" y2="12"/>
-                </svg>
-              </button>
+            <div class="map-brand">
+              <div class="map-brand-menu" onclick="State.setView('explore')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+              </div>
+            </div>
+            <div id="marker-count" class="map-count">
+              <strong>0</strong> <span>locations</span>
             </div>
           </div>
-
-          <!-- Add Location FAB -->
-          <button class="map-fab" onclick="UI.openAddModal()" title="Add location">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-            </svg>
-          </button>
+          <!-- Map right controls -->
+          <div class="map-controls">
+            <button class="map-control-btn" onclick="MapModule.zoomIn()" title="Zoom in">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </button>
+            <button class="map-control-btn" onclick="MapModule.zoomOut()" title="Zoom out">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </button>
+            <button class="map-control-btn" onclick="MapModule.centerOnUser()" title="My location">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/></svg>
+            </button>
+            <button class="map-control-btn" onclick="UI.openAddModal()" title="Add location" style="margin-top:8px;background:var(--color-primary);border-radius:var(--radius-md)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </button>
+          </div>
         </div>
-
-        <!-- Location List Sheet -->
-        <div class="location-list-sheet">
+        <!-- Locations bottom sheet -->
+        <div class="locations-sheet">
           <div class="sheet-handle"></div>
           <div class="sheet-header">
-            <span class="section-title" id="entries-count">0 locations</span>
+            <div class="sheet-title">Locations</div>
+            <div id="location-filters" class="filter-chips">
+              <button class="chip active" data-filter="all">All</button>
+              <button class="chip" data-filter="nearby">Nearby</button>
+              <button class="chip" data-filter="planned">Planned</button>
+              <button class="chip" data-filter="visited">Visited</button>
+            </div>
           </div>
-          <div id="entries-list" class="entries-list">
-            <!-- Populated by JS -->
+          <div class="sheet-content">
+            <div id="locations-list"></div>
           </div>
         </div>
       </section>
 
-      <!-- ═══════════════════════════════════════════════════════════════════
-           TRIPS VIEW
-           ═══════════════════════════════════════════════════════════════════ -->
+      <!-- ═══════════════ TRIPS VIEW ═══════════════ -->
       <section id="view-trips" class="view">
-        <header class="view-header">
+        <header class="view-header trips-view-header">
           <div class="header-row">
             <h1 class="view-title">Trips</h1>
-            <button class="btn btn-primary btn-sm" onclick="Trips.openNewJourneyModal()">+ New</button>
+            <button class="btn btn-primary" style="padding:8px 16px;font-size:13px" onclick="Trips.openNewJourneyModal()">+ New</button>
           </div>
-
-          <!-- Fuel settings bar -->
           <div class="fuel-bar" onclick="Trips.openFuelSettingsModal()">
-            <span class="fuel-bar-icon">⛽</span>
-            <span id="fuel-summary" class="fuel-bar-text">Diesel · 18 mpg · $3.89/gal</span>
-            <span class="fuel-bar-edit">Edit</span>
+            <span>⛽</span>
+            <span id="fuel-summary">Diesel · 18 mpg · $3.89/gal</span>
+            <span style="margin-left:auto;color:var(--color-primary);font-weight:600;font-size:12px">Edit</span>
           </div>
         </header>
-
         <div class="view-content">
-          <div id="journeys-list">
+          <div id="journeys-list" class="trips-list">
             <div id="no-journeys" class="empty-state">
               <div class="empty-state-icon">🗺</div>
               <div class="empty-state-title">No journeys yet</div>
-              <div class="empty-state-text">Create a journey to start planning your route with destinations and backups</div>
+              <div class="empty-state-text">Create a journey to start planning your route</div>
               <button class="btn btn-primary" onclick="Trips.openNewJourneyModal()">Create Journey</button>
             </div>
           </div>
         </div>
       </section>
 
-      <!-- ═══════════════════════════════════════════════════════════════════
-           SETTINGS VIEW
-           ═══════════════════════════════════════════════════════════════════ -->
+      <!-- ═══════════════ SETTINGS VIEW ═══════════════ -->
       <section id="view-settings" class="view">
         <header class="view-header">
-          <div class="header-row">
-            <h1 class="view-title">Settings</h1>
-          </div>
+          <h1 class="view-title">Settings</h1>
         </header>
-        <div class="view-content">
+        <div class="view-content" style="padding:var(--space-4)">
           <div class="settings-section">
-            <div class="settings-item">
-              <div class="settings-item-label">Account</div>
-              <div id="user-display-name" class="settings-item-value"></div>
-              <div id="user-email" class="settings-item-subvalue"></div>
+            <div class="settings-section-title">Account</div>
+            <div class="user-info">
+              <div class="user-avatar" id="user-avatar">U</div>
+              <div class="user-details">
+                <div class="user-name" id="user-display-name"></div>
+                <div class="user-email" id="user-email"></div>
+              </div>
             </div>
-            <button class="btn btn-outline" style="width:100%;margin-top:16px" onclick="Firebase && Firebase.signOut()">Sign Out</button>
+            <button class="btn btn-outline" style="width:100%" onclick="Firebase && Firebase.signOut()">Sign Out</button>
           </div>
         </div>
       </section>
@@ -264,99 +216,67 @@
     <!-- Bottom Navigation (Mobile) -->
     <nav id="bottom-nav">
       <button class="nav-item active" data-view="explore">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10"/>
-          <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/>
-        </svg>
-        <span>Explore</span>
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></svg>
+        <span class="nav-label">Explore</span>
       </button>
       <button class="nav-item" data-view="saved">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/>
-          <circle cx="12" cy="10" r="3"/>
-        </svg>
-        <span>Map</span>
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        <span class="nav-label">Map</span>
       </button>
-      <button class="nav-item nav-add-btn" id="nav-add-btn">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-        </svg>
-        <span>Add</span>
+      <button class="nav-item nav-item-add" id="nav-add-btn">
+        <div class="add-btn"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></div>
+        <span class="nav-label">Add</span>
       </button>
       <button class="nav-item" data-view="trips">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10"/>
-          <polyline points="12 6 12 12 16 14"/>
-        </svg>
-        <span>Trips</span>
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span class="nav-label">Trips</span>
       </button>
       <button class="nav-item" data-view="settings">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="3"/>
-          <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
-        </svg>
-        <span>Settings</span>
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        <span class="nav-label">Settings</span>
       </button>
     </nav>
   </div>
 
-  <!-- ═══════════════════════════════════════════════════════════════════════
-       JOURNEY DETAIL PANEL
-       Full-screen panel overlaying trips view when viewing an itinerary
-       ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- ═══════════════ JOURNEY DETAIL PANEL ═══════════════ -->
   <div id="journey-detail-panel" class="side-panel" style="display:none">
-    <!-- Content injected by Trips.openJourneyDetail() -->
+    <!-- Injected by Trips.openJourneyDetail() -->
   </div>
 
-  <!-- ═══════════════════════════════════════════════════════════════════════
-       LOCATION DETAIL PANEL
-       Slides up from bottom when viewing a location's details
-       ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- ═══════════════ LOCATION DETAIL PANEL ═══════════════ -->
   <div id="location-detail-panel" class="location-detail-panel">
     <div id="location-detail-resize" class="location-detail-resize"></div>
     <div class="location-detail-header">
       <div style="font-size:14px;font-weight:600;color:var(--color-text)">Location details</div>
       <button onclick="Trips.closeLocationDetail()" class="btn btn-ghost btn-icon">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
-    <div id="location-detail-content" class="location-detail-content">
-      <!-- Content injected by Trips.openLocationDetail() -->
-    </div>
+    <div id="location-detail-content" class="location-detail-content"></div>
     <div id="location-detail-footer" class="location-detail-footer">
       <button onclick="Trips.editLocationFromDetail()" class="btn btn-primary" style="width:100%">Edit location</button>
     </div>
   </div>
 
-  <!-- ═══════════════════════════════════════════════════════════════════════
-       MODAL BACKDROP
-       ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- ═══════════════ MODAL BACKDROP ═══════════════ -->
   <div id="modal-backdrop" class="modal-backdrop" onclick="UI.closeAllModals()"></div>
 
-  <!-- ═══════════════════════════════════════════════════════════════════════
-       MODALS
-       ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- ═══════════════ MODALS ═══════════════ -->
 
-  <!-- Add Location Modal -->
+  <!-- Add / Edit Location Modal -->
   <div id="modal-add-location" class="modal modal-sheet">
     <div class="modal-handle"></div>
     <div class="modal-header">
-      <div>
-        <h2 class="modal-title">Add Location</h2>
-      </div>
+      <h2 class="modal-title">Add Location</h2>
       <button class="modal-close" onclick="UI.closeAddModal()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
     <div class="modal-body">
-      <div class="form-group">
+      <div class="form-group" style="position:relative">
         <label class="input-label">Location Name *</label>
         <input type="text" id="f-name" class="input" placeholder="e.g. Yellow Post Sites" autocomplete="off">
-        <div id="place-suggestions" style="display:none;position:absolute;left:0;right:0;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);box-shadow:var(--shadow-lg);max-height:200px;overflow-y:auto;z-index:9999"></div>
+        <div id="place-suggestions" style="display:none;position:absolute;left:0;right:0;top:100%;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius-md);box-shadow:var(--shadow-lg);max-height:200px;overflow-y:auto;z-index:9999"></div>
       </div>
       <div class="form-group">
         <label class="input-label">Address</label>
@@ -369,90 +289,55 @@
       <div class="form-row">
         <div class="form-group">
           <label class="input-label">Type</label>
-          <select id="f-type-sel" class="input">
-            <option>National Park</option>
-            <option>National Forest</option>
-            <option>State Park</option>
-            <option>BLM</option>
-            <option selected>Dispersed</option>
-            <option>Private</option>
-            <option>Other</option>
+          <select id="f-type" class="input">
+            <option>National Park</option><option>National Forest</option><option>State Park</option>
+            <option>BLM</option><option selected>Dispersed</option><option>Private</option><option>Other</option>
           </select>
         </div>
         <div class="form-group">
           <label class="input-label">Status</label>
-          <select id="f-status-sel" class="input">
+          <select id="f-status" class="input">
             <option value="planned">Planned</option>
             <option value="visited">Visited</option>
             <option value="saved">Saved for Later</option>
           </select>
         </div>
       </div>
-      
       <div class="form-group">
         <label class="input-label">Cost per night</label>
         <input type="number" id="f-cost" class="input" placeholder="0 for free">
       </div>
-      
-      <!-- Rating -->
       <div class="form-group">
         <label class="input-label">Rating</label>
         <div class="star-rating">
-          <span class="star" data-value="1">★</span>
-          <span class="star" data-value="2">★</span>
-          <span class="star" data-value="3">★</span>
-          <span class="star" data-value="4">★</span>
+          <span class="star" data-value="1">★</span><span class="star" data-value="2">★</span>
+          <span class="star" data-value="3">★</span><span class="star" data-value="4">★</span>
           <span class="star" data-value="5">★</span>
         </div>
       </div>
-      
-      <!-- Amenities -->
       <div class="form-group">
         <label class="input-label">Amenities & Tags</label>
         <div class="toggle-chips">
-          <label class="toggle-chip" data-amenity="hasPotableWater">
-            <input type="checkbox" name="hasPotableWater">
-            💧 Water
-          </label>
-          <label class="toggle-chip" data-amenity="hasDumpStation">
-            <input type="checkbox" name="hasDumpStation">
-            🚽 Dump
-          </label>
-          <label class="toggle-chip" data-amenity="hasHookups">
-            <input type="checkbox" name="hasHookups">
-            ⚡ Hookups
-          </label>
-          <label class="toggle-chip" data-amenity="hasTrash">
-            <input type="checkbox" name="hasTrash">
-            🗑️ Trash
-          </label>
-          <label class="toggle-chip" data-amenity="hasPets">
-            <input type="checkbox" name="hasPets">
-            🐾 Pets
-          </label>
-          <label class="toggle-chip" data-amenity="needs4x4">
-            <input type="checkbox" name="needs4x4">
-            🚙 4x4
-          </label>
-          <label class="toggle-chip" data-amenity="needsReservations">
-            <input type="checkbox" name="needsReservations">
-            🎫 Reservations
-          </label>
+          <label class="toggle-chip" data-amenity="hasPotableWater"><input type="checkbox" name="hasPotableWater"> 💧 Water</label>
+          <label class="toggle-chip" data-amenity="hasDumpStation"><input type="checkbox" name="hasDumpStation"> 🚽 Dump</label>
+          <label class="toggle-chip" data-amenity="hasHookups"><input type="checkbox" name="hasHookups"> ⚡ Hookups</label>
+          <label class="toggle-chip" data-amenity="hasTrash"><input type="checkbox" name="hasTrash"> 🗑️ Trash</label>
+          <label class="toggle-chip" data-amenity="hasPets"><input type="checkbox" name="hasPets"> 🐾 Pets</label>
+          <label class="toggle-chip" data-amenity="needs4x4"><input type="checkbox" name="needs4x4"> 🚙 4x4</label>
+          <label class="toggle-chip" data-amenity="needsReservations"><input type="checkbox" name="needsReservations"> 🎫 Reservations</label>
         </div>
       </div>
-      
       <div class="form-group">
         <label class="input-label">Notes</label>
         <textarea id="f-notes" class="input" rows="3" placeholder="Any helpful notes..."></textarea>
       </div>
-      
       <div class="form-group">
         <label class="input-label">Link</label>
         <input type="url" id="f-link" class="input" placeholder="https://...">
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-primary" style="flex: 1;" onclick="Entries.saveEntry()">Save Location</button>
+      <button class="btn btn-primary" style="flex:1" onclick="Entries.saveEntry()">Save Location</button>
     </div>
   </div>
 
@@ -466,24 +351,22 @@
     </div>
     <div class="modal-footer">
       <button class="btn btn-outline" onclick="UI.closeDeleteConfirm()">Cancel</button>
-      <button class="btn btn-primary" style="background: var(--color-error);" onclick="UI.confirmDelete()">Delete</button>
+      <button class="btn btn-primary" style="background:var(--color-error)" onclick="UI.confirmDelete()">Delete</button>
     </div>
   </div>
 
-  <!-- New Journey Modal -->
+  <!-- New / Rename Journey Modal -->
   <div id="modal-new-journey" class="modal modal-center">
     <div class="modal-header">
-      <h2 class="modal-title" id="journey-modal-title">New Journey</h2>
+      <h2 class="modal-title">New Journey</h2>
       <button class="modal-close" onclick="Trips.closeNewJourneyModal()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
     <div class="modal-body">
       <div class="form-group">
         <label class="input-label">Journey Name</label>
-        <input type="text" id="journey-name" class="input" placeholder="e.g., Summer Road Trip 2025">
+        <input type="text" id="journey-name" class="input" placeholder="e.g., Southwest Winter 2026">
       </div>
     </div>
     <div class="modal-footer">
@@ -498,18 +381,14 @@
     <div class="modal-header">
       <h2 class="modal-title">Fuel Settings</h2>
       <button class="modal-close" onclick="Trips.closeFuelSettingsModal()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
     <div class="modal-body">
       <div class="form-group">
         <label class="input-label">Fuel Type</label>
         <select id="fuel-type" class="input">
-          <option value="Diesel">Diesel</option>
-          <option value="Regular">Regular Gas</option>
-          <option value="Premium">Premium Gas</option>
+          <option value="Diesel">Diesel</option><option value="Regular">Regular Gas</option><option value="Premium">Premium Gas</option>
         </select>
       </div>
       <div class="form-group">
@@ -524,8 +403,7 @@
         <div class="form-group">
           <label class="input-label">Unit</label>
           <select id="fuel-price-unit" class="input">
-            <option value="gal">Gallon</option>
-            <option value="L">Liter</option>
+            <option value="gal">Gallon</option><option value="L">Liter</option>
           </select>
         </div>
       </div>
@@ -535,7 +413,7 @@
       </div>
     </div>
     <div class="modal-footer">
-      <button class="btn btn-primary" style="flex: 1;" onclick="Trips.saveFuelSettings()">Save</button>
+      <button class="btn btn-primary" style="flex:1" onclick="Trips.saveFuelSettings()">Save</button>
     </div>
   </div>
 
@@ -545,28 +423,22 @@
     <div class="modal-header">
       <h2 class="modal-title">Add Destination</h2>
       <button class="modal-close" onclick="Trips.closeLegModal()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
     <div class="modal-body">
-
-      <!-- From -->
       <div class="form-group">
         <label class="input-label">From</label>
         <input type="hidden" id="leg-from-id">
-        <div id="leg-from-selected" style="display:none;background:rgba(127,195,165,0.15);border-radius:8px;padding:10px 12px;margin-bottom:4px">
+        <div id="leg-from-selected" style="display:none;background:rgba(127,195,165,0.15);border-radius:8px;padding:10px 12px">
           <div style="display:flex;justify-content:space-between;align-items:center">
             <span id="leg-from-name" style="font-size:13px;font-weight:600;color:var(--color-primary)">Starting point</span>
-            <button onclick="Trips.clearLegOrigin()" class="btn btn-ghost btn-icon-sm">✕</button>
+            <button onclick="Trips.clearLegOrigin()" class="btn btn-ghost btn-icon">✕</button>
           </div>
         </div>
         <input class="input" type="text" id="leg-from-search" placeholder="Search or use current location…" oninput="Trips.searchLocationsForLegFrom(this.value)" onfocus="Trips.showFromOptions()" style="display:none">
         <div id="leg-from-results" class="search-results-dropdown" style="display:none"></div>
       </div>
-
-      <!-- To -->
       <div class="form-group">
         <label class="input-label">To</label>
         <input class="input" type="text" id="leg-search" placeholder="Search your locations…" oninput="Trips.searchLocationsForLeg(this.value)" onfocus="Trips.showToOptions()">
@@ -575,15 +447,13 @@
         <div id="leg-dest-selected" style="display:none;background:rgba(127,195,165,0.15);border-radius:8px;padding:10px 12px;margin-top:8px">
           <div style="display:flex;justify-content:space-between;align-items:center">
             <span id="leg-dest-name" style="font-size:13px;font-weight:600;color:var(--color-primary)"></span>
-            <button onclick="Trips.clearLegDestination()" class="btn btn-ghost btn-icon-sm">✕</button>
+            <button onclick="Trips.clearLegDestination()" class="btn btn-ghost btn-icon">✕</button>
           </div>
         </div>
         <button onclick="Trips.addNewLocationFromLeg()" style="margin-top:8px;background:none;border:none;color:var(--color-primary);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:4px">
           <span>+</span> Add new location
         </button>
       </div>
-
-      <!-- Dates -->
       <div class="form-row">
         <div class="form-group">
           <label class="input-label">Arrive</label>
@@ -594,8 +464,6 @@
           <input class="input" type="date" id="leg-depart">
         </div>
       </div>
-
-      <!-- Route preview -->
       <div id="leg-preview" style="display:none;background:rgba(127,195,165,0.1);border-radius:8px;padding:12px;margin-bottom:16px">
         <div style="font-size:10px;font-weight:700;color:var(--color-primary);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Route preview</div>
         <div style="display:flex;justify-content:space-between">
@@ -604,8 +472,6 @@
           <div style="text-align:right"><div id="leg-fuel" style="font-size:18px;font-weight:700;color:var(--color-text)">--</div><div style="font-size:10px;color:var(--color-text-muted)">Est. fuel</div></div>
         </div>
       </div>
-
-      <!-- Per-leg fuel settings -->
       <div id="leg-fuel-settings" style="display:none;background:rgba(88,111,107,0.05);border-radius:8px;padding:12px;margin-bottom:16px">
         <div onclick="Trips.toggleLegFuelExpand()" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer">
           <div style="font-size:12px;font-weight:600;color:var(--color-text-muted)">⛽ Override fuel price for this leg</div>
@@ -620,27 +486,20 @@
             <div class="form-group">
               <label class="input-label">Per</label>
               <select class="input" id="leg-fuel-unit" onchange="Trips.updateLegFuelPreview()">
-                <option value="gal">Gallon</option>
-                <option value="L">Liter</option>
+                <option value="gal">Gallon</option><option value="L">Liter</option>
               </select>
             </div>
           </div>
           <div style="font-size:11px;color:var(--color-text-muted)">Default: <span id="leg-fuel-default"></span></div>
         </div>
       </div>
-
-      <!-- Backup suggestions -->
       <div id="leg-backups" style="display:none;background:rgba(245,158,11,0.1);border-radius:8px;padding:10px 12px;margin-bottom:16px">
         <div style="display:flex;align-items:center;gap:8px">
-          <span style="font-size:14px">💡</span>
-          <div style="flex:1;font-size:12px;color:#92400e">
-            <span id="leg-backup-count" style="font-weight:600">0 backup options</span> within <span id="leg-backup-radius">30</span>mi
-          </div>
+          <span>💡</span>
+          <div style="flex:1;font-size:12px;color:#92400e"><span id="leg-backup-count" style="font-weight:600">0 backup options</span> within <span id="leg-backup-radius">30</span>mi</div>
           <button onclick="Trips.showBackupOptions()" style="background:none;border:none;color:#92400e;font-size:12px;font-weight:600;cursor:pointer">View</button>
         </div>
       </div>
-
-      <!-- Notes -->
       <div class="form-group">
         <label class="input-label">Notes (optional)</label>
         <textarea class="input" id="leg-notes" rows="2" placeholder="Reservation #, backup plans…" style="resize:none"></textarea>
@@ -657,38 +516,26 @@
     <div class="modal-header">
       <h2 class="modal-title">Send to Maps</h2>
       <button class="modal-close" onclick="Trips.closeMapsModal()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
-    <div class="modal-body">
-      <div id="maps-modal-content">
-        <!-- Populated by Trips.openSendToMapsModal() -->
-      </div>
-    </div>
+    <div class="modal-body"><div id="maps-modal-content"></div></div>
   </div>
 
   <!-- Maps App Picker Modal -->
   <div id="modal-maps-picker" class="modal modal-center">
-    <div class="modal-header">
-      <h2 class="modal-title">Open with</h2>
-    </div>
+    <div class="modal-header"><h2 class="modal-title">Open with</h2></div>
     <div class="modal-body" style="text-align:center;padding-bottom:8px">
       <button onclick="Trips.openInAppleMaps()" class="btn btn-outline" style="width:100%;margin-bottom:10px;padding:14px">🗺 Apple Maps</button>
       <button onclick="Trips.openInGoogleMaps()" class="btn btn-outline" style="width:100%;padding:14px">📍 Google Maps</button>
     </div>
   </div>
 
-  <!-- ═══════════════════════════════════════════════════════════════════════
-       TOASTS & BANNERS
-       ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- TOASTS & BANNERS -->
   <div id="toast-container" class="toast-container"></div>
   <div id="offline-banner">You're offline. Changes will sync when connected.</div>
 
-  <!-- ═══════════════════════════════════════════════════════════════════════
-       SCRIPTS
-       ═══════════════════════════════════════════════════════════════════════ -->
+  <!-- SCRIPTS -->
   <script src="./config.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="./js/state.js"></script>
