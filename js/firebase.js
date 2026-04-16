@@ -128,12 +128,20 @@ const Firebase = {
     
     // Subscribe to entries (stored as /users/{uid}/logs/)
     const entriesRef = collection(db, 'users', uid, 'logs');
+    let firstSnapshot = true;
     this.entriesUnsub = onSnapshot(entriesRef, snapshot => {
       const entries = snapshot.docs.map(d => ({
         id: d.id,
         ...d.data()
       }));
       State.setEntries(entries);
+      // Add a sample entry for brand-new users
+      if (firstSnapshot) {
+        firstSnapshot = false;
+        if (entries.length === 0) {
+          this.addSampleEntry(uid);
+        }
+      }
     }, err => {
       console.error('Entries subscription error:', err);
     });
@@ -288,6 +296,33 @@ const Firebase = {
     const legs = [...(journey.legs || [])];
     legs[legIndex] = { ...legs[legIndex], ...legData };
     await updateDoc(doc(db, 'users', uid, 'journeys', journeyId), { legs });
+  },
+  
+  async addSampleEntry(uid) {
+    try {
+      const id = State.genId();
+      const sample = {
+        name: 'Grizzly Creek Redwoods — Welcome to The Fallback!',
+        address: 'Grizzly Creek Redwoods State Park, Carlotta, CA 95528',
+        lat: 40.5485,
+        lng: -123.9578,
+        type: 'State Park',
+        status: 'planned',
+        cost: 35,
+        rating: 5,
+        hasPotableWater: true,
+        hasTrash: true,
+        hasPets: true,
+        notes: 'This is a sample location — feel free to edit or delete it. Log your own camping spots using the + button, and plan routes in the Trips tab.',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        uid
+      };
+      await setDoc(doc(db, 'users', uid, 'logs', id), sample);
+      console.log('[Firebase] Sample entry created for new user');
+    } catch (err) {
+      console.warn('[Firebase] Could not create sample entry:', err);
+    }
   },
   
   async deleteLeg(journeyId, legIndex) {
