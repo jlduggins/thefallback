@@ -372,7 +372,7 @@ const Trips = {
 
   clearLegDestination() { document.getElementById('leg-dest-id').value=''; document.getElementById('leg-dest-selected').style.display='none'; document.getElementById('leg-preview').style.display='none'; document.getElementById('leg-backups').style.display='none'; document.getElementById('leg-fuel-settings').style.display='none'; },
 
-  addNewLocationFromLeg() { this.returnToLegModalAfterSave=true; this.closeLegModal(); if(window.closeDrawer)closeDrawer(); if(window.openFormPanel)openFormPanel(null); },
+  addNewLocationFromLeg() { this.returnToLegModalAfterSave=true; this.closeLegModal();  UI.openAddModal(); },
 
   toggleLegFuelExpand() { const ex=document.getElementById('leg-fuel-expanded'),tg=document.getElementById('leg-fuel-toggle'),op=ex.style.display==='none'; ex.style.display=op?'block':'none'; tg.textContent=op?'▲':'▼'; },
 
@@ -512,7 +512,7 @@ const Trips = {
   },
 
   closeLocationDetail() { const p=document.getElementById('location-detail-panel'); if(p){p.classList.remove('open');p.style.right='';} this.currentDetailEntryId=null; this.currentDetailJourneyContext=null; },
-  editLocationFromDetail() { if(!this.currentDetailEntryId) return; this.closeLocationDetail(); const e=State.getEntry(this.currentDetailEntryId); if(e&&window.openFormPanel)openFormPanel(e,e.lat,e.lng); },
+  editLocationFromDetail() { if(!this.currentDetailEntryId) return; this.closeLocationDetail(); const e=State.getEntry(this.currentDetailEntryId); if(e) Entries.openEditForm(e); },
   editDestinationFromDetail() { if(!this.currentDetailJourneyContext) return; const{journeyId,legIndex}=this.currentDetailJourneyContext; this.closeLocationDetail(); this.editLeg(journeyId,legIndex); },
 
   openBackupLocationDetail(backupEntryId) {
@@ -544,8 +544,8 @@ const Trips = {
   viewJourneyOnMap(journeyId, shouldCloseDrawer=true) {
     const journey=State.getJourney(journeyId); if(!journey?.legs?.length) return;
     this.activeJourneyId=journeyId;
-    const m=window.map; if(!m) return;
-    if (window.markers) window.markers.forEach(mk=>mk.remove());
+    const m=MapModule.map; if(!m) return;
+    MapModule.markers.forEach(mk=>mk.remove());
     const bb=document.getElementById('btn-backups'); if(bb){bb.style.display='flex';this.updateBackupButtonState(false);}
     this.backupMarkers.forEach(mk=>m.removeLayer(mk)); this.backupMarkers=[]; this.showingBackups=false;
     this.journeyMarkers.forEach(mk=>m.removeLayer(mk)); this.journeyMarkers=[];
@@ -565,20 +565,20 @@ const Trips = {
       for(let i=1;i<legs.length;i++){const g=pg(legs[i].routeGeometry),fr=allCoords[i],to=allCoords[i+1];if(!to)continue;const ln=g?L.polyline(g,{color:'#7FC3A5',weight:4,opacity:0.85}):L.polyline([fr,to],{color:'#7FC3A5',weight:4,opacity:0.85});ln.addTo(m);this.journeyMarkers.push(ln);}
       m.fitBounds(L.latLngBounds(allCoords),{padding:[80,80],maxZoom:11});
     } else if (allCoords.length===1) { m.setView(allCoords[0],12); }
-    if (shouldCloseDrawer) { const d=document.getElementById('drawer'); if(window.innerWidth<=640&&d){d.classList.remove('expanded');d.classList.add('peeked');if(window.updateMapControlsPosition)window.updateMapControlsPosition();}else{if(window.closeDrawer)closeDrawer();} }
+    if (shouldCloseDrawer) { const d=document.getElementById('drawer'); if(window.innerWidth<=640&&d){d.classList.remove('expanded');d.classList.add('peeked');if(window.updateMapControlsPosition)window.updateMapControlsPosition();}else{} }
   },
 
   showJourneyOnMap(journeyId){this.viewJourneyOnMap(journeyId,false);},
 
   clearJourneyFromMap(){
-    const m=window.map; if(m){this.journeyMarkers.forEach(mk=>m.removeLayer(mk));this.backupMarkers.forEach(mk=>m.removeLayer(mk));}
+    const m=MapModule.map; if(m){this.journeyMarkers.forEach(mk=>m.removeLayer(mk));this.backupMarkers.forEach(mk=>m.removeLayer(mk));}
     this.journeyMarkers=[];this.backupMarkers=[];this.showingBackups=false;
     const bb=document.getElementById('btn-backups');if(bb)bb.style.display='none';
-    if(window.renderMarkers)renderMarkers();this.activeJourneyId=null;
+    MapModule.renderMarkers();this.activeJourneyId=null;
   },
 
   toggleBackupMarkers(){
-    if(this.showingBackups){const m=window.map;if(m)this.backupMarkers.forEach(mk=>m.removeLayer(mk));this.backupMarkers=[];this.showingBackups=false;this.updateBackupButtonState(false);}
+    if(this.showingBackups){const m=MapModule.map;if(m)this.backupMarkers.forEach(mk=>m.removeLayer(mk));this.backupMarkers=[];this.showingBackups=false;this.updateBackupButtonState(false);}
     else{this.showBackupMarkersForJourney();this.showingBackups=true;this.updateBackupButtonState(true);}
   },
 
@@ -588,7 +588,7 @@ const Trips = {
   },
 
   showBackupMarkersForJourney(){
-    if(!this.activeJourneyId) return; const journey=State.getJourney(this.activeJourneyId); if(!journey?.legs) return; const m=window.map;if(!m)return;
+    if(!this.activeJourneyId) return; const journey=State.getJourney(this.activeJourneyId); if(!journey?.legs) return; const m=MapModule.map;if(!m)return;
     const radius=State.fuelSettings.backupRadius||30, jids=new Set(journey.legs.map(l=>l.destId)), seen=new Set();
     journey.legs.forEach(leg=>{const de=State.getEntry(leg.destId);if(!de?.lat)return;State.entries.forEach(e=>{if(jids.has(e.id)||!e.lat||seen.has(e.id))return;if(this.haversine(de.lat,de.lng,e.lat,e.lng)<=radius){seen.add(e.id);const icon=L.divIcon({html:`<div style="width:22px;height:32px;position:relative"><div style="width:22px;height:22px;background:#f59e0b;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:2.5px solid white;box-shadow:0 2px 8px rgba(0,0,0,.35);position:absolute"></div></div>`,className:'backup-marker',iconSize:[22,32],iconAnchor:[11,32]});const mk=L.marker([e.lat,e.lng],{icon,zIndexOffset:500}).addTo(m);mk.bindPopup(`<div style="font-family:system-ui;padding:4px"><span style="background:#f59e0b;color:white;font-size:9px;font-weight:600;padding:2px 6px;border-radius:4px">BACKUP</span><div style="font-weight:700;font-size:14px;margin:4px 0;color:#163F2E">${this.esc(e.name)}</div><div style="font-size:12px;color:#4a6358">${e.type||''}</div><div style="font-size:12px;color:#4a6358">${e.cost===0?'Free!':e.cost!=null?'$'+e.cost+'/night':''}</div></div>`);this.backupMarkers.push(mk);}});});
   },
