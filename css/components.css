@@ -1004,3 +1004,10 @@
 #modal-leg .modal-body {
   padding-bottom: 8px;
 }
+
+/* Trips view header — stack header-row and fuel-bar vertically */
+.trips-view-header {
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-3);
+}

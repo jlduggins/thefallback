@@ -189,3 +189,21 @@
   --color-divider: rgba(255, 255, 255, 0.08);
   --color-overlay: rgba(0, 0, 0, 0.7);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LEGACY VARIABLE ALIASES
+   Allows the trips module (ported from v1) to use old variable names
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --card: var(--color-surface);
+  --forest: var(--color-primary);
+  --teal: #7FC3A5;
+  --teal-light: rgba(127, 195, 165, 0.10);
+  --teal-mid: rgba(127, 195, 165, 0.15);
+  --text: var(--color-text);
+  --text-mid: var(--color-text-secondary);
+  --text-muted: var(--color-text-muted);
+  --border: var(--color-border);
+  --bg: var(--color-base);
+}
