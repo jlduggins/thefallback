@@ -123,12 +123,7 @@
           </div>
         </div>
 
-        <!-- Right column: embedded map (desktop only; mobile hides this and uses Map view) -->
-        <div class="explore-right">
-          <div id="explore-map-container"></div>
-        </div>
-
-        <!-- Backup detail panel — slides in from right edge of .explore-left, overlays map area -->
+        <!-- Backup detail panel — third flex column, between .explore-left and map -->
         <aside id="explore-backup-panel" class="explore-backup-panel" style="display:none">
           <div class="side-panel-hd">
             <div style="display:flex;justify-content:space-between;align-items:center">
@@ -141,6 +136,11 @@
           <div id="explore-backup-content" class="side-panel-body"></div>
           <div id="explore-backup-footer" class="side-panel-footer"></div>
         </aside>
+
+        <!-- Right column: embedded map (desktop only; mobile hides this and uses Map view) -->
+        <div class="explore-right">
+          <div id="explore-map-container"></div>
+        </div>
       </section>
 
       <!-- ═══ SAVED VIEW — locations panel over shared map ═══ -->
