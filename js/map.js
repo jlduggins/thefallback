@@ -52,10 +52,11 @@ const MapModule = {
       maxZoom: 19
     });
     
-    // Public lands overlay
-    this.publicLandsLayer = L.tileLayer('https://tiles.arcgis.com/tiles/v01gqwM5QqNysAAi/arcgis/rest/services/PADUS3_0_VA_OverlaySmall/MapServer/tile/{z}/{y}/{x}', {
-      opacity: 0.15,
-      maxZoom: 16
+    // Public lands overlay — BLM Surface Management Agency (Federal: BLM, USFS, NPS, FWS)
+    this.publicLandsLayer = L.tileLayer('https://gis.blm.gov/arcgis/rest/services/lands/BLM_Natl_SMA_Cached_without_PriUnk/MapServer/tile/{z}/{y}/{x}', {
+      attribution: 'Surface Management &copy; BLM',
+      maxZoom: 14,
+      opacity: 0.6
     });
     
     if (State.showPublicLands) {
@@ -246,9 +247,31 @@ const MapModule = {
   },
   
   centerOnUser() {
+    // If we already have a GPS fix, use it immediately
     if (State.userLat && State.userLng) {
       this.flyTo(State.userLat, State.userLng, 14);
+      return;
     }
+    // Otherwise, request a fresh position (GPS may have been denied previously or
+    // simply never succeeded). Prompt the user again and provide feedback.
+    if (!navigator.geolocation) {
+      if (window.UI?.showToast) UI.showToast('Location not available in this browser', 'error');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        State.setUserLocation(pos.coords.latitude, pos.coords.longitude);
+        this.flyTo(pos.coords.latitude, pos.coords.longitude, 14);
+      },
+      err => {
+        console.warn('[Map] centerOnUser geolocation error:', err);
+        const msg = err.code === 1
+          ? 'Location permission denied. Enable it in your browser settings.'
+          : 'Couldn\'t get your location';
+        if (window.UI?.showToast) UI.showToast(msg, 'error');
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
   },
   
   // ═══════════════════════════════════════════════════════════════════════════
@@ -272,35 +295,116 @@ const MapModule = {
     this.fitBounds(group.getBounds());
   },
   
-  toggleSatellite() {
-    State.isSatellite = !State.isSatellite;
-    
-    if (State.isSatellite) {
-      this.map.removeLayer(this.streetLayer);
-      this.satelliteLayer.addTo(this.map);
+  toggleLayersPanel() {
+    const panel = document.getElementById('map-layers-panel');
+    if (!panel) return;
+    const isOpen = panel.style.display && panel.style.display !== 'none';
+    panel.style.display = isOpen ? 'none' : 'block';
+  },
+
+  closeLayersPanel() {
+    const panel = document.getElementById('map-layers-panel');
+    if (panel) panel.style.display = 'none';
+  },
+
+  setBasemap(type) {
+    if (!this.map) return;
+    if (type === 'satellite') {
+      if (this.map.hasLayer(this.streetLayer)) this.map.removeLayer(this.streetLayer);
+      if (!this.map.hasLayer(this.satelliteLayer)) this.satelliteLayer.addTo(this.map);
+      this.satelliteLayer.bringToBack();
+      State.isSatellite = true;
     } else {
-      this.map.removeLayer(this.satelliteLayer);
-      this.streetLayer.addTo(this.map);
+      if (this.map.hasLayer(this.satelliteLayer)) this.map.removeLayer(this.satelliteLayer);
+      if (!this.map.hasLayer(this.streetLayer)) this.streetLayer.addTo(this.map);
+      this.streetLayer.bringToBack();
+      State.isSatellite = false;
     }
-    
-    // Keep public lands on top
-    if (State.showPublicLands) {
-      this.publicLandsLayer.bringToFront();
-    }
-    
+    if (this.map.hasLayer(this.publicLandsLayer)) this.publicLandsLayer.bringToFront();
+    if (this.stateParksLayer && this.map.hasLayer(this.stateParksLayer)) this.stateParksLayer.bringToFront();
+  },
+
+  toggleSatellite() {
+    this.setBasemap(State.isSatellite ? 'street' : 'satellite');
     return State.isSatellite;
   },
-  
+
   togglePublicLands() {
     State.showPublicLands = !State.showPublicLands;
-    
+    const legend = document.getElementById('sma-legend');
+    if (!this.map) return State.showPublicLands;
     if (State.showPublicLands) {
       this.publicLandsLayer.addTo(this.map);
+      if (legend) legend.style.display = 'block';
     } else {
       this.map.removeLayer(this.publicLandsLayer);
+      if (legend) legend.style.display = 'none';
     }
-    
     return State.showPublicLands;
+  },
+
+  // ─── State Parks overlay (PAD-US) ──────────────────────────────────────────
+  stateParksLayer: null,
+  _stateParksCache: {},
+  _stateParksBound: false,
+
+  toggleStateParks() {
+    const cb = document.getElementById('layer-stateparks');
+    const legend = document.getElementById('stateparks-legend');
+    if (cb?.checked) {
+      if (legend) legend.style.display = 'block';
+      if (this.stateParksLayer) {
+        this.stateParksLayer.addTo(this.map);
+      } else {
+        this.loadStateParksInView();
+        if (!this._stateParksBound) {
+          this.map.on('moveend', () => this.loadStateParksInView());
+          this._stateParksBound = true;
+        }
+      }
+    } else {
+      if (this.stateParksLayer) this.map.removeLayer(this.stateParksLayer);
+      if (legend) legend.style.display = 'none';
+    }
+  },
+
+  async loadStateParksInView() {
+    const cb = document.getElementById('layer-stateparks');
+    if (!cb?.checked) return;
+    const loading = document.getElementById('stateparks-loading');
+    const bounds = this.map.getBounds();
+    const zoom = this.map.getZoom();
+    if (zoom < 8) {
+      if (this.stateParksLayer) { this.map.removeLayer(this.stateParksLayer); this.stateParksLayer = null; }
+      return;
+    }
+    const cacheKey = `${bounds.toBBoxString()}-${zoom}`;
+    if (this._stateParksCache[cacheKey]) return;
+    if (loading) loading.style.display = 'inline';
+    try {
+      const bbox = `${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}`;
+      const where = encodeURIComponent("Mang_Name='SPR' OR Des_Tp='SP'");
+      const url = `https://services.arcgis.com/v01gqwM5QqNysAAi/arcgis/rest/services/Manager_Name/FeatureServer/0/query?where=${where}&geometry=${encodeURIComponent(bbox)}&geometryType=esriGeometryEnvelope&inSR=4326&outSR=4326&spatialRel=esriSpatialRelIntersects&outFields=Unit_Nm,Mang_Name,Des_Tp&returnGeometry=true&f=geojson`;
+      const resp = await fetch(url);
+      const data = await resp.json();
+      if (data.features?.length > 0) {
+        this._stateParksCache[cacheKey] = true;
+        const style = { color: 'rgba(37,99,235,0.3)', fillColor: '#3b82f6', fillOpacity: 0.05, weight: 1.5 };
+        if (this.stateParksLayer) {
+          L.geoJSON(data, { style }).eachLayer(l => this.stateParksLayer.addLayer(l));
+        } else {
+          this.stateParksLayer = L.geoJSON(data, {
+            style,
+            onEachFeature: (f, l) => {
+              if (f.properties?.Unit_Nm) l.bindPopup(`<b>${f.properties.Unit_Nm}</b><br>State Park`);
+            }
+          }).addTo(this.map);
+        }
+      }
+    } catch (e) {
+      console.error('[MapModule] Error loading state parks:', e);
+    }
+    if (loading) loading.style.display = 'none';
   },
   
   zoomIn() {
