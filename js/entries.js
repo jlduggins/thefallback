@@ -20,6 +20,8 @@ const Entries = {
     State.on('dragpin:moved', ({ lat, lng }) => this.updateCoords(lat, lng));
     State.on('fuel:changed', () => this.renderExploreNearby());
     State.on('location:updated', () => this.renderExploreNearby());
+    State.on('journeys:changed', () => this.renderExploreNearby());
+    State.on('journey:current-changed', () => this.renderExploreNearby());
     // Close the backup detail panel when leaving Explore
     State.on('view:changed', ({ from, to }) => {
       if (from === 'explore' && to !== 'explore') this.closeBackupPanel();
@@ -99,11 +101,54 @@ const Entries = {
     // Radius from fuel settings (backupRadius) — these are "backup" nearby spots
     const radius = (State.fuelSettings && State.fuelSettings.backupRadius) || 30;
     const radiusLabel = document.getElementById('nearby-radius-label');
-    if (radiusLabel) radiusLabel.textContent = `within ${radius} mi`;
+
+    // Determine the anchor point for "nearby":
+    //  - If the user is on a current journey, anchor to the next destination
+    //    (or current destination if they've arrived at the final stop)
+    //  - Otherwise, anchor to the user's GPS location
+    let anchorLat = null, anchorLng = null, anchorLabel = null;
+    const ctx = this.computeReplacementContext ? this.computeReplacementContext() : null;
+    if (ctx && ctx.journey && ctx.legs.length > 0) {
+      // Prefer the next leg's destination (upcoming stop)
+      if (ctx.nextLegIndex >= 0 && ctx.nextLegIndex < ctx.legs.length) {
+        const nl = ctx.legs[ctx.nextLegIndex];
+        const ne = State.getEntry(nl.destId);
+        anchorLat = nl.destLat || ne?.lat;
+        anchorLng = nl.destLng || ne?.lng;
+        anchorLabel = nl.destName || ne?.name;
+      }
+      // If there's no next leg (final destination) but user is currently at a stop, anchor there
+      else if (ctx.currentLegIndex >= 0 && ctx.currentLegRole === 'dest') {
+        const cl = ctx.legs[ctx.currentLegIndex];
+        const ce = State.getEntry(cl.destId);
+        anchorLat = cl.destLat || ce?.lat;
+        anchorLng = cl.destLng || ce?.lng;
+        anchorLabel = cl.destName || ce?.name;
+      }
+    }
+    // Fallback to GPS
+    if (anchorLat == null && State.userLat) {
+      anchorLat = State.userLat;
+      anchorLng = State.userLng;
+      anchorLabel = null; // implicit "you"
+    }
+
+    if (radiusLabel) {
+      radiusLabel.textContent = anchorLabel
+        ? `within ${radius} mi of ${anchorLabel}`
+        : `within ${radius} mi`;
+    }
 
     let entries = [];
-    if (State.userLat && State.userLng) {
-      entries = State.getNearbyEntries(State.userLat, State.userLng, radius);
+    if (anchorLat != null && anchorLng != null) {
+      entries = State.getNearbyEntries(anchorLat, anchorLng, radius);
+      // Exclude the anchor entry itself from the list (it's the destination, not a backup)
+      const ctxDestId = ctx?.journey && ctx.nextLegIndex >= 0 && ctx.nextLegIndex < ctx.legs.length
+        ? ctx.legs[ctx.nextLegIndex].destId
+        : (ctx?.journey && ctx.currentLegIndex >= 0 && ctx.currentLegRole === 'dest'
+            ? ctx.legs[ctx.currentLegIndex].destId
+            : null);
+      if (ctxDestId) entries = entries.filter(e => e.id !== ctxDestId);
     }
     entries = entries.slice(0, 20);
 
@@ -112,7 +157,7 @@ const Entries = {
         <div class="empty-state" style="padding: 24px; text-align: center;">
           <div style="font-size: 24px; margin-bottom: 8px;">📍</div>
           <div style="font-size: 14px; color: var(--color-text-muted);">
-            ${State.userLat ? `No spots within ${radius} miles` : 'Enable location to see nearby spots'}
+            ${anchorLat != null ? `No spots within ${radius} miles` : 'Enable location to see nearby spots'}
           </div>
         </div>
       `;
@@ -815,69 +860,19 @@ const Entries = {
     if (entry) MapModule.flyTo(entry.lat, entry.lng, 14);
   },
 
-  // Replace leg[legIndex].dest with backup entry (reuses Trips.replaceDestinationWithBackup
-  // logic by temporarily setting the journey context). Simpler approach: write a
-  // dedicated path that mirrors the same steps used by Trips.
+  // Replace leg[legIndex].dest with backup entry — delegates to Trips.replaceDestinationWithBackup
+  // to ensure identical route-recomputation behavior (same getRoute + fuel calc + next-leg update).
   async replaceLegDest(backupEntryId, legIndex) {
-    const journey = State.currentJourneyId ? State.getJourney(State.currentJourneyId) : null;
-    if (!journey?.legs?.[legIndex]) return;
-    const backup = State.getEntry(backupEntryId);
-    if (!backup) return;
-
-    const legs = [...journey.legs];
-    const leg = { ...legs[legIndex] };
-    leg.destId = backupEntryId;
-    leg.destName = backup.name;
-    leg.destLat = backup.lat;
-    leg.destLng = backup.lng;
-
-    // Origin for this leg's route
-    let fromLat, fromLng, fromName;
-    if (legIndex > 0) {
-      const pl = legs[legIndex - 1];
-      if (pl?.destLat) { fromLat = pl.destLat; fromLng = pl.destLng; fromName = pl.destName || 'Previous stop'; }
-    } else {
-      if (leg.fromLat) { fromLat = leg.fromLat; fromLng = leg.fromLng; fromName = leg.fromName || 'Start'; }
-      else if (State.userLat) { fromLat = State.userLat; fromLng = State.userLng; fromName = 'Current Location'; }
+    if (!State.currentJourneyId) return;
+    if (!window.Trips?.replaceDestinationWithBackup) return;
+    // Set the journey context Trips needs, then invoke the shared code path
+    Trips.currentDetailJourneyContext = { journeyId: State.currentJourneyId, legIndex };
+    Trips.currentDetailEntryId = null; // not used by replaceDestinationWithBackup
+    try {
+      await Trips.replaceDestinationWithBackup(backupEntryId);
+    } finally {
+      Trips.currentDetailJourneyContext = null;
     }
-
-    // Recompute this leg's route
-    if (fromLat && backup.lat && window.Trips?.getRoute) {
-      try {
-        const r = await Trips.getRoute(fromLat, fromLng, backup.lat, backup.lng);
-        if (r) {
-          leg.distance = Math.round(r.distance);
-          leg.duration = Math.round(r.duration);
-          leg.fuelCost = Math.round(Trips.calcFuelCost(r.distance, leg.fuelPrice, leg.fuelPriceUnit));
-          leg.routeGeometry = r.geometry ? JSON.stringify(r.geometry) : null;
-          if (legIndex === 0) { leg.fromLat = fromLat; leg.fromLng = fromLng; leg.fromName = fromName; }
-        }
-      } catch (e) { /* ignore */ }
-    }
-    legs[legIndex] = leg;
-
-    // Also recompute the NEXT leg's route (if any), since its origin just changed
-    if (legIndex < legs.length - 1 && window.Trips?.getRoute) {
-      const nl = { ...legs[legIndex + 1] };
-      const ne = State.getEntry(nl.destId);
-      if (ne?.lat && backup.lat) {
-        try {
-          const r = await Trips.getRoute(backup.lat, backup.lng, ne.lat, ne.lng);
-          if (r) {
-            nl.fromLat = backup.lat;
-            nl.fromLng = backup.lng;
-            nl.fromName = backup.name;
-            nl.distance = Math.round(r.distance);
-            nl.duration = Math.round(r.duration);
-            nl.fuelCost = Math.round(Trips.calcFuelCost(r.distance, nl.fuelPrice, nl.fuelPriceUnit));
-            nl.routeGeometry = r.geometry ? JSON.stringify(r.geometry) : null;
-            legs[legIndex + 1] = nl;
-          }
-        } catch (e) { /* ignore */ }
-      }
-    }
-
-    await Firebase.saveJourney({ ...journey, legs });
     this.closeBackupPanel();
     UI.showToast('Destination replaced', 'success');
   },
