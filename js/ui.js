@@ -98,6 +98,11 @@ const UI = {
     if (viewName === 'saved' || viewName === 'trips' || viewName === 'explore') {
       setTimeout(() => { if (MapModule.map) MapModule.map.invalidateSize(); }, 50);
     }
+
+    // Entering Saved view: restore entry markers if a prior journey overlay wiped them
+    if (viewName === 'saved' && MapModule.map) {
+      MapModule.renderMarkers();
+    }
   },
   
   // ═══════════════════════════════════════════════════════════════════════════

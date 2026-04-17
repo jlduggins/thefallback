@@ -860,19 +860,78 @@ const Entries = {
     if (entry) MapModule.flyTo(entry.lat, entry.lng, 14);
   },
 
-  // Replace leg[legIndex].dest with backup entry — delegates to Trips.replaceDestinationWithBackup
-  // to ensure identical route-recomputation behavior (same getRoute + fuel calc + next-leg update).
+  // Replace leg[legIndex].dest with backup entry. Does the swap + route recomputation
+  // directly (mirrors Trips.replaceDestinationWithBackup) but WITHOUT the Trips side
+  // effects that happen when you're on the Trips view (activating journey overlay,
+  // wiping entry markers, triggering refreshAllRoutes). Safe to call from Explore.
   async replaceLegDest(backupEntryId, legIndex) {
-    if (!State.currentJourneyId) return;
-    if (!window.Trips?.replaceDestinationWithBackup) return;
-    // Set the journey context Trips needs, then invoke the shared code path
-    Trips.currentDetailJourneyContext = { journeyId: State.currentJourneyId, legIndex };
-    Trips.currentDetailEntryId = null; // not used by replaceDestinationWithBackup
-    try {
-      await Trips.replaceDestinationWithBackup(backupEntryId);
-    } finally {
-      Trips.currentDetailJourneyContext = null;
+    const journey = State.currentJourneyId ? State.getJourney(State.currentJourneyId) : null;
+    if (!journey?.legs?.[legIndex]) return;
+    const backup = State.getEntry(backupEntryId);
+    if (!backup) return;
+    if (!window.Trips) return;
+
+    const legs = [...journey.legs];
+    const leg = { ...legs[legIndex] };
+    leg.destId = backupEntryId;
+    leg.destName = backup.name;
+    leg.destLat = backup.lat;
+    leg.destLng = backup.lng;
+
+    // Resolve "from" coordinates for this leg
+    let fromLat, fromLng, fromName;
+    if (legIndex > 0) {
+      const pl = legs[legIndex - 1];
+      if (pl?.destLat) { fromLat = pl.destLat; fromLng = pl.destLng; fromName = pl.destName || 'Previous stop'; }
+    } else {
+      if (leg.fromLat) { fromLat = leg.fromLat; fromLng = leg.fromLng; fromName = leg.fromName || 'Start'; }
+      else if (State.userLat) { fromLat = State.userLat; fromLng = State.userLng; fromName = 'Current Location'; }
     }
+
+    // Recompute this leg's route. Preserve existing geometry on ORS failure
+    // rather than nulling it (which would cause a dashed-line regression).
+    if (fromLat && backup.lat) {
+      try {
+        const r = await Trips.getRoute(fromLat, fromLng, backup.lat, backup.lng);
+        if (r) {
+          leg.distance = Math.round(r.distance);
+          leg.duration = Math.round(r.duration);
+          leg.fuelCost = Math.round(Trips.calcFuelCost(r.distance, leg.fuelPrice, leg.fuelPriceUnit));
+          if (r.geometry) {
+            leg.routeGeometry = JSON.stringify(r.geometry);
+          }
+          // If geometry is null (ORS unavailable), leave leg.routeGeometry as-is from
+          // before the replace. It'll be visually slightly off but won't break the map.
+          if (legIndex === 0) { leg.fromLat = fromLat; leg.fromLng = fromLng; leg.fromName = fromName; }
+        }
+      } catch (e) { /* keep prior route data */ }
+    }
+    legs[legIndex] = leg;
+
+    // Recompute the NEXT leg's route (its origin is now the backup)
+    if (legIndex < legs.length - 1) {
+      const nl = { ...legs[legIndex + 1] };
+      const ne = State.getEntry(nl.destId);
+      if (ne?.lat && backup.lat) {
+        try {
+          const r = await Trips.getRoute(backup.lat, backup.lng, ne.lat, ne.lng);
+          if (r) {
+            nl.fromLat = backup.lat;
+            nl.fromLng = backup.lng;
+            nl.fromName = backup.name;
+            nl.distance = Math.round(r.distance);
+            nl.duration = Math.round(r.duration);
+            nl.fuelCost = Math.round(Trips.calcFuelCost(r.distance, nl.fuelPrice, nl.fuelPriceUnit));
+            if (r.geometry) {
+              nl.routeGeometry = JSON.stringify(r.geometry);
+            }
+            legs[legIndex + 1] = nl;
+          }
+        } catch (e) { /* keep prior route data */ }
+      }
+    }
+
+    await Firebase.saveJourney({ ...journey, legs });
     this.closeBackupPanel();
     UI.showToast('Destination replaced', 'success');
   },
