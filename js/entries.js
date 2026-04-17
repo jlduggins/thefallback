@@ -574,12 +574,18 @@ const Entries = {
     footer.innerHTML = this.renderBackupDetailFooter(entry, ctx);
 
     panel.style.display = 'flex';
+
+    // Map container just got narrower — tell Leaflet to re-render
+    setTimeout(() => { if (MapModule.map) MapModule.map.invalidateSize(); }, 50);
   },
 
   closeBackupPanel() {
     const panel = document.getElementById('explore-backup-panel');
     if (panel) panel.style.display = 'none';
     this._backupEntryId = null;
+
+    // Map container got wider — tell Leaflet to re-render
+    setTimeout(() => { if (MapModule.map) MapModule.map.invalidateSize(); }, 50);
   },
 
   /**
