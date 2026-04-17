@@ -13,7 +13,13 @@ const UI = {
     this.initNavigation();
     
     // Subscribe to state changes
-    State.on('view:changed', ({ to }) => this.showView(to));
+    State.on('view:changed', ({ from, to }) => {
+      this.showView(to);
+      // Leaving Saved with a selected entry: deselect so the map isn't stuck zoomed in
+      if (from === 'saved' && to !== 'saved' && State.selectedEntryId) {
+        State.selectEntry(null);
+      }
+    });
     State.on('auth:signed-in', user => this.handleSignIn(user));
     State.on('auth:signed-out', () => this.handleSignOut());
     State.on('auth:error', msg => this.showLoginError(msg));
@@ -94,21 +100,6 @@ const UI = {
       }
     }
 
-    // Move map-controls tray into the same container as the map so the zoom/locate
-    // buttons are visible on every view where the map is visible.
-    const controls = document.getElementById('map-controls');
-    if (controls) {
-      const targetParent = mapEl?.parentElement;
-      const showControls =
-        (viewName === 'explore' && isDesktop) ||
-        viewName === 'saved' ||
-        viewName === 'trips';
-      if (showControls && targetParent && controls.parentElement !== targetParent) {
-        targetParent.appendChild(controls);
-      }
-      controls.style.display = showControls ? '' : 'none';
-    }
-
     // Invalidate map when the container size may have changed
     if (viewName === 'saved' || viewName === 'trips' || viewName === 'explore') {
       setTimeout(() => { if (MapModule.map) MapModule.map.invalidateSize(); }, 50);
@@ -120,6 +111,11 @@ const UI = {
       MapModule.renderMarkers();
       if (State.selectedEntryId) State.selectEntry(null);
       setTimeout(() => MapModule.fitAllMarkers(), 80);
+    }
+
+    // Entering Explore: if a current journey is set, draw its route on the map
+    if (viewName === 'explore' && MapModule.map && State.currentJourneyId && window.Trips) {
+      setTimeout(() => Trips.viewJourneyOnMap(State.currentJourneyId, false), 100);
     }
   },
   

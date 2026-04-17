@@ -445,8 +445,12 @@ const Trips = {
 
     // Auto-refresh routes in background if any are missing
     const hasMissingRoute = legs.some(l => !l.routeGeometry && l.destLat);
+    console.log('[Trips] journey detail opened:', journey.name,
+      'legs:', legs.length,
+      'hasMissingRoute:', hasMissingRoute,
+      'geometries:', legs.map(l => l.routeGeometry ? `${typeof l.routeGeometry}(${String(l.routeGeometry).length}ch)` : 'null'));
     if (hasMissingRoute) {
-      this.refreshAllRoutes(journeyId).catch(() => {});
+      this.refreshAllRoutes(journeyId).catch(err => console.warn('[Trips] refreshAllRoutes failed:', err));
     }
 
     // Store default panel content for restoration on close
