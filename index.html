@@ -81,7 +81,7 @@
       <!-- ═══ GLOBAL MAP — shared between saved + trips views ═══ -->
       <div id="map-global">
         <div id="map"></div>
-        <!-- Floating controls (visible in saved + trips) -->
+        <!-- Floating controls (bottom-right) -->
         <div class="map-controls-global">
           <button class="map-control-btn" onclick="MapModule.zoomIn()" title="Zoom in">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -92,8 +92,10 @@
           <button class="map-control-btn" onclick="MapModule.centerOnUser()" title="My location">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/></svg>
           </button>
+          <button class="map-control-btn map-control-backups" id="map-backups-btn" onclick="Trips.toggleBackupMarkers()" title="Toggle backup spots" style="display:none">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          </button>
         </div>
-        <div id="marker-count" class="map-count-global"><strong>0</strong> <span>locations</span></div>
       </div>
 
       <!-- ═══ EXPLORE VIEW ═══ -->
@@ -118,22 +120,29 @@
           </div>
         </header>
         <div class="view-content">
-          <div class="section-header">
-            <span class="section-title">Nearby Spots</span>
-            <button class="section-action" onclick="State.setView('saved')">See all</button>
-          </div>
-          <div id="nearby-scroll" class="nearby-scroll"></div>
-          <div class="map-preview" onclick="State.setView('saved')">
+          <!-- Embedded map (uses shared #map via showExploreMap) -->
+          <div class="explore-map-card" onclick="State.setView('saved')">
+            <div id="explore-map-container"></div>
             <button class="map-preview-btn">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
-              Open Map
+              Open full map
             </button>
           </div>
+
+          <div class="section-header">
+            <span class="section-title">Nearby Spots</span>
+            <span class="section-subtitle" id="nearby-radius-label"></span>
+          </div>
+          <div id="nearby-list" class="nearby-list"></div>
         </div>
       </section>
 
       <!-- ═══ SAVED VIEW — locations panel over shared map ═══ -->
       <section id="view-saved" class="view map-overlay-view">
+
+        <!-- Top-right overlay count (locations) -->
+        <div id="entries-count" class="map-count-overlay">0 locations</div>
+
         <div class="map-side-panel" id="locations-panel">
           <div class="side-panel-hd">
             <div class="side-panel-title">Locations</div>
@@ -156,6 +165,9 @@
 
       <!-- ═══ TRIPS VIEW — panels over shared map ═══ -->
       <section id="view-trips" class="view map-overlay-view">
+
+        <!-- Top-right overlay count (journeys) -->
+        <div id="journeys-count" class="map-count-overlay">0 journeys</div>
 
         <!-- Panel 1: Journey list / Journey detail (content swapped by trips.js) -->
         <div class="map-side-panel" id="trips-list-panel">
@@ -490,9 +502,9 @@
   <!-- Maps Picker -->
   <div id="modal-maps-picker" class="modal modal-center">
     <div class="modal-header"><h2 class="modal-title">Open with</h2></div>
-    <div class="modal-body" style="text-align:center;padding-bottom:8px">
-      <button onclick="Trips.openInAppleMaps()" class="btn btn-outline" style="width:100%;margin-bottom:10px;padding:14px">🗺 Apple Maps</button>
-      <button onclick="Trips.openInGoogleMaps()" class="btn btn-outline" style="width:100%;padding:14px">📍 Google Maps</button>
+    <div class="modal-body" style="padding-bottom:16px">
+      <button onclick="Trips.openInAppleMaps()" class="btn btn-outline maps-picker-btn">Apple Maps</button>
+      <button onclick="Trips.openInGoogleMaps()" class="btn btn-outline maps-picker-btn">Google Maps</button>
     </div>
   </div>
 
