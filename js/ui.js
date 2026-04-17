@@ -94,14 +94,32 @@ const UI = {
       }
     }
 
+    // Move map-controls tray into the same container as the map so the zoom/locate
+    // buttons are visible on every view where the map is visible.
+    const controls = document.getElementById('map-controls');
+    if (controls) {
+      const targetParent = mapEl?.parentElement;
+      const showControls =
+        (viewName === 'explore' && isDesktop) ||
+        viewName === 'saved' ||
+        viewName === 'trips';
+      if (showControls && targetParent && controls.parentElement !== targetParent) {
+        targetParent.appendChild(controls);
+      }
+      controls.style.display = showControls ? '' : 'none';
+    }
+
     // Invalidate map when the container size may have changed
     if (viewName === 'saved' || viewName === 'trips' || viewName === 'explore') {
       setTimeout(() => { if (MapModule.map) MapModule.map.invalidateSize(); }, 50);
     }
 
-    // Entering Saved view: restore entry markers if a prior journey overlay wiped them
+    // Entering Saved view: restore entry markers if a prior journey overlay wiped them,
+    // and clear any lingering entry selection / zoom so the map shows all markers.
     if (viewName === 'saved' && MapModule.map) {
       MapModule.renderMarkers();
+      if (State.selectedEntryId) State.selectEntry(null);
+      setTimeout(() => MapModule.fitAllMarkers(), 80);
     }
   },
   

@@ -472,6 +472,7 @@ const Trips = {
               <div id="journey-detail-menu" class="journey-context-menu" style="right:0">
                 <button onclick="Trips.closeJourneyDetailMenu();Trips.editJourneyName('${journey.id}')" class="jmenu-item">Rename</button>
                 <button onclick="Trips.closeJourneyDetailMenu();Trips.togglePinJourney('${journey.id}')" class="jmenu-item">${journey.pinned?'Unpin':'Pin'}</button>
+                <button onclick="Trips.closeJourneyDetailMenu();Trips.refreshAllRoutes('${journey.id}')" class="jmenu-item">Refresh routes</button>
                 <div style="height:0.5px;background:var(--color-border);margin:4px 0"></div>
                 <button onclick="Trips.closeJourneyDetailMenu();Trips.confirmDeleteJourney('${journey.id}')" class="jmenu-item" style="color:var(--color-error)">Delete journey</button>
               </div>

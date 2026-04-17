@@ -461,6 +461,13 @@ const MapModule = {
       State.pendingLat = e.latlng.lat;
       State.pendingLng = e.latlng.lng;
       State.emit('dragpin:moved', { lat: e.latlng.lat, lng: e.latlng.lng });
+      return;
+    }
+    // Clicking the map background on Saved view deselects the current entry
+    // and zooms back out to show all markers.
+    if (State.currentView === 'saved' && State.selectedEntryId) {
+      State.selectEntry(null);
+      this.fitAllMarkers();
     }
   }
 };
