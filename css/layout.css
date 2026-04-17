@@ -1116,15 +1116,30 @@ body[data-view="trips"] #app.authenticated #map-global {
   height: 100%;
 }
 
-/* Map floating controls (bottom-right tray) */
+/* Map floating controls (bottom-right tray) — fixed to viewport so it's
+   always visible regardless of which container currently hosts #map.
+   Hidden on views without a map via body[data-view=...] below. */
 .map-controls-global {
-  position: absolute;
+  position: fixed;
   right: var(--space-3);
   bottom: var(--space-6);
   display: flex;
   flex-direction: column;
   gap: 1px;
-  z-index: 10;
+  z-index: 50;
+}
+
+/* Hide tray on views that don't show a map */
+body[data-view="settings"] .map-controls-global,
+body[data-view="login"] .map-controls-global {
+  display: none;
+}
+
+/* On mobile, Explore view hides the map; hide the tray too */
+@media (max-width: 767px) {
+  body[data-view="explore"] .map-controls-global {
+    display: none;
+  }
 }
 
 .map-control-btn {
