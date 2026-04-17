@@ -20,6 +20,10 @@ const Entries = {
     State.on('dragpin:moved', ({ lat, lng }) => this.updateCoords(lat, lng));
     State.on('fuel:changed', () => this.renderExploreNearby());
     State.on('location:updated', () => this.renderExploreNearby());
+    // Close the backup detail panel when leaving Explore
+    State.on('view:changed', ({ from, to }) => {
+      if (from === 'explore' && to !== 'explore') this.closeBackupPanel();
+    });
 
     this.initForm();
     this.initFilters();
@@ -120,10 +124,16 @@ const Entries = {
     container.querySelectorAll('.nearby-card').forEach(card => {
       card.addEventListener('click', () => {
         const id = card.dataset.id;
-        State.selectEntry(id);
-        State.setView('saved');
-        const entry = State.getEntry(id);
-        if (entry) MapModule.flyTo(entry.lat, entry.lng, 14);
+        // On Explore view, open the backup detail panel anchored to the left column.
+        // Elsewhere, fall back to the legacy behavior (jump to Saved view).
+        if (State.currentView === 'explore') {
+          this.openBackupPanel(id);
+        } else {
+          State.selectEntry(id);
+          State.setView('saved');
+          const entry = State.getEntry(id);
+          if (entry) MapModule.flyTo(entry.lat, entry.lng, 14);
+        }
       });
     });
   },
@@ -532,6 +542,373 @@ const Entries = {
     return null;
   },
   
+  // ═══════════════════════════════════════════════════════════════════════════
+  // EXPLORE BACKUP DETAIL PANEL
+  // Slides in from right edge of .explore-left. Lets the user preview a nearby
+  // "backup" spot and optionally save it as a replacement for the current or
+  // next leg of their current journey.
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // Tracks which nearby entry the panel is showing
+  _backupEntryId: null,
+
+  openBackupPanel(entryId) {
+    const entry = State.getEntry(entryId);
+    if (!entry) return;
+    this._backupEntryId = entryId;
+
+    const panel = document.getElementById('explore-backup-panel');
+    const content = document.getElementById('explore-backup-content');
+    const footer = document.getElementById('explore-backup-footer');
+    if (!panel || !content || !footer) return;
+
+    // Fly map to the entry so the user has spatial context
+    if (entry.lat && entry.lng && MapModule.map) {
+      MapModule.flyTo(entry.lat, entry.lng, 12);
+    }
+
+    // Determine replacement context from the current journey (if any)
+    const ctx = this.computeReplacementContext();
+
+    content.innerHTML = this.renderBackupDetailContent(entry, ctx);
+    footer.innerHTML = this.renderBackupDetailFooter(entry, ctx);
+
+    panel.style.display = 'flex';
+  },
+
+  closeBackupPanel() {
+    const panel = document.getElementById('explore-backup-panel');
+    if (panel) panel.style.display = 'none';
+    this._backupEntryId = null;
+  },
+
+  /**
+   * Figure out what "current" and "next" mean for the user's current journey.
+   * Returns { journey, legs, currentLegIndex, currentLegRole, nextLegIndex }
+   * where currentLegRole is 'dest' (at a leg's destination) or 'start' (at the
+   * starting point of the journey), and -1 means "not applicable".
+   */
+  computeReplacementContext() {
+    const journey = State.currentJourneyId ? State.getJourney(State.currentJourneyId) : null;
+    if (!journey || !Array.isArray(journey.legs) || journey.legs.length === 0) {
+      return { journey: null, legs: [], currentLegIndex: -1, currentLegRole: null, nextLegIndex: -1 };
+    }
+    const legs = journey.legs;
+    const uLat = State.userLat, uLng = State.userLng;
+    const PROX = 2;
+
+    let currentLegIndex = -1;
+    let currentLegRole = null; // 'start' | 'dest' | null
+    let nextLegIndex = -1;
+
+    if (uLat) {
+      let closestDist = Infinity;
+      // Starting point (leg[0].from*)
+      const firstLeg = legs[0];
+      const fromE = firstLeg.fromId ? State.getEntry(firstLeg.fromId) : null;
+      const fromLat = firstLeg.fromLat || fromE?.lat;
+      const fromLng = firstLeg.fromLng || fromE?.lng;
+      if (fromLat) {
+        const d = State.getDistanceMiles(uLat, uLng, fromLat, fromLng);
+        if (d <= PROX) {
+          closestDist = d;
+          currentLegIndex = 0;
+          currentLegRole = 'start';
+          nextLegIndex = 0;
+        }
+      }
+      // Each destination
+      for (let i = 0; i < legs.length; i++) {
+        const l = legs[i];
+        const destE = State.getEntry(l.destId);
+        const destLat = l.destLat || destE?.lat;
+        const destLng = l.destLng || destE?.lng;
+        if (destLat) {
+          const d = State.getDistanceMiles(uLat, uLng, destLat, destLng);
+          if (d <= PROX && d < closestDist) {
+            closestDist = d;
+            currentLegIndex = i;
+            currentLegRole = 'dest';
+            nextLegIndex = i + 1;
+          }
+        }
+      }
+    }
+
+    // If not at any stop, "next" = the first upcoming destination (legs[0] if no GPS)
+    if (currentLegIndex === -1 && legs.length > 0) {
+      if (uLat) {
+        // Walk legs to find the one the user is still traveling toward
+        for (let i = 0; i < legs.length; i++) {
+          const l = legs[i];
+          if (!l.destLat) continue;
+          let originLat, originLng;
+          if (i === 0) { originLat = l.fromLat; originLng = l.fromLng; }
+          else { originLat = legs[i - 1].destLat; originLng = legs[i - 1].destLng; }
+          const distToDest = State.getDistanceMiles(uLat, uLng, l.destLat, l.destLng);
+          if (!originLat) { nextLegIndex = i; break; }
+          const distToOrigin = State.getDistanceMiles(uLat, uLng, originLat, originLng);
+          if (distToDest < distToOrigin || distToOrigin > PROX) { nextLegIndex = i; break; }
+        }
+        if (nextLegIndex === -1) nextLegIndex = legs.length - 1;
+      } else {
+        nextLegIndex = 0;
+      }
+    }
+
+    // Clamp next to valid range
+    if (nextLegIndex >= legs.length) nextLegIndex = -1;
+
+    return { journey, legs, currentLegIndex, currentLegRole, nextLegIndex };
+  },
+
+  renderBackupDetailContent(entry, ctx) {
+    const esc = s => this.escapeHtml(s);
+    const hasPhoto = entry.photos?.length > 0;
+    const photoUrl = hasPhoto ? (typeof entry.photos[0] === 'string' ? entry.photos[0] : entry.photos[0].data) : null;
+    const cost = entry.cost === 0 ? 'Free' : entry.cost != null ? '$' + entry.cost : '--';
+
+    const amap = {
+      hasPotableWater: '💧 Water',
+      hasDumpStation: '🚿 Dump',
+      hasHookups: '⚡ Hookups',
+      hasTrash: '🗑 Trash',
+      hasWaterFill: '💦 Fill',
+      isSeasonal: '📅 Seasonal',
+      hasPets: '🐕 Pets OK',
+      needs4x4: '🚙 4x4',
+      needsReservations: '📋 Reservations'
+    };
+    const amenities = Object.entries(amap).filter(([k]) => entry[k]).map(([, v]) => v);
+
+    // "Backup option" context pill — shown if we have a current journey
+    let contextPill = '';
+    if (ctx.journey) {
+      contextPill = `
+        <div style="display:flex;align-items:center;gap:8px;background:rgba(245,158,11,0.10);border-radius:var(--radius-md);padding:10px 12px;margin-bottom:14px">
+          <span style="font-size:16px">💡</span>
+          <span style="font-size:13px;font-weight:500;color:#92400e">Backup option</span>
+        </div>`;
+    }
+
+    return `
+      ${contextPill}
+      ${hasPhoto ? `<img src="${photoUrl}" style="width:100%;height:140px;object-fit:cover;border-radius:var(--radius-md);margin-bottom:16px">` : ''}
+      <div style="font-size:17px;font-weight:600;color:var(--color-text);margin-bottom:4px">${esc(entry.name)}</div>
+      <div style="font-size:12px;color:var(--color-text-muted);margin-bottom:16px">${esc(entry.address || entry.type || '')}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+        <div style="background:var(--color-surface-alt);border-radius:var(--radius-md);padding:10px">
+          <div style="font-size:10px;color:var(--color-text-muted)">Cost/night</div>
+          <div style="font-size:15px;font-weight:500;color:var(--color-text)">${cost}</div>
+        </div>
+        <div style="background:var(--color-surface-alt);border-radius:var(--radius-md);padding:10px">
+          <div style="font-size:10px;color:var(--color-text-muted)">Type</div>
+          <div style="font-size:15px;font-weight:500;color:var(--color-text)">${esc(entry.type || '--')}</div>
+        </div>
+      </div>
+      ${amenities.length > 0 ? `
+        <div style="font-size:11px;font-weight:500;color:var(--color-text-muted);margin-bottom:8px">Amenities</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:14px">
+          ${amenities.map(a => `<span style="background:var(--color-primary-muted);color:var(--color-primary);font-size:11px;padding:3px 8px;border-radius:var(--radius-sm)">${a}</span>`).join('')}
+        </div>
+      ` : ''}
+      ${entry.notes ? `
+        <div style="font-size:11px;font-weight:500;color:var(--color-text-muted);margin-bottom:6px">Notes</div>
+        <div style="font-size:13px;color:var(--color-text);line-height:1.5;margin-bottom:14px">${esc(entry.notes)}</div>
+      ` : ''}
+      ${entry.rating ? `<div style="font-size:14px;margin-bottom:14px">${'★'.repeat(entry.rating)}${'☆'.repeat(5 - entry.rating)}</div>` : ''}
+      ${entry.link ? `
+        <a href="${entry.link}" target="_blank" rel="noopener" style="display:block;background:var(--color-surface-alt);border-radius:var(--radius-md);padding:10px;text-decoration:none;color:var(--color-text);margin-bottom:14px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span>🔗</span>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(entry.linkTitle || 'View Website')}</div>
+              <div style="font-size:11px;color:var(--color-text-muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(entry.link)}</div>
+            </div>
+            <span style="color:var(--color-primary)">→</span>
+          </div>
+        </a>
+      ` : ''}
+    `;
+  },
+
+  renderBackupDetailFooter(entry, ctx) {
+    const esc = s => this.escapeHtml(s);
+    const viewFullBtn = `<button onclick="Entries.viewFullFromBackup('${entry.id}')" class="btn btn-outline" style="width:100%">View full details</button>`;
+
+    // No current journey → just "View full details"
+    if (!ctx.journey) {
+      return viewFullBtn;
+    }
+
+    // Build the list of replacement choices based on context
+    const choices = [];
+    const legs = ctx.legs;
+
+    if (ctx.currentLegRole === 'start') {
+      // At starting point — offer both "replace current (start)" and "replace next dest"
+      choices.push({
+        label: `Replace starting point`,
+        sub: esc(legs[0].fromName || 'Starting point'),
+        action: `Entries.replaceStartingPoint('${entry.id}')`
+      });
+      if (legs.length > 0) {
+        choices.push({
+          label: `Replace next destination`,
+          sub: esc(legs[0].destName || 'Next stop'),
+          action: `Entries.replaceLegDest('${entry.id}', 0)`
+        });
+      }
+    } else if (ctx.currentLegRole === 'dest') {
+      // At a leg's destination — offer "replace current" and (if exists) "replace next"
+      const curIdx = ctx.currentLegIndex;
+      choices.push({
+        label: `Replace current destination`,
+        sub: esc(legs[curIdx].destName || 'Current stop'),
+        action: `Entries.replaceLegDest('${entry.id}', ${curIdx})`
+      });
+      if (curIdx + 1 < legs.length) {
+        choices.push({
+          label: `Replace next destination`,
+          sub: esc(legs[curIdx + 1].destName || 'Next stop'),
+          action: `Entries.replaceLegDest('${entry.id}', ${curIdx + 1})`
+        });
+      }
+    } else if (ctx.nextLegIndex >= 0) {
+      // En route — only "replace next"
+      const nextIdx = ctx.nextLegIndex;
+      choices.push({
+        label: `Replace next destination`,
+        sub: esc(legs[nextIdx].destName || 'Next stop'),
+        action: `Entries.replaceLegDest('${entry.id}', ${nextIdx})`
+      });
+    }
+
+    if (choices.length === 0) {
+      return viewFullBtn;
+    }
+
+    // Render one orange primary button per choice (Save as replacement style),
+    // stacked, with a small subtitle showing which stop it will replace.
+    const choiceBtns = choices.map(c => `
+      <button onclick="event.stopPropagation();${c.action}"
+        style="width:100%;margin-bottom:8px;padding:12px;background:#f59e0b;color:#fff;border:none;border-radius:var(--radius-md);cursor:pointer;text-align:center">
+        <div style="font-size:14px;font-weight:600;line-height:1.2">${c.label}</div>
+        <div style="font-size:11px;opacity:0.9;margin-top:2px;line-height:1.2">${c.sub}</div>
+      </button>
+    `).join('');
+
+    return choiceBtns + viewFullBtn;
+  },
+
+  viewFullFromBackup(entryId) {
+    this.closeBackupPanel();
+    State.selectEntry(entryId);
+    State.setView('saved');
+    const entry = State.getEntry(entryId);
+    if (entry) MapModule.flyTo(entry.lat, entry.lng, 14);
+  },
+
+  // Replace leg[legIndex].dest with backup entry (reuses Trips.replaceDestinationWithBackup
+  // logic by temporarily setting the journey context). Simpler approach: write a
+  // dedicated path that mirrors the same steps used by Trips.
+  async replaceLegDest(backupEntryId, legIndex) {
+    const journey = State.currentJourneyId ? State.getJourney(State.currentJourneyId) : null;
+    if (!journey?.legs?.[legIndex]) return;
+    const backup = State.getEntry(backupEntryId);
+    if (!backup) return;
+
+    const legs = [...journey.legs];
+    const leg = { ...legs[legIndex] };
+    leg.destId = backupEntryId;
+    leg.destName = backup.name;
+    leg.destLat = backup.lat;
+    leg.destLng = backup.lng;
+
+    // Origin for this leg's route
+    let fromLat, fromLng, fromName;
+    if (legIndex > 0) {
+      const pl = legs[legIndex - 1];
+      if (pl?.destLat) { fromLat = pl.destLat; fromLng = pl.destLng; fromName = pl.destName || 'Previous stop'; }
+    } else {
+      if (leg.fromLat) { fromLat = leg.fromLat; fromLng = leg.fromLng; fromName = leg.fromName || 'Start'; }
+      else if (State.userLat) { fromLat = State.userLat; fromLng = State.userLng; fromName = 'Current Location'; }
+    }
+
+    // Recompute this leg's route
+    if (fromLat && backup.lat && window.Trips?.getRoute) {
+      try {
+        const r = await Trips.getRoute(fromLat, fromLng, backup.lat, backup.lng);
+        if (r) {
+          leg.distance = Math.round(r.distance);
+          leg.duration = Math.round(r.duration);
+          leg.fuelCost = Math.round(Trips.calcFuelCost(r.distance, leg.fuelPrice, leg.fuelPriceUnit));
+          leg.routeGeometry = r.geometry ? JSON.stringify(r.geometry) : null;
+          if (legIndex === 0) { leg.fromLat = fromLat; leg.fromLng = fromLng; leg.fromName = fromName; }
+        }
+      } catch (e) { /* ignore */ }
+    }
+    legs[legIndex] = leg;
+
+    // Also recompute the NEXT leg's route (if any), since its origin just changed
+    if (legIndex < legs.length - 1 && window.Trips?.getRoute) {
+      const nl = { ...legs[legIndex + 1] };
+      const ne = State.getEntry(nl.destId);
+      if (ne?.lat && backup.lat) {
+        try {
+          const r = await Trips.getRoute(backup.lat, backup.lng, ne.lat, ne.lng);
+          if (r) {
+            nl.fromLat = backup.lat;
+            nl.fromLng = backup.lng;
+            nl.fromName = backup.name;
+            nl.distance = Math.round(r.distance);
+            nl.duration = Math.round(r.duration);
+            nl.fuelCost = Math.round(Trips.calcFuelCost(r.distance, nl.fuelPrice, nl.fuelPriceUnit));
+            nl.routeGeometry = r.geometry ? JSON.stringify(r.geometry) : null;
+            legs[legIndex + 1] = nl;
+          }
+        } catch (e) { /* ignore */ }
+      }
+    }
+
+    await Firebase.saveJourney({ ...journey, legs });
+    this.closeBackupPanel();
+    UI.showToast('Destination replaced', 'success');
+  },
+
+  // Replace the starting point of the journey (leg[0].from*) with a backup entry
+  async replaceStartingPoint(backupEntryId) {
+    const journey = State.currentJourneyId ? State.getJourney(State.currentJourneyId) : null;
+    if (!journey?.legs?.length) return;
+    const backup = State.getEntry(backupEntryId);
+    if (!backup?.lat) return;
+
+    const legs = [...journey.legs];
+    const leg0 = { ...legs[0] };
+    leg0.fromId = backupEntryId;
+    leg0.fromName = backup.name;
+    leg0.fromLat = backup.lat;
+    leg0.fromLng = backup.lng;
+
+    // Recompute leg[0]'s route from the new start
+    if (leg0.destLat && window.Trips?.getRoute) {
+      try {
+        const r = await Trips.getRoute(backup.lat, backup.lng, leg0.destLat, leg0.destLng);
+        if (r) {
+          leg0.distance = Math.round(r.distance);
+          leg0.duration = Math.round(r.duration);
+          leg0.fuelCost = Math.round(Trips.calcFuelCost(r.distance, leg0.fuelPrice, leg0.fuelPriceUnit));
+          leg0.routeGeometry = r.geometry ? JSON.stringify(r.geometry) : null;
+        }
+      } catch (e) { /* ignore */ }
+    }
+    legs[0] = leg0;
+
+    await Firebase.saveJourney({ ...journey, legs });
+    this.closeBackupPanel();
+    UI.showToast('Starting point replaced', 'success');
+  },
+
   // ═══════════════════════════════════════════════════════════════════════════
   // NAVIGATION
   // ═══════════════════════════════════════════════════════════════════════════
