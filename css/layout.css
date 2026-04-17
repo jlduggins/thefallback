@@ -432,94 +432,7 @@
   color: var(--color-primary);
 }
 
-/* Trip status card */
-.trip-status-card {
-  background: var(--color-primary);
-  border-radius: var(--radius-lg);
-  padding: var(--space-4);
-  color: var(--color-text-inverse);
-}
-
-.trip-status-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: var(--space-2);
-}
-
-.trip-status-label {
-  font-size: var(--text-xs);
-  color: rgba(255, 255, 255, 0.6);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.trip-status-destination {
-  font-size: var(--text-lg);
-  font-weight: var(--font-semibold);
-  margin-top: var(--space-1);
-}
-
-.trip-status-link {
-  font-size: var(--text-sm);
-  color: var(--color-accent);
-  margin-top: var(--space-1);
-}
-
-.trip-status-distance {
-  font-size: var(--text-sm);
-  color: var(--color-accent);
-  margin-top: var(--space-2);
-}
-
-.trip-status-share {
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: var(--radius-sm);
-}
-
-.trip-status-share svg {
-  width: 16px;
-  height: 16px;
-  stroke: white;
-}
-
-.trip-status-stats {
-  display: flex;
-  gap: var(--space-2);
-  margin-top: var(--space-3);
-}
-
-.trip-stat {
-  flex: 1;
-  padding: var(--space-2) var(--space-3);
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: var(--radius-sm);
-  text-align: center;
-}
-
-.trip-stat.accent {
-  background: var(--color-accent);
-  color: var(--color-text);
-}
-
-.trip-stat-value {
-  font-size: var(--text-lg);
-  font-weight: var(--font-semibold);
-}
-
-.trip-stat-label {
-  font-size: var(--text-xs);
-  color: rgba(255, 255, 255, 0.6);
-}
-
-.trip-stat.accent .trip-stat-label {
-  color: var(--color-text);
-}
+/* Trip status card — styles in components.css (.trip-status-card / .ts-*) */
 
 /* Nearby section */
 .section-header {
@@ -542,44 +455,90 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   EXPLORE — Embedded map card + vertical nearby list
+   EXPLORE — Two-pane layout: left column (brand/summary/nearby), right map
    ═══════════════════════════════════════════════════════════════════════════ */
 
-.explore-map-card {
-  position: relative;
-  margin: 0 var(--space-4) var(--space-4);
-  height: 180px;
-  background: var(--color-surface-alt);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  cursor: pointer;
+#view-explore {
+  flex-direction: row !important;
+  background: var(--color-base);
+  z-index: 5;
 }
 
-.explore-map-card #explore-map-container {
+.explore-left {
+  width: 380px;
+  max-width: 40vw;
+  min-width: 320px;
+  flex-shrink: 0;
+  background: var(--color-base);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: var(--space-5) var(--space-4);
+  gap: var(--space-4);
+}
+
+.explore-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-1);
+}
+.explore-brand .brand-logo {
+  height: 40px;
+  width: auto;
+}
+.explore-brand .brand-text {
+  font-family: var(--font-family-display);
+  font-size: var(--text-2xl);
+  font-weight: var(--font-bold);
+}
+.explore-brand .brand-text .the { color: var(--color-text); }
+.explore-brand .brand-text .fallback { color: var(--color-primary); }
+
+.explore-nearby-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.explore-nearby-wrap .section-header {
+  padding: 0 var(--space-1);
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.explore-right {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  background: var(--color-surface-alt);
+}
+
+.explore-right #explore-map-container {
   position: absolute;
   inset: 0;
 }
-
-.explore-map-card #explore-map-container #map {
+.explore-right #explore-map-container #map {
   width: 100%;
   height: 100%;
 }
 
-.explore-map-card .map-preview-btn {
-  position: absolute;
-  bottom: var(--space-3);
-  right: var(--space-3);
-  background: var(--color-surface);
-  color: var(--color-text);
-  border-radius: var(--radius-full);
-  padding: var(--space-2) var(--space-4);
-  font-size: var(--text-sm);
-  font-weight: var(--font-medium);
-  box-shadow: var(--shadow-md);
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  z-index: 2;
+/* Mobile: hide the map pane, stack everything */
+@media (max-width: 767px) {
+  #view-explore {
+    flex-direction: column !important;
+  }
+  .explore-left {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+    flex: 1;
+  }
+  .explore-right {
+    display: none;
+  }
 }
 
 /* Nearby list (vertical) */
@@ -587,7 +546,6 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  padding: 0 var(--space-4) var(--space-4);
 }
 
 .nearby-card {
