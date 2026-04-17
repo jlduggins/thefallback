@@ -80,13 +80,16 @@ const UI = {
 
     // Move #map between the global container and the explore preview container
     // so a single Leaflet instance can serve all three views.
+    // On mobile (<768px), the explore pane hides the map entirely, so keep it in
+    // the global container instead (user taps Map view to see it).
     const mapEl = document.getElementById('map');
     const exploreSlot = document.getElementById('explore-map-container');
     const globalSlot = document.getElementById('map-global');
+    const isDesktop = window.matchMedia('(min-width: 768px)').matches;
     if (mapEl && globalSlot) {
-      if (viewName === 'explore' && exploreSlot && mapEl.parentElement !== exploreSlot) {
+      if (viewName === 'explore' && isDesktop && exploreSlot && mapEl.parentElement !== exploreSlot) {
         exploreSlot.appendChild(mapEl);
-      } else if (viewName !== 'explore' && mapEl.parentElement !== globalSlot) {
+      } else if ((viewName !== 'explore' || !isDesktop) && mapEl.parentElement !== globalSlot) {
         globalSlot.insertBefore(mapEl, globalSlot.firstChild);
       }
     }

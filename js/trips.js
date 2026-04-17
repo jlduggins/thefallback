@@ -26,6 +26,8 @@ const Trips = {
     State.on('fuel:changed', () => { this.updateFuelSummary(); this.renderJourneys(); });
     State.on('location:updated', () => this.renderTripStatus());
     State.on('view:changed', ({ from, to }) => {
+      // Refresh summary card when entering explore
+      if (to === 'explore') this.renderTripStatus();
       // Leaving trips view — tear down journey overlay so the map is clean
       if (from === 'trips' && to !== 'trips') {
         if (this.activeJourneyId) {
@@ -98,31 +100,268 @@ const Trips = {
   renderTripStatus() {
     const el = document.getElementById('trip-status-card');
     if (!el) return;
-    const journey = State.getCurrentJourney();
-    if (!journey || !journey.legs?.length) {
-      el.innerHTML = `<div class="trip-status-header"><div><div class="trip-status-label">No active trip</div><div class="trip-status-destination">Start planning your route</div></div></div>`;
+
+    const currentId = State.currentJourneyId;
+    const journey = currentId ? State.getJourney(currentId) : null;
+
+    // No current journey selected — show journey chooser
+    if (!journey) {
+      this.renderTripStatusChooser(el);
       return;
     }
-    const nextLeg = this.findNextLeg(journey);
-    const stats = this.calculateJourneyStats(journey);
-    if (nextLeg) {
+
+    const legs = journey.legs || [];
+    if (!legs.length) {
       el.innerHTML = `
-        <div class="trip-status-header">
+        <div class="ts-header">
           <div>
-            <div class="trip-status-label">En route to</div>
-            <div class="trip-status-destination">${this.esc(nextLeg.destName)}</div>
-            ${nextLeg.distance ? `<div class="trip-status-distance">${nextLeg.distance} mi · ${this.fmtDuration(nextLeg.duration)}</div>` : ''}
+            <div class="ts-journey-name">${this.esc(journey.name)}</div>
+            <div class="ts-meta">No stops yet</div>
           </div>
-          <button class="trip-status-share" onclick="Trips.shareNextDestination()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
-          </button>
-        </div>
-        <div class="trip-status-stats">
-          <div class="trip-stat"><div class="trip-stat-value">${Math.round(stats.totalMiles)}</div><div class="trip-stat-label">Total miles</div></div>
-          <div class="trip-stat"><div class="trip-stat-value">$${Math.round(stats.totalFuel)}</div><div class="trip-stat-label">Est. fuel</div></div>
-          <div class="trip-stat accent"><div class="trip-stat-value">$${Math.round(stats.totalLodging)}</div><div class="trip-stat-label">Lodging</div></div>
+          <div class="ts-current-pill" onclick="Trips.clearCurrentJourney()" title="Clear current journey">
+            <span class="ts-dot"></span><span>Current</span>
+          </div>
         </div>`;
+      return;
     }
+
+    const uLat = State.userLat, uLng = State.userLng, PROX = 2;
+
+    // Determine "currently at" and next leg index (v1 logic)
+    let currentLocationName = null;
+    let currentLocationId = null;
+    let nextLegIndex = -1;
+    let atStartingPoint = false;
+
+    if (uLat && legs.length > 0) {
+      let closestDist = Infinity;
+      // Starting point
+      const firstLeg = legs[0];
+      const fromE = firstLeg.fromId ? State.getEntry(firstLeg.fromId) : null;
+      const fromLat = firstLeg.fromLat || fromE?.lat;
+      const fromLng = firstLeg.fromLng || fromE?.lng;
+      if (fromLat) {
+        const d = this.haversine(uLat, uLng, fromLat, fromLng);
+        if (d <= PROX) {
+          closestDist = d;
+          atStartingPoint = true;
+          currentLocationName = firstLeg.fromName;
+          currentLocationId = firstLeg.fromId;
+          nextLegIndex = 0;
+        }
+      }
+      // Each destination — fall back to entry coords if leg coords missing
+      for (let i = 0; i < legs.length; i++) {
+        const l = legs[i];
+        const destE = State.getEntry(l.destId);
+        const destLat = l.destLat || destE?.lat;
+        const destLng = l.destLng || destE?.lng;
+        if (destLat) {
+          const d = this.haversine(uLat, uLng, destLat, destLng);
+          if (d <= PROX && d < closestDist) {
+            closestDist = d;
+            atStartingPoint = false;
+            currentLocationName = l.destName;
+            currentLocationId = l.destId;
+            nextLegIndex = i + 1;
+          }
+        }
+      }
+    }
+
+    // Determine next destination (either after current location, or first upcoming)
+    let nextDest = null, distanceToNext = null, timeToNext = null, nextEntry = null;
+
+    if (nextLegIndex >= 0 && nextLegIndex < legs.length) {
+      const nextLeg = legs[nextLegIndex];
+      nextDest = nextLeg.destName;
+      distanceToNext = nextLeg.distance;
+      timeToNext = nextLeg.duration;
+      nextEntry = State.getEntry(nextLeg.destId);
+    } else if (!currentLocationName && legs.length > 0) {
+      // User is en route, not at any location — find first leg that's still upcoming
+      let nextIdx = -1;
+      if (uLat) {
+        for (let i = 0; i < legs.length; i++) {
+          const l = legs[i];
+          if (!l.destLat) continue;
+          let originLat, originLng;
+          if (i === 0) { originLat = l.fromLat; originLng = l.fromLng; }
+          else { originLat = legs[i - 1].destLat; originLng = legs[i - 1].destLng; }
+
+          const distToDest = this.haversine(uLat, uLng, l.destLat, l.destLng);
+          if (!originLat) {
+            nextIdx = i;
+            distanceToNext = Math.round(distToDest);
+            timeToNext = Math.round((distToDest / 45) * 60);
+            break;
+          }
+          const distToOrigin = this.haversine(uLat, uLng, originLat, originLng);
+          if (distToDest < distToOrigin || distToOrigin > PROX) {
+            nextIdx = i;
+            distanceToNext = Math.round(distToDest);
+            timeToNext = Math.round((distToDest / 45) * 60);
+            break;
+          }
+        }
+        // Fallback to last leg
+        if (nextIdx === -1) {
+          nextIdx = legs.length - 1;
+          const lastLeg = legs[nextIdx];
+          if (lastLeg.destLat) {
+            distanceToNext = Math.round(this.haversine(uLat, uLng, lastLeg.destLat, lastLeg.destLng));
+            timeToNext = Math.round((distanceToNext / 45) * 60);
+          }
+        }
+      } else {
+        nextIdx = 0;
+      }
+      if (nextIdx >= 0 && nextIdx < legs.length) {
+        nextDest = legs[nextIdx]?.destName;
+        nextEntry = State.getEntry(legs[nextIdx]?.destId);
+        nextLegIndex = nextIdx;
+      }
+    }
+
+    // Calculate spent / remaining
+    let spentCost = 0, remainingCost = 0;
+    for (let i = 0; i < legs.length; i++) {
+      const l = legs[i];
+      const legCost = l.fuelCost || 0;
+      const entry = State.getEntry(l.destId);
+      let lodgingCost = 0;
+      if (entry && l.arriveDate && l.departDate) {
+        const nights = Math.round((new Date(l.departDate) - new Date(l.arriveDate)) / 86400000);
+        if (nights > 0) {
+          lodgingCost = (entry.cost || 0) * nights;
+          if (entry.discountPercent) lodgingCost *= (1 - entry.discountPercent / 100);
+        }
+      }
+      const total = legCost + lodgingCost;
+      if (i < nextLegIndex || (nextLegIndex === -1 && currentLocationName)) {
+        spentCost += total;
+      } else {
+        remainingCost += total;
+      }
+    }
+    const totalCost = spentCost + remainingCost;
+
+    // Date range
+    const firstArrive = legs[0]?.arriveDate;
+    const lastDepart = legs[legs.length - 1]?.departDate;
+    const dateRange = firstArrive
+      ? new Date(firstArrive + 'T12:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+        + ' – ' + (lastDepart ? new Date(lastDepart + 'T12:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '')
+      : '';
+
+    // Render
+    el.innerHTML = `
+      <div class="ts-header">
+        <div>
+          <div class="ts-journey-name">${this.esc(journey.name)}</div>
+          <div class="ts-meta">${legs.length} stop${legs.length !== 1 ? 's' : ''}${dateRange ? ' · ' + dateRange : ''}</div>
+        </div>
+        <div class="ts-current-pill" onclick="Trips.clearCurrentJourney()" title="Change current journey">
+          <span class="ts-dot"></span><span>Current</span>
+        </div>
+      </div>
+
+      ${currentLocationName ? `
+        <div class="ts-block ts-block-light">
+          <div class="ts-block-label">
+            <span class="ts-dot"></span>
+            <span>Currently at</span>
+          </div>
+          <div class="ts-block-name">${this.esc(currentLocationName)}</div>
+        </div>
+      ` : nextDest ? `
+        <div class="ts-block ts-block-light">
+          <div class="ts-block-label">
+            <span class="ts-dot"></span>
+            <span>En route to</span>
+          </div>
+          <div class="ts-block-name">${this.esc(nextDest)}</div>
+          ${distanceToNext ? `<div class="ts-block-sub">${distanceToNext} mi remaining${timeToNext ? ' · ~' + Math.round(timeToNext) + ' min' : ''}</div>` : ''}
+        </div>
+      ` : ''}
+
+      ${currentLocationName && nextDest ? `
+        <div class="ts-block ts-block-dark">
+          <button class="ts-share-btn" onclick="Trips.openSendToMapsModal('${journey.id}')" title="Share to Maps">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+          </button>
+          <div class="ts-block-label-inv">Next destination</div>
+          <div class="ts-block-name-inv">${this.esc(nextDest)}</div>
+          <div class="ts-stats-inv">
+            <div><div class="ts-stat-v">${distanceToNext || '--'}${distanceToNext ? ' mi' : ''}</div><div class="ts-stat-l">distance</div></div>
+            <div><div class="ts-stat-v">${timeToNext ? Math.round(timeToNext) + ' min' : '--'}</div><div class="ts-stat-l">drive time</div></div>
+          </div>
+        </div>
+      ` : ''}
+
+      <div class="ts-cost-row">
+        <div class="ts-cost muted"><div class="ts-cost-v">$${Math.round(spentCost)}</div><div class="ts-cost-l">Est. Spent</div></div>
+        <div class="ts-cost muted"><div class="ts-cost-v">$${Math.round(remainingCost)}</div><div class="ts-cost-l">Est. Remaining</div></div>
+        <div class="ts-cost accent"><div class="ts-cost-v">$${Math.round(totalCost)}</div><div class="ts-cost-l">Est. Total</div></div>
+      </div>
+    `;
+  },
+
+  renderTripStatusChooser(el) {
+    const journeys = State.journeys;
+    if (!journeys.length) {
+      el.innerHTML = `
+        <div class="ts-empty">
+          <div class="ts-empty-title">No active trip</div>
+          <div class="ts-empty-sub">Create a journey in the Trips tab to track your route here.</div>
+        </div>`;
+      return;
+    }
+
+    // Filter journeys that overlap today (with 7-day buffer), like v1
+    const now = new Date();
+    const relevant = journeys.filter(j => {
+      const legs = j.legs || [];
+      if (!legs.length) return false;
+      const firstArrive = legs[0]?.arriveDate;
+      const lastDepart = legs[legs.length - 1]?.departDate;
+      if (!firstArrive) return true;
+      const start = new Date(firstArrive + 'T00:00');
+      const end = lastDepart ? new Date(lastDepart + 'T23:59') : new Date(start.getTime() + 30 * 86400000);
+      start.setDate(start.getDate() - 7);
+      end.setDate(end.getDate() + 7);
+      return now >= start && now <= end;
+    });
+    const display = relevant.length > 0 ? relevant : journeys.slice(0, 5);
+
+    el.innerHTML = `
+      <div class="ts-empty-title">Select current journey</div>
+      <div class="ts-empty-sub" style="margin-bottom:14px">${relevant.length > 0 ? 'Based on your travel dates:' : 'Your journeys:'}</div>
+      <div class="ts-chooser-list">
+        ${display.map(j => {
+          const legs = j.legs || [];
+          const fa = legs[0]?.arriveDate;
+          const ld = legs[legs.length - 1]?.departDate;
+          const dr = fa ? (fa.slice(5).replace('-', '/') + (ld ? ' – ' + ld.slice(5).replace('-', '/') : '')) : '';
+          return `
+            <div class="ts-chooser-item" onclick="Trips.selectCurrentJourney('${j.id}')">
+              <div class="ts-chooser-name">${this.esc(j.name)}</div>
+              <div class="ts-chooser-meta">${dr ? dr + ' · ' : ''}${legs.length} stop${legs.length !== 1 ? 's' : ''}</div>
+            </div>`;
+        }).join('')}
+      </div>
+      ${journeys.length > display.length ? `<div class="ts-empty-sub" style="margin-top:10px">+${journeys.length - display.length} more in Trips tab</div>` : ''}
+    `;
+  },
+
+  selectCurrentJourney(journeyId) {
+    State.setCurrentJourney(journeyId);
+    this.renderTripStatus();
+  },
+
+  clearCurrentJourney() {
+    State.setCurrentJourney(null);
+    this.renderTripStatus();
   },
 
   renderJourneys() {
@@ -480,9 +719,9 @@ const Trips = {
       const j=State.getJourney(journeyContext.journeyId),leg=j?.legs?.[journeyContext.legIndex];
       const backups=State.entries.filter(e=>{if(e.id===entry.id||!e.lat)return false;if(this.haversine(entry.lat,entry.lng,e.lat,e.lng)>radius)return false;if(e.isSeasonal&&leg?.arriveDate&&!this.isInSeason(leg.arriveDate))return false;return true;});
       if(backups.length>0){content.innerHTML+=`<div style="margin-top:16px;padding-top:16px;border-top:0.5px solid var(--color-border)"><div style="font-size:11px;font-weight:500;color:var(--color-text-muted);margin-bottom:10px">💡 Backup Options (within ${radius}mi)</div><div style="display:flex;flex-direction:column;gap:7px">${backups.map(b=>{const d=Math.round(this.haversine(entry.lat,entry.lng,b.lat,b.lng));const bc=b.cost===0?'Free':b.cost!=null?'$'+b.cost+'/night':'';return`<div onclick="Trips.openBackupLocationDetail('${b.id}')" style="background:rgba(245,158,11,0.08);border-radius:var(--radius-md);padding:10px 12px;cursor:pointer" onmouseover="this.style.background='rgba(245,158,11,0.14)'" onmouseout="this.style.background='rgba(245,158,11,0.08)'"><div style="display:flex;justify-content:space-between"><div><div style="font-size:13px;font-weight:500;color:var(--color-text)">${this.esc(b.name)}</div><div style="font-size:11px;color:var(--color-text-muted)">${b.type||''}${bc?' · '+bc:''}</div></div><div style="font-size:12px;font-weight:500;color:#92400e">${d}mi</div></div></div>`;}).join('')}</div></div>`;}
-      footer.innerHTML=`<button onclick="Trips.editDestinationFromDetail()" class="btn btn-primary" style="width:100%;margin-bottom:8px">Edit destination</button><button onclick="Trips.editLocationFromDetail()" class="btn btn-outline" style="width:100%">Edit location details</button>`;
+      footer.innerHTML=`<button onclick="event.stopPropagation();Trips.editDestinationFromDetail()" class="btn btn-primary" style="width:100%;margin-bottom:8px">Edit destination</button><button onclick="event.stopPropagation();Trips.editLocationFromDetail()" class="btn btn-outline" style="width:100%">Edit location details</button>`;
     } else {
-      footer.innerHTML=`<button onclick="Trips.editLocationFromDetail()" class="btn btn-primary" style="width:100%">Edit location</button>`;
+      footer.innerHTML=`<button onclick="event.stopPropagation();Trips.editLocationFromDetail()" class="btn btn-primary" style="width:100%">Edit location</button>`;
     }
 
     const panel=document.getElementById('location-detail-panel');
@@ -501,8 +740,26 @@ const Trips = {
     if(MapModule.map)MapModule.map.invalidateSize();
   },
 
-  editLocationFromDetail() { if(!this.currentDetailEntryId)return;this.closeLocationDetail();const e=State.getEntry(this.currentDetailEntryId);if(e)Entries.openEditForm(e); },
-  editDestinationFromDetail() { if(!this.currentDetailJourneyContext)return;const{journeyId,legIndex}=this.currentDetailJourneyContext;this.closeLocationDetail();this.editLeg(journeyId,legIndex); },
+  editLocationFromDetail() {
+    if (!this.currentDetailEntryId) return;
+    const id = this.currentDetailEntryId;
+    this.closeLocationDetail();
+    const e = State.getEntry(id);
+    if (!e) { console.warn('[Trips] editLocationFromDetail: entry not found', id); return; }
+    if (typeof Entries === 'undefined' || !Entries.openEditForm) {
+      console.warn('[Trips] editLocationFromDetail: Entries.openEditForm unavailable');
+      return;
+    }
+    // Small delay so the detail-panel close animation doesn't fight the modal open
+    setTimeout(() => Entries.openEditForm(e), 50);
+  },
+
+  editDestinationFromDetail() {
+    if (!this.currentDetailJourneyContext) return;
+    const { journeyId, legIndex } = this.currentDetailJourneyContext;
+    this.closeLocationDetail();
+    setTimeout(() => this.editLeg(journeyId, legIndex), 50);
+  },
 
   openBackupLocationDetail(backupEntryId) {
     const b=State.getEntry(backupEntryId);if(!b)return;
