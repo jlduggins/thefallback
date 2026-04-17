@@ -66,6 +66,9 @@ const UI = {
     if (view) {
       view.classList.add('active');
     }
+
+    // Set body attribute so CSS can target view-specific map visibility
+    document.body.setAttribute('data-view', viewName);
     
     // Update nav items
     document.querySelectorAll('.nav-item[data-view]').forEach(item => {
@@ -74,27 +77,23 @@ const UI = {
     document.querySelectorAll('.sidebar-nav-item[data-view]').forEach(item => {
       item.classList.toggle('active', item.dataset.view === viewName);
     });
-    
-    // Initialize map if showing saved view
-    if (viewName === 'saved') {
-      if (!State.mapReady) {
-        setTimeout(() => {
-          MapModule.init('map');
-          // Render markers after map is ready
-          setTimeout(() => {
-            MapModule.renderMarkers();
-            if (State.entries.length > 0) {
-              MapModule.fitAllMarkers();
-            }
-          }, 200);
-        }, 100);
-      } else {
-        // Map already initialized, just make sure markers are rendered
-        setTimeout(() => {
-          MapModule.map.invalidateSize();
-          MapModule.renderMarkers();
-        }, 100);
+
+    // Move #map between the global container and the explore preview container
+    // so a single Leaflet instance can serve all three views.
+    const mapEl = document.getElementById('map');
+    const exploreSlot = document.getElementById('explore-map-container');
+    const globalSlot = document.getElementById('map-global');
+    if (mapEl && globalSlot) {
+      if (viewName === 'explore' && exploreSlot && mapEl.parentElement !== exploreSlot) {
+        exploreSlot.appendChild(mapEl);
+      } else if (viewName !== 'explore' && mapEl.parentElement !== globalSlot) {
+        globalSlot.insertBefore(mapEl, globalSlot.firstChild);
       }
+    }
+
+    // Invalidate map when the container size may have changed
+    if (viewName === 'saved' || viewName === 'trips' || viewName === 'explore') {
+      setTimeout(() => { if (MapModule.map) MapModule.map.invalidateSize(); }, 50);
     }
   },
   
@@ -116,6 +115,10 @@ const UI = {
     // Show default view
     State.setView('explore');
     
+    // Initialize map immediately so it's ready for saved + trips views
+    if (!State.mapReady) {
+      setTimeout(() => { MapModule.init('map'); MapModule.renderMarkers(); }, 50);
+    }
     // Start location tracking
     MapModule.startWatchingLocation();
   },

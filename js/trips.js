@@ -25,6 +25,23 @@ const Trips = {
     State.on('journey:current-changed', () => this.renderAll());
     State.on('fuel:changed', () => { this.updateFuelSummary(); this.renderJourneys(); });
     State.on('location:updated', () => this.renderTripStatus());
+    State.on('view:changed', ({ from, to }) => {
+      // Leaving trips view — tear down journey overlay so the map is clean
+      if (from === 'trips' && to !== 'trips') {
+        if (this.activeJourneyId) {
+          this.clearJourneyFromMap();
+          // Reset the detail panel back to the list
+          const content = document.getElementById('trips-panel-content');
+          if (content && this._defaultPanelContent) {
+            content.innerHTML = this._defaultPanelContent;
+            this._defaultPanelContent = null;
+            this.renderJourneys();
+            this.updateFuelSummary();
+          }
+        }
+        this.closeLocationDetail();
+      }
+    });
     this.updateFuelSummary();
     this.initResizeHandles();
 
@@ -115,18 +132,33 @@ const Trips = {
     const journeys = State.journeys;
     if (!journeys.length) {
       if (noEl) noEl.style.display = '';
-      list.querySelectorAll('.journey-card').forEach(c => c.remove());
+      // Remove any previously rendered section wrappers
+      list.querySelectorAll('.journey-section').forEach(c => c.remove());
       return;
     }
     if (noEl) noEl.style.display = 'none';
-    const sorted = [...journeys].sort((a,b) => { if(a.pinned&&!b.pinned)return-1;if(!a.pinned&&b.pinned)return 1;return(b.createdAt||0)-(a.createdAt||0); });
-    // Remove existing cards, keep no-journeys div
-    list.querySelectorAll('.journey-card').forEach(c => c.remove());
-    sorted.forEach(j => {
-      const div = document.createElement('div');
-      div.innerHTML = this.renderJourneyCard(j);
-      list.appendChild(div.firstElementChild);
-    });
+    // Clean previous render
+    list.querySelectorAll('.journey-section').forEach(c => c.remove());
+
+    const pinned = journeys.filter(j => j.pinned);
+    const others = journeys.filter(j => !j.pinned)
+      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+    const renderSection = (title, arr) => {
+      if (!arr.length) return;
+      const section = document.createElement('div');
+      section.className = 'journey-section';
+      section.innerHTML = `<div class="journey-section-title">${title}</div>` +
+        arr.map(j => this.renderJourneyCard(j)).join('');
+      list.appendChild(section);
+    };
+
+    renderSection('📌 PINNED', pinned);
+    renderSection('ALL JOURNEYS', others);
+
+    // Update journeys count display
+    const countEl = document.getElementById('journeys-count');
+    if (countEl) countEl.textContent = `${journeys.length} journey${journeys.length !== 1 ? 's' : ''}`;
   },
 
   renderJourneyCard(j) {
@@ -135,33 +167,23 @@ const Trips = {
     const totalFuel = legs.reduce((s,l)=>s+(l.fuelCost||0),0);
     const totalNights = legs.reduce((s,l)=>{ if(!l.arriveDate||!l.departDate)return s; return s+Math.max(0,Math.round((new Date(l.departDate)-new Date(l.arriveDate))/86400000)); },0);
     const totalLodging = legs.reduce((s,l)=>{ const e=State.getEntry(l.destId); if(!e||!l.arriveDate||!l.departDate)return s; const n=Math.round((new Date(l.departDate)-new Date(l.arriveDate))/86400000); if(n<=0)return s; let c=(e.cost||0)*n; if(e.discountPercent&&e.discountType)c=c*(1-e.discountPercent/100); return s+c; },0);
+    const totalCost = Math.round(totalFuel + totalLodging);
     return `
-      <div class="journey-card" data-id="${j.id}" style="background:var(--color-surface);border:0.5px solid var(--color-border);${j.pinned?'border-left:3px solid var(--color-primary);':''}border-radius:var(--radius-lg);padding:12px;margin-bottom:8px">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
-          <div style="flex:1;cursor:pointer" onclick="Trips.openJourneyDetail('${j.id}')">
-            <div style="font-size:14px;font-weight:500;color:var(--color-text)">${this.esc(j.name)}</div>
-            <div style="font-size:11px;color:var(--color-text-muted);margin-top:2px">${legs.length} stop${legs.length!==1?'s':''} · ${Math.round(totalMiles)} mi · ${totalNights} nights</div>
+      <div class="journey-card${j.pinned?' pinned':''}" data-id="${j.id}" onclick="Trips.openJourneyDetail('${j.id}')">
+        <div class="jcard-top">
+          <div class="jcard-info">
+            <div class="jcard-name">${this.esc(j.name)}</div>
+            <div class="jcard-meta">${legs.length} stop${legs.length!==1?'s':''} · ${Math.round(totalMiles)} mi · ${totalNights} night${totalNights!==1?'s':''}</div>
           </div>
-          <div style="position:relative">
-            <button onclick="event.stopPropagation();Trips.toggleJourneyMenu('${j.id}')" style="background:none;border:none;color:var(--color-text-muted);font-size:18px;cursor:pointer;padding:2px;line-height:1">⋮</button>
-            <div id="journey-menu-${j.id}" class="journey-context-menu">
-              <button onclick="event.stopPropagation();Trips.closeJourneyMenu();Trips.openJourneyDetail('${j.id}')" class="jmenu-item">View itinerary</button>
-              <button onclick="event.stopPropagation();Trips.closeJourneyMenu();Trips.openSendToMapsModal('${j.id}')" class="jmenu-item">Share to Maps</button>
-              <button onclick="event.stopPropagation();Trips.closeJourneyMenu();Trips.editJourneyName('${j.id}')" class="jmenu-item">Rename</button>
-              <button onclick="event.stopPropagation();Trips.closeJourneyMenu();Trips.togglePinJourney('${j.id}')" class="jmenu-item">${j.pinned?'Unpin':'Pin'}</button>
-              <div style="height:0.5px;background:var(--color-border);margin:4px 0"></div>
-              <button onclick="event.stopPropagation();Trips.closeJourneyMenu();Trips.confirmDeleteJourney('${j.id}')" class="jmenu-item" style="color:var(--color-error)">Delete</button>
-            </div>
+          <div class="jcard-price">
+            <div class="jcard-price-val">$${totalCost}</div>
+            <div class="jcard-price-lbl">total est.</div>
           </div>
         </div>
-        <div style="display:flex;gap:6px;margin-bottom:8px">
-          <div style="flex:1;background:var(--color-surface-alt);border-radius:6px;padding:5px 8px;text-align:center"><div style="font-size:11px;font-weight:500;color:var(--color-text)">$${Math.round(totalLodging)}</div><div style="font-size:9px;color:var(--color-text-muted)">Lodging</div></div>
-          <div style="flex:1;background:var(--color-surface-alt);border-radius:6px;padding:5px 8px;text-align:center"><div style="font-size:11px;font-weight:500;color:var(--color-text)">$${Math.round(totalFuel)}</div><div style="font-size:9px;color:var(--color-text-muted)">Fuel</div></div>
-          <div style="flex:1;background:var(--color-primary);border-radius:6px;padding:5px 8px;text-align:center"><div style="font-size:11px;font-weight:500;color:white">$${Math.round(totalFuel+totalLodging)}</div><div style="font-size:9px;color:rgba(255,255,255,0.7)">Total</div></div>
-        </div>
-        <div style="display:flex;gap:6px">
-          <button onclick="Trips.openJourneyDetail('${j.id}')" style="flex:1;padding:7px;border-radius:var(--radius-sm);border:0.5px solid var(--color-border);background:white;color:var(--color-text);font-size:11px;font-weight:500;cursor:pointer">View itinerary</button>
-          <button onclick="Trips.viewJourneyOnMap('${j.id}')" style="flex:1;padding:7px;border-radius:var(--radius-sm);border:none;background:var(--color-primary);color:white;font-size:11px;font-weight:500;cursor:pointer">View on map</button>
+        <div class="jcard-budgets">
+          <div class="bp muted"><div class="bp-v">$${Math.round(totalLodging)}</div><div class="bp-l">Lodging</div></div>
+          <div class="bp muted"><div class="bp-v">$${Math.round(totalFuel)}</div><div class="bp-l">Fuel</div></div>
+          <div class="bp accent"><div class="bp-v">$${totalCost}</div><div class="bp-l">Total</div></div>
         </div>
       </div>`;
   },
@@ -182,7 +204,11 @@ const Trips = {
     const uLat=State.userLat, uLng=State.userLng, PROX=2;
     if(uLat){let cl=Infinity;if(legs.length>0&&legs[0].fromLat){const d=this.haversine(uLat,uLng,legs[0].fromLat,legs[0].fromLng);if(d<=PROX&&d<cl){cl=d;atStart=true;curIdx=-1;}}legs.forEach((l,i)=>{if(!l.destLat)return;const d=this.haversine(uLat,uLng,l.destLat,l.destLng);if(d<=PROX&&d<cl){cl=d;atStart=false;curIdx=i;}});}
 
-    const hasMissing = legs.some(l=>!l.routeGeometry);
+    // Auto-refresh routes in background if any are missing
+    const hasMissingRoute = legs.some(l => !l.routeGeometry && l.destLat);
+    if (hasMissingRoute) {
+      this.refreshAllRoutes(journeyId).catch(() => {});
+    }
 
     // Store default panel content for restoration on close
     const panelContent = document.getElementById('trips-panel-content');
@@ -193,24 +219,27 @@ const Trips = {
 
     panelContent.innerHTML = `
       <div class="detail-panel-hd">
+        <div class="detail-back-row">
+          <button class="detail-back-btn" onclick="Trips.closeJourneyDetail()">← Back to journeys</button>
+        </div>
         <div class="detail-panel-nav">
-          <button class="detail-back-btn" onclick="Trips.closeJourneyDetail()">← Back</button>
+          <div class="detail-journey-name">${this.esc(journey.name)}</div>
           <div class="detail-actions">
-            <button class="detail-maps-btn" onclick="Trips.openSendToMapsModal('${journey.id}')">Maps ↗</button>
-            <div style="position:relative">
-              <button onclick="Trips.toggleJourneyDetailMenu('${journey.id}')" style="background:none;border:none;color:var(--color-text-muted);font-size:18px;cursor:pointer;line-height:1;padding:2px">⋮</button>
+            <button class="detail-share-btn" onclick="Trips.openSendToMapsModal('${journey.id}')" title="Share to Maps">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+            </button>
+            <div class="detail-menu-wrap">
+              <button class="detail-more-btn" onclick="Trips.toggleJourneyDetailMenu('${journey.id}')">⋮</button>
               <div id="journey-detail-menu" class="journey-context-menu" style="right:0">
                 <button onclick="Trips.closeJourneyDetailMenu();Trips.editJourneyName('${journey.id}')" class="jmenu-item">Rename</button>
                 <button onclick="Trips.closeJourneyDetailMenu();Trips.togglePinJourney('${journey.id}')" class="jmenu-item">${journey.pinned?'Unpin':'Pin'}</button>
-                ${hasMissing?`<button onclick="Trips.closeJourneyDetailMenu();Trips.refreshAllRoutes('${journey.id}')" class="jmenu-item">🔄 Refresh routes</button>`:''}
                 <div style="height:0.5px;background:var(--color-border);margin:4px 0"></div>
                 <button onclick="Trips.closeJourneyDetailMenu();Trips.confirmDeleteJourney('${journey.id}')" class="jmenu-item" style="color:var(--color-error)">Delete journey</button>
               </div>
             </div>
           </div>
         </div>
-        <div class="detail-journey-name">${this.esc(journey.name)}</div>
-        <div class="detail-journey-meta">${legs.length} stop${legs.length!==1?'s':''} · ${Math.round(totalMiles)} mi · ${totalNights} nights</div>
+        <div class="detail-journey-meta">${legs.length} stop${legs.length!==1?'s':''} · ${Math.round(totalMiles)} mi · ${totalNights} night${totalNights!==1?'s':''}</div>
         <div class="detail-cost-row">
           <div class="detail-cost-card muted"><div class="detail-cost-label">Est. Lodging</div><div class="detail-cost-value">$${Math.round(totalLodging)}</div></div>
           <div class="detail-cost-card muted"><div class="detail-cost-label">Est. Fuel</div><div class="detail-cost-value">$${Math.round(totalFuel)}</div></div>
@@ -519,6 +548,9 @@ const Trips = {
     if(allCoords.length>1){const pg=g=>{if(!g)return null;try{const p=typeof g==='string'?JSON.parse(g):g;return p.map(c=>[c[1],c[0]]);}catch(e){return null;}};const f0=pg(legs[0]?.routeGeometry);const l0=f0?L.polyline(f0,{color:'#2d5a47',weight:4,opacity:0.7}):L.polyline([allCoords[0],allCoords[1]],{color:'#2d5a47',weight:3,opacity:0.5,dashArray:'6 4'});l0.addTo(m);this.journeyMarkers.push(l0);for(let i=1;i<legs.length;i++){const g=pg(legs[i].routeGeometry),fr=allCoords[i],to=allCoords[i+1];if(!to)continue;const ln=g?L.polyline(g,{color:'#2d5a47',weight:4,opacity:0.7}):L.polyline([fr,to],{color:'#2d5a47',weight:3,opacity:0.5,dashArray:'6 4'});ln.addTo(m);this.journeyMarkers.push(ln);}
     m.fitBounds(L.latLngBounds(allCoords),{padding:[60,60],maxZoom:11});}
     else if(allCoords.length===1){m.setView(allCoords[0],12);}
+    // Show the Backups toggle button now that a journey is active
+    const bb = document.getElementById('map-backups-btn');
+    if (bb) bb.style.display = '';
     if(shouldSwitchView && State.currentView !== 'trips') State.setView('trips');
   },
 
@@ -528,9 +560,21 @@ const Trips = {
     const m=MapModule.map;if(m){this.journeyMarkers.forEach(mk=>m.removeLayer(mk));this.backupMarkers.forEach(mk=>m.removeLayer(mk));}
     this.journeyMarkers=[];this.backupMarkers=[];this.showingBackups=false;
     MapModule.renderMarkers();this.activeJourneyId=null;
+    const bb = document.getElementById('map-backups-btn');
+    if (bb) { bb.style.display = 'none'; bb.classList.remove('active'); }
   },
 
-  toggleBackupMarkers(){if(this.showingBackups){const m=MapModule.map;if(m)this.backupMarkers.forEach(mk=>m.removeLayer(mk));this.backupMarkers=[];this.showingBackups=false;}else{this.showBackupMarkersForJourney();this.showingBackups=true;}},
+  toggleBackupMarkers(){
+    const bb = document.getElementById('map-backups-btn');
+    if(this.showingBackups){
+      const m=MapModule.map;if(m)this.backupMarkers.forEach(mk=>m.removeLayer(mk));
+      this.backupMarkers=[];this.showingBackups=false;
+      if(bb)bb.classList.remove('active');
+    }else{
+      this.showBackupMarkersForJourney();this.showingBackups=true;
+      if(bb)bb.classList.add('active');
+    }
+  },
 
   showBackupMarkersForJourney(){if(!this.activeJourneyId)return;const j=State.getJourney(this.activeJourneyId);if(!j?.legs)return;const m=MapModule.map;if(!m)return;const radius=State.fuelSettings.backupRadius||30,jids=new Set(j.legs.map(l=>l.destId)),seen=new Set();j.legs.forEach(leg=>{const de=State.getEntry(leg.destId);if(!de?.lat)return;State.entries.forEach(e=>{if(jids.has(e.id)||!e.lat||seen.has(e.id))return;if(this.haversine(de.lat,de.lng,e.lat,e.lng)<=radius){seen.add(e.id);const icon=L.divIcon({html:`<div style="width:20px;height:30px;position:relative"><div style="width:20px;height:20px;background:#f59e0b;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:2px solid white;position:absolute"></div></div>`,className:'backup-marker',iconSize:[20,30],iconAnchor:[10,30]});const mk=L.marker([e.lat,e.lng],{icon,zIndexOffset:500}).addTo(m);mk.bindPopup(`<div style="font-family:system-ui;padding:4px"><span style="background:#f59e0b;color:white;font-size:9px;font-weight:600;padding:2px 6px;border-radius:4px">BACKUP</span><div style="font-weight:500;font-size:14px;margin:4px 0">${this.esc(e.name)}</div><div style="font-size:12px;color:#4a6358">${e.type||''}</div></div>`);this.backupMarkers.push(mk);}});});},
 

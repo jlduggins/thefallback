@@ -16,15 +16,22 @@ const Entries = {
     State.on('entries:changed', () => this.renderAll());
     State.on('entry:selected', id => {
       this.updateSelectedCard(id);
-      // Don't show detail panel - just highlight the card and marker
     });
     State.on('dragpin:moved', ({ lat, lng }) => this.updateCoords(lat, lng));
-    
-    // Form event listeners
+    State.on('fuel:changed', () => this.renderExploreNearby());
+    State.on('location:updated', () => this.renderExploreNearby());
+
     this.initForm();
-    
-    // Filter chip listeners
     this.initFilters();
+    this.updateEntriesCount();
+  },
+
+  updateEntriesCount() {
+    const el = document.getElementById('entries-count');
+    if (el) {
+      const n = State.entries.length;
+      el.textContent = `${n} location${n !== 1 ? 's' : ''}`;
+    }
   },
   
   initFilters() {
@@ -78,60 +85,69 @@ const Entries = {
   renderAll() {
     this.renderExploreNearby();
     this.renderSavedList();
+    this.updateEntriesCount();
   },
   
   renderExploreNearby() {
-    const container = document.getElementById('nearby-scroll');
+    const container = document.getElementById('nearby-list');
     if (!container) return;
-    
-    // Get nearby entries if we have user location
-    let entries = State.entries;
-    
+
+    // Radius from fuel settings (backupRadius) — these are "backup" nearby spots
+    const radius = (State.fuelSettings && State.fuelSettings.backupRadius) || 30;
+    const radiusLabel = document.getElementById('nearby-radius-label');
+    if (radiusLabel) radiusLabel.textContent = `within ${radius} mi`;
+
+    let entries = [];
     if (State.userLat && State.userLng) {
-      entries = State.getNearbyEntries(State.userLat, State.userLng, 100);
+      entries = State.getNearbyEntries(State.userLat, State.userLng, radius);
     }
-    
-    // Take first 10
-    entries = entries.slice(0, 10);
-    
+    entries = entries.slice(0, 20);
+
     if (entries.length === 0) {
       container.innerHTML = `
         <div class="empty-state" style="padding: 24px; text-align: center;">
           <div style="font-size: 24px; margin-bottom: 8px;">📍</div>
-          <div style="font-size: 14px; color: var(--color-text-muted);">No locations yet</div>
+          <div style="font-size: 14px; color: var(--color-text-muted);">
+            ${State.userLat ? `No spots within ${radius} miles` : 'Enable location to see nearby spots'}
+          </div>
         </div>
       `;
       return;
     }
-    
+
     container.innerHTML = entries.map(entry => this.renderNearbyCard(entry)).join('');
-    
-    // Add click handlers
+
     container.querySelectorAll('.nearby-card').forEach(card => {
       card.addEventListener('click', () => {
         const id = card.dataset.id;
         State.selectEntry(id);
         State.setView('saved');
-        
         const entry = State.getEntry(id);
-        if (entry) {
-          MapModule.flyTo(entry.lat, entry.lng, 14);
-        }
+        if (entry) MapModule.flyTo(entry.lat, entry.lng, 14);
       });
     });
   },
-  
+
   renderNearbyCard(entry) {
-    const distance = entry.distance 
-      ? State.formatDistance(entry.distance)
+    const distance = entry.distance != null
+      ? State.formatDistance(entry.distance) + ' away'
       : '';
-    
+    const costTag = entry.cost === 0
+      ? '<span class="nearby-tag free">Free</span>'
+      : entry.cost != null
+        ? `<span class="nearby-tag cost">$${entry.cost}</span>`
+        : '';
+    const tags = [costTag];
+    if (entry.hasHookups) tags.push('<span class="nearby-tag">Hookups</span>');
+    if (entry.needsReservations) tags.push('<span class="nearby-tag warn">Reservation</span>');
+
     return `
       <div class="nearby-card" data-id="${entry.id}">
-        <div class="nearby-card-image" style="${entry.photos?.[0] ? `background-image: url(${entry.photos[0]})` : ''}"></div>
+        <div class="nearby-card-thumb"${entry.photos?.[0] ? ` style="background-image:url(${entry.photos[0]})"` : ''}></div>
         <div class="nearby-card-content">
           <div class="nearby-card-name">${this.escapeHtml(entry.name)}</div>
-          <div class="nearby-card-meta">${distance || entry.type || ''}</div>
+          <div class="nearby-card-meta">${distance}</div>
+          <div class="nearby-card-tags">${tags.filter(Boolean).join('')}</div>
         </div>
       </div>
     `;
