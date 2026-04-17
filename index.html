@@ -99,41 +99,33 @@
       </div>
 
       <!-- ═══ EXPLORE VIEW ═══ -->
-      <section id="view-explore" class="view active">
-        <header class="view-header">
-          <div class="header-row">
-            <div class="brand">
-              <img src="./icons/logo.png" alt="" class="brand-logo">
-              <div class="brand-text"><span class="the">The</span> <span class="fallback">Fallback</span></div>
-            </div>
-            <button class="btn btn-ghost btn-icon" onclick="State.setView('settings')">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-            </button>
-          </div>
+      <section id="view-explore" class="view">
+        <!-- Left column: brand, summary, nearby list -->
+        <div class="explore-left">
+          <header class="explore-brand">
+            <img src="./icons/logo.png" alt="" class="brand-logo">
+            <div class="brand-text"><span class="the">The</span> <span class="fallback">Fallback</span></div>
+          </header>
+
           <div id="trip-status-card" class="trip-status-card">
-            <div class="trip-status-header">
-              <div>
-                <div class="trip-status-label">No active trip</div>
-                <div class="trip-status-destination">Start planning your route</div>
-              </div>
+            <div class="ts-empty">
+              <div class="ts-empty-title">No active trip</div>
+              <div class="ts-empty-sub">Create a journey in Trips to track your route here.</div>
             </div>
-          </div>
-        </header>
-        <div class="view-content">
-          <!-- Embedded map (uses shared #map via showExploreMap) -->
-          <div class="explore-map-card" onclick="State.setView('saved')">
-            <div id="explore-map-container"></div>
-            <button class="map-preview-btn">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
-              Open full map
-            </button>
           </div>
 
-          <div class="section-header">
-            <span class="section-title">Nearby Spots</span>
-            <span class="section-subtitle" id="nearby-radius-label"></span>
+          <div class="explore-nearby-wrap">
+            <div class="section-header">
+              <span class="section-title">Nearby Spots</span>
+              <span class="section-subtitle" id="nearby-radius-label"></span>
+            </div>
+            <div id="nearby-list" class="nearby-list"></div>
           </div>
-          <div id="nearby-list" class="nearby-list"></div>
+        </div>
+
+        <!-- Right column: embedded map (desktop only; mobile hides this and uses Map view) -->
+        <div class="explore-right">
+          <div id="explore-map-container"></div>
         </div>
       </section>
 
