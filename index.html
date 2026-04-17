@@ -81,21 +81,22 @@
       <!-- ═══ GLOBAL MAP — shared between saved + trips views ═══ -->
       <div id="map-global">
         <div id="map"></div>
-        <!-- Floating controls (bottom-right) -->
-        <div class="map-controls-global">
-          <button class="map-control-btn" onclick="MapModule.zoomIn()" title="Zoom in">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          </button>
-          <button class="map-control-btn" onclick="MapModule.zoomOut()" title="Zoom out">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          </button>
-          <button class="map-control-btn" onclick="MapModule.centerOnUser()" title="My location">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/></svg>
-          </button>
-          <button class="map-control-btn map-control-backups" id="map-backups-btn" onclick="Trips.toggleBackupMarkers()" title="Toggle backup spots" style="display:none">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
-          </button>
-        </div>
+      </div>
+
+      <!-- Floating map controls (bottom-right tray) — relocated per-view by ui.js -->
+      <div id="map-controls" class="map-controls-global">
+        <button class="map-control-btn" onclick="MapModule.zoomIn()" title="Zoom in">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <button class="map-control-btn" onclick="MapModule.zoomOut()" title="Zoom out">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <button class="map-control-btn" onclick="MapModule.centerOnUser()" title="My location">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/></svg>
+        </button>
+        <button class="map-control-btn map-control-backups" id="map-backups-btn" onclick="Trips.toggleBackupMarkers()" title="Toggle backup spots" style="display:none">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        </button>
       </div>
 
       <!-- ═══ EXPLORE VIEW ═══ -->
