@@ -542,25 +542,22 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   EXPLORE — Backup detail panel (slides in from right edge of .explore-left)
+   EXPLORE — Backup detail panel (third flex column between .explore-left and map)
    ═══════════════════════════════════════════════════════════════════════════ */
 
-#view-explore { position: relative; }
-
 .explore-backup-panel {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 380px;               /* anchored to right edge of .explore-left */
   width: 380px;
-  max-width: 90vw;
+  max-width: 40vw;
+  min-width: 320px;
+  flex-shrink: 0;
   background: var(--color-surface);
   border-left: 0.5px solid var(--color-border);
   box-shadow: 2px 0 12px rgba(0, 0, 0, 0.06);
   display: flex;
   flex-direction: column;
-  z-index: 10;
+  overflow: hidden;
   animation: explore-backup-slide-in 180ms ease-out;
+  z-index: 6;
 }
 
 @keyframes explore-backup-slide-in {
@@ -586,7 +583,7 @@
   background: var(--color-surface);
 }
 
-/* Mobile: panel takes over full width below the nearby list */
+/* Mobile: panel takes over full screen */
 @media (max-width: 767px) {
   .explore-backup-panel {
     position: fixed;
@@ -596,6 +593,7 @@
     right: 0;
     width: 100%;
     max-width: none;
+    min-width: 0;
     z-index: 100;
   }
 }
