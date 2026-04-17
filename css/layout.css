@@ -541,35 +541,83 @@
   font-weight: var(--font-medium);
 }
 
-.nearby-scroll {
-  display: flex;
-  gap: var(--space-3);
-  padding: 0 var(--space-4) var(--space-4);
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
+/* ═══════════════════════════════════════════════════════════════════════════
+   EXPLORE — Embedded map card + vertical nearby list
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.explore-map-card {
+  position: relative;
+  margin: 0 var(--space-4) var(--space-4);
+  height: 180px;
+  background: var(--color-surface-alt);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  cursor: pointer;
 }
 
-.nearby-scroll::-webkit-scrollbar {
-  display: none;
+.explore-map-card #explore-map-container {
+  position: absolute;
+  inset: 0;
+}
+
+.explore-map-card #explore-map-container #map {
+  width: 100%;
+  height: 100%;
+}
+
+.explore-map-card .map-preview-btn {
+  position: absolute;
+  bottom: var(--space-3);
+  right: var(--space-3);
+  background: var(--color-surface);
+  color: var(--color-text);
+  border-radius: var(--radius-full);
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  z-index: 2;
+}
+
+/* Nearby list (vertical) */
+.nearby-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: 0 var(--space-4) var(--space-4);
 }
 
 .nearby-card {
-  min-width: 140px;
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-3);
   background: var(--color-surface);
   border-radius: var(--radius-lg);
-  overflow: hidden;
-  box-shadow: var(--shadow-md);
+  border: 0.5px solid var(--color-border);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.nearby-card:hover { background: var(--color-surface-alt); }
+
+.nearby-card-thumb {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, var(--color-primary-light) 0%, var(--color-primary) 100%);
+  background-size: cover;
+  background-position: center;
   flex-shrink: 0;
 }
 
-.nearby-card-image {
-  height: 80px;
-  background: linear-gradient(135deg, var(--color-primary-light) 0%, var(--color-primary) 100%);
-}
-
 .nearby-card-content {
-  padding: var(--space-3);
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .nearby-card-name {
@@ -584,7 +632,31 @@
 .nearby-card-meta {
   font-size: var(--text-xs);
   color: var(--color-text-muted);
-  margin-top: var(--space-1);
+  margin-top: 2px;
+}
+
+.nearby-card-tags {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.nearby-tag {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: var(--color-surface-alt);
+  color: var(--color-text-secondary);
+}
+.nearby-tag.free { background: #e8f5e9; color: #2d5a47; }
+.nearby-tag.cost { background: #e8f5e9; color: #2d5a47; }
+.nearby-tag.warn { background: #fff3e0; color: #e65100; }
+
+.section-subtitle {
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  font-weight: var(--font-normal);
 }
 
 /* Map preview card */
@@ -1001,4 +1073,495 @@
 .user-email {
   font-size: var(--text-sm);
   color: var(--color-text-muted);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   GLOBAL MAP — shared background for saved + trips views
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+#main-content {
+  position: relative; /* Override: needed for absolute map-global */
+}
+
+#map-global {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: none;
+}
+
+/* Show global map only on saved + trips views */
+body[data-view="saved"] #app.authenticated #map-global,
+body[data-view="trips"] #app.authenticated #map-global {
+  display: block;
+}
+
+#map-global #map {
+  width: 100%;
+  height: 100%;
+}
+
+/* Map floating controls (bottom-right tray) */
+.map-controls-global {
+  position: absolute;
+  right: var(--space-3);
+  bottom: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  z-index: 10;
+}
+
+.map-control-btn {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-surface);
+  border: 0.5px solid var(--color-border);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.map-control-btn:hover { background: var(--color-surface-alt); }
+.map-control-btn:first-child { border-radius: var(--radius-md) var(--radius-md) 0 0; }
+.map-control-btn:last-child  { border-radius: 0 0 var(--radius-md) var(--radius-md); }
+.map-control-btn svg { width: 16px; height: 16px; stroke: var(--color-text); }
+
+/* Backups toggle button (inside the tray, shown when journey active) */
+.map-control-backups {
+  margin-top: 4px !important;
+  border-radius: var(--radius-md) !important;
+  color: var(--color-text-muted);
+}
+.map-control-backups.active {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+.map-control-backups.active svg { stroke: white; }
+
+/* Top-right count overlay (entries count / journeys count) */
+.map-count-overlay {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  padding: 6px 12px;
+  background: var(--color-surface);
+  border-radius: var(--radius-full);
+  border: 0.5px solid var(--color-border);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  color: var(--color-text);
+  z-index: 10;
+  box-shadow: var(--shadow-sm);
+  pointer-events: auto;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MAP OVERLAY VIEWS (saved + trips)
+   These float over the map with transparent backgrounds
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.map-overlay-view {
+  flex-direction: row !important;
+  background: transparent !important;
+  pointer-events: none; /* Pass clicks to map in empty areas */
+}
+
+/* Override: solid-bg views (explore, settings) need to cover map */
+#view-explore,
+#view-settings {
+  background: var(--color-base);
+  z-index: 5;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   SIDE PANELS (locations panel, trips panels)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.map-side-panel {
+  width: 320px;
+  min-width: 220px;
+  max-width: 500px;
+  height: 100%;
+  background: var(--color-surface);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  border-right: 0.5px solid var(--color-border);
+  pointer-events: auto; /* Panels receive clicks */
+  overflow: hidden;
+  z-index: 1;
+}
+
+/* Panel sections */
+.side-panel-hd {
+  padding: 14px 16px 12px;
+  border-bottom: 0.5px solid var(--color-border);
+  flex-shrink: 0;
+  background: var(--color-surface);
+}
+
+.side-panel-title {
+  font-size: var(--text-lg);
+  font-weight: var(--font-semibold);
+  color: var(--color-text);
+  margin-bottom: var(--space-3);
+}
+
+.side-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: var(--space-3) var(--space-3);
+}
+
+.side-panel-footer {
+  padding: var(--space-3) var(--space-4);
+  border-top: 0.5px solid var(--color-border);
+  flex-shrink: 0;
+  background: var(--color-surface);
+}
+
+/* Resize handle between panels */
+.resize-handle {
+  width: 4px;
+  background: var(--color-border);
+  cursor: col-resize;
+  flex-shrink: 0;
+  position: relative;
+  pointer-events: auto;
+  z-index: 2;
+  transition: background var(--transition-fast);
+}
+.resize-handle:hover,
+.resize-handle.dragging {
+  background: var(--color-primary);
+}
+.resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 2px;
+  height: 40px;
+  background: var(--color-text-muted);
+  border-radius: 1px;
+  opacity: 0.35;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TRIPS-SPECIFIC PANELS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.trips-hd-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-2);
+}
+
+/* Journey detail panel — hidden until open */
+.trips-detail-panel {
+  width: 0;
+  min-width: 0;
+  overflow: hidden;
+  transition: width 0.22s cubic-bezier(0.32, 0.72, 0, 1),
+              min-width 0.22s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.trips-detail-panel.open {
+  width: 340px;
+  min-width: 240px;
+  overflow: hidden; /* panel body scrolls internally */
+}
+
+.trips-detail-panel.open > * {
+  animation: panelSlideIn 0.22s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@keyframes panelSlideIn {
+  from { opacity: 0; transform: translateX(-16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* Location detail panel — hidden until open */
+.trips-location-panel {
+  width: 0;
+  min-width: 0;
+  overflow: hidden;
+  transition: width 0.22s cubic-bezier(0.32, 0.72, 0, 1),
+              min-width 0.22s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.trips-location-panel.open {
+  width: 320px;
+  min-width: 240px;
+  overflow: hidden;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   TRIPS VIEW — detail panel internal layout
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.detail-panel-hd {
+  padding: 12px 16px;
+  border-bottom: 0.5px solid var(--color-border);
+  flex-shrink: 0;
+  background: var(--color-surface);
+}
+
+.detail-panel-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.detail-back-btn {
+  font-size: 13px;
+  font-weight: var(--font-medium);
+  color: var(--color-primary);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.detail-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.detail-maps-btn {
+  font-size: 13px;
+  font-weight: var(--font-medium);
+  color: var(--color-primary);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.detail-journey-name {
+  font-size: var(--text-xl);
+  font-weight: var(--font-bold);
+  color: var(--color-text);
+  margin-bottom: 2px;
+}
+
+.detail-journey-meta {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.detail-cost-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.detail-cost-card {
+  flex: 1;
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+  text-align: center;
+}
+.detail-cost-card.muted {
+  background: var(--color-surface-alt);
+}
+.detail-cost-card.accent {
+  background: var(--color-primary);
+}
+.detail-cost-label {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  margin-bottom: 2px;
+}
+.detail-cost-card.accent .detail-cost-label { color: rgba(255,255,255,0.7); }
+.detail-cost-value {
+  font-size: 16px;
+  font-weight: var(--font-semibold);
+  color: var(--color-text);
+}
+.detail-cost-card.accent .detail-cost-value { color: white; }
+
+/* Itinerary list */
+.itin-section-title {
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
+  color: var(--color-text);
+  margin-bottom: 12px;
+  padding: 14px 16px 0;
+}
+
+.leg-stop {
+  position: relative;
+  padding: 0 16px 14px 36px;
+}
+.leg-stop:last-child { padding-bottom: 4px; }
+
+.leg-stop-line {
+  position: absolute;
+  left: 20px;
+  top: 14px;
+  bottom: 0;
+  width: 1.5px;
+  background: var(--color-primary);
+  opacity: 0.3;
+}
+.leg-stop:last-child .leg-stop-line { display: none; }
+
+.leg-stop-dot {
+  position: absolute;
+  left: 14px;
+  top: 3px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  border: 2.5px solid var(--color-surface);
+  box-shadow: 0 0 0 1.5px var(--color-primary);
+}
+.leg-stop-dot.here {
+  box-shadow: 0 0 0 4px rgba(45, 90, 71, 0.2);
+}
+.leg-stop-dot.start {
+  background: var(--color-text-muted);
+  box-shadow: 0 0 0 1.5px var(--color-text-muted);
+}
+
+.drag-handle {
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  font-size: 10px;
+  color: var(--color-text-muted);
+  cursor: grab;
+  line-height: 1;
+}
+
+.leg-stop-name {
+  font-size: 13px;
+  font-weight: var(--font-medium);
+  color: var(--color-primary);
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: rgba(45, 90, 71, 0.3);
+}
+.leg-stop-name.muted {
+  color: var(--color-text-secondary);
+  text-decoration: none;
+  cursor: default;
+}
+.leg-stop-here {
+  font-size: 11px;
+  color: var(--color-primary);
+  font-weight: var(--font-medium);
+  margin-top: 1px;
+}
+.leg-stop-dates {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-top: 1px;
+}
+
+.leg-stop-actions {
+  position: absolute;
+  right: 16px;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-end;
+}
+.leg-stop-cost {
+  font-size: 12px;
+  font-weight: var(--font-medium);
+  color: var(--color-text);
+}
+.leg-stop-cost.free { color: var(--color-primary); }
+.leg-stop-edit-btns {
+  display: flex;
+  gap: 2px;
+}
+
+.leg-drive-info {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  background: var(--color-surface-alt);
+  border-radius: 5px;
+  padding: 3px 8px;
+  margin-top: 5px;
+  display: inline-block;
+}
+
+.add-stop-btn {
+  width: calc(100% - 32px);
+  margin: 10px 16px 16px;
+  padding: 10px;
+  border-radius: var(--radius-md);
+  border: 1.5px dashed rgba(45, 90, 71, 0.3);
+  background: transparent;
+  color: var(--color-primary);
+  font-size: 13px;
+  font-weight: var(--font-medium);
+  cursor: pointer;
+  text-align: center;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+.add-stop-btn:hover {
+  background: var(--color-primary-muted);
+  border-color: var(--color-primary);
+}
+
+/* Context menu for journey cards */
+.journey-context-menu {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  background: var(--color-surface);
+  border: 0.5px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  min-width: 160px;
+  z-index: 200;
+  overflow: hidden;
+  display: none;
+}
+.journey-context-menu.open { display: block; }
+
+/* Mobile: panels become bottom sheets */
+@media (max-width: 767px) {
+  .map-overlay-view {
+    flex-direction: column !important;
+  }
+
+  .map-side-panel {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 50vh;
+    border-right: none;
+    border-top: 0.5px solid var(--color-border);
+    border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 10;
+  }
+
+  .trips-detail-panel.open {
+    width: 100% !important;
+    height: 85vh;
+  }
+
+  .resize-handle {
+    display: none !important;
+  }
 }

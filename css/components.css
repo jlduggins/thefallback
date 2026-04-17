@@ -1011,3 +1011,249 @@
   align-items: stretch;
   gap: var(--space-3);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   JOURNEY CARDS — Trips list
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.journey-section {
+  margin-bottom: var(--space-4);
+}
+
+.journey-section-title {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  padding: 0 var(--space-2) var(--space-2);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.journey-card {
+  background: var(--color-surface);
+  border: 0.5px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3);
+  margin-bottom: var(--space-2);
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+.journey-card:hover {
+  background: var(--color-surface-alt);
+}
+.journey-card.pinned {
+  border-left: 3px solid var(--color-primary);
+  background: rgba(127, 195, 165, 0.04);
+}
+.journey-card.pinned:hover {
+  background: rgba(127, 195, 165, 0.08);
+}
+
+.jcard-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 10px;
+  gap: 12px;
+}
+
+.jcard-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.jcard-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text);
+  line-height: 1.3;
+}
+
+.jcard-meta {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+.jcard-price {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.jcard-price-val {
+  font-size: 18px;
+  font-weight: 600;
+  color: #7FC3A5;
+  line-height: 1;
+}
+
+.jcard-price-lbl {
+  font-size: 9px;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+.jcard-budgets {
+  display: flex;
+  gap: 6px;
+}
+
+.bp {
+  flex: 1;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  text-align: center;
+}
+.bp.muted {
+  background: var(--color-surface-alt);
+}
+.bp.accent {
+  background: #7FC3A5;
+}
+.bp-v {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+.bp.accent .bp-v {
+  color: white;
+}
+.bp-l {
+  font-size: 9px;
+  color: var(--color-text-muted);
+  margin-top: 1px;
+}
+.bp.accent .bp-l {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   JOURNEY DETAIL HEADER
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.detail-panel-hd {
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  border-bottom: 0.5px solid var(--color-border);
+  background: var(--color-surface);
+  flex-shrink: 0;
+}
+
+.detail-back-row {
+  margin-bottom: var(--space-2);
+}
+
+.detail-back-btn {
+  background: none;
+  border: none;
+  color: var(--color-primary);
+  font-size: var(--text-sm);
+  font-weight: var(--font-medium);
+  cursor: pointer;
+  padding: 4px 0;
+}
+
+.detail-panel-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.detail-journey-name {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--color-text);
+  line-height: 1.2;
+  flex: 1;
+  min-width: 0;
+  word-wrap: break-word;
+}
+
+.detail-actions {
+  display: flex;
+  gap: var(--space-1);
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.detail-share-btn,
+.detail-more-btn {
+  background: none;
+  border: none;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--color-text-secondary);
+  transition: background var(--transition-fast);
+}
+.detail-share-btn:hover,
+.detail-more-btn:hover {
+  background: var(--color-surface-alt);
+}
+.detail-more-btn {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.detail-menu-wrap {
+  position: relative;
+}
+
+.detail-journey-meta {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin-top: 4px;
+  margin-bottom: var(--space-3);
+}
+
+.detail-cost-row {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.detail-cost-card {
+  flex: 1;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  text-align: center;
+}
+.detail-cost-card.muted { background: var(--color-surface-alt); }
+.detail-cost-card.accent { background: #7FC3A5; }
+.detail-cost-label {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  margin-bottom: 2px;
+}
+.detail-cost-card.accent .detail-cost-label {
+  color: rgba(255, 255, 255, 0.85);
+}
+.detail-cost-value {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+.detail-cost-card.accent .detail-cost-value {
+  color: white;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MAPS PICKER MODAL BUTTONS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.maps-picker-btn {
+  width: 100%;
+  padding: 14px;
+  text-align: left;
+  margin-bottom: 8px;
+  font-size: var(--text-base);
+}
+.maps-picker-btn:last-child {
+  margin-bottom: 0;
+}
