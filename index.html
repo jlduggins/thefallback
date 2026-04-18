@@ -426,15 +426,7 @@
       </div>
       <div class="form-group">
         <label class="input-label">Amenities & Tags</label>
-        <div class="toggle-chips">
-          <label class="toggle-chip" data-amenity="hasPotableWater"><input type="checkbox" name="hasPotableWater"> 💧 Water</label>
-          <label class="toggle-chip" data-amenity="hasDumpStation"><input type="checkbox" name="hasDumpStation"> 🚽 Dump</label>
-          <label class="toggle-chip" data-amenity="hasHookups"><input type="checkbox" name="hasHookups"> ⚡ Hookups</label>
-          <label class="toggle-chip" data-amenity="hasTrash"><input type="checkbox" name="hasTrash"> 🗑️ Trash</label>
-          <label class="toggle-chip" data-amenity="hasPets"><input type="checkbox" name="hasPets"> 🐾 Pets</label>
-          <label class="toggle-chip" data-amenity="needs4x4"><input type="checkbox" name="needs4x4"> 🚙 4x4</label>
-          <label class="toggle-chip" data-amenity="needsReservations"><input type="checkbox" name="needsReservations"> 🎫 Reservations</label>
-        </div>
+        <div class="toggle-chips" id="f-amenities"></div>
       </div>
       <div class="form-group">
         <label class="input-label">Notes</label>
@@ -443,6 +435,12 @@
       <div class="form-group">
         <label class="input-label">Link</label>
         <input type="url" id="f-link" class="input" placeholder="https://...">
+      </div>
+      <div class="form-group">
+        <label class="input-label">Photos</label>
+        <div id="f-photo-row" class="photo-row"></div>
+        <input type="file" id="f-photo-input" accept="image/*" multiple style="display:none" onchange="Entries.handlePhotos(this)"/>
+        <button type="button" class="photo-add-btn" onclick="document.getElementById('f-photo-input').click()">+</button>
       </div>
     </div>
     <div class="modal-footer">
