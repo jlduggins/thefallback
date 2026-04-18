@@ -445,12 +445,8 @@ const Trips = {
 
     // Auto-refresh routes in background if any are missing
     const hasMissingRoute = legs.some(l => !l.routeGeometry && l.destLat);
-    console.log('[Trips] journey detail opened:', journey.name,
-      'legs:', legs.length,
-      'hasMissingRoute:', hasMissingRoute,
-      'geometries:', legs.map(l => l.routeGeometry ? `${typeof l.routeGeometry}(${String(l.routeGeometry).length}ch)` : 'null'));
     if (hasMissingRoute) {
-      this.refreshAllRoutes(journeyId).catch(err => console.warn('[Trips] refreshAllRoutes failed:', err));
+      this.refreshAllRoutes(journeyId).catch(() => {});
     }
 
     // Store default panel content for restoration on close
@@ -810,9 +806,9 @@ const Trips = {
     if(allCoords.length>1){const pg=g=>{if(!g)return null;try{const p=typeof g==='string'?JSON.parse(g):g;return p.map(c=>[c[1],c[0]]);}catch(e){return null;}};const f0=pg(legs[0]?.routeGeometry);const l0=f0?L.polyline(f0,{color:'#2d5a47',weight:4,opacity:0.7}):L.polyline([allCoords[0],allCoords[1]],{color:'#2d5a47',weight:3,opacity:0.5,dashArray:'6 4'});l0.addTo(m);this.journeyMarkers.push(l0);for(let i=1;i<legs.length;i++){const g=pg(legs[i].routeGeometry),fr=allCoords[i],to=allCoords[i+1];if(!to)continue;const ln=g?L.polyline(g,{color:'#2d5a47',weight:4,opacity:0.7}):L.polyline([fr,to],{color:'#2d5a47',weight:3,opacity:0.5,dashArray:'6 4'});ln.addTo(m);this.journeyMarkers.push(ln);}
     m.fitBounds(L.latLngBounds(allCoords),{padding:[60,60],maxZoom:11});}
     else if(allCoords.length===1){m.setView(allCoords[0],12);}
-    // Show the Backups toggle button now that a journey is active
+    // Show the Backups toggle button only on Trips view
     const bb = document.getElementById('map-backups-btn');
-    if (bb) bb.style.display = '';
+    if (bb) bb.style.display = (State.currentView === 'trips') ? 'flex' : 'none';
     if(shouldSwitchView && State.currentView !== 'trips') State.setView('trips');
   },
 
@@ -878,7 +874,7 @@ const Trips = {
 
   // ─── Routing & calculations ───────────────────────────────────────────────
 
-  async getRoute(fromLat,fromLng,toLat,toLng){const KEY=window.ORS_API_KEY||(window.CONFIG?.ORS_API_KEY)||'';if(!KEY){const m=this.haversine(fromLat,fromLng,toLat,toLng);return{distance:m*1.3,duration:m*1.3/45*60,geometry:null};}try{const r=await fetch(`https://api.openrouteservice.org/v2/directions/driving-car?api_key=${KEY}&start=${fromLng},${fromLat}&end=${toLng},${toLat}`);const d=await r.json();if(d.features?.[0]){const f=d.features[0],p=f.properties.summary;return{distance:p.distance*0.000621371,duration:p.duration/60,geometry:f.geometry?.coordinates||null};}}catch(e){console.error('[Route]',e);}const m=this.haversine(fromLat,fromLng,toLat,toLng);return{distance:m*1.3,duration:m*1.3/45*60,geometry:null};},
+  async getRoute(fromLat,fromLng,toLat,toLng){const KEY=window.ORS_API_KEY||(window.CONFIG?.ORS_API_KEY)||'';if(!KEY){console.warn('[Route] No ORS_API_KEY configured — returning straight-line estimate (no geometry). Set window.CONFIG.ORS_API_KEY in config.js to render real routes.');const m=this.haversine(fromLat,fromLng,toLat,toLng);return{distance:m*1.3,duration:m*1.3/45*60,geometry:null};}try{const r=await fetch(`https://api.openrouteservice.org/v2/directions/driving-car?api_key=${KEY}&start=${fromLng},${fromLat}&end=${toLng},${toLat}`);const d=await r.json();if(d.features?.[0]){const f=d.features[0],p=f.properties.summary;return{distance:p.distance*0.000621371,duration:p.duration/60,geometry:f.geometry?.coordinates||null};}if(d.error){console.error('[Route] ORS API error:',d.error);}}catch(e){console.error('[Route] fetch failed:',e);}const m=this.haversine(fromLat,fromLng,toLat,toLng);return{distance:m*1.3,duration:m*1.3/45*60,geometry:null};},
 
   haversine(lat1,lon1,lat2,lon2){const R=3959,dl=(lat2-lat1)*Math.PI/180,dn=(lon2-lon1)*Math.PI/180,a=Math.sin(dl/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dn/2)**2;return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));},
   isInSeason(d){if(!d)return true;const m=new Date(d+'T12:00').getMonth();return m>=4&&m<=8;},
