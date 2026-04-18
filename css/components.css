@@ -213,9 +213,39 @@
   font-size: var(--text-sm);
   color: var(--color-text-muted);
   margin-top: var(--space-1);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+}
+
+.location-card-topline {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.location-card-cost {
+  font-size: var(--text-base);
+  font-weight: var(--font-semibold);
+  flex-shrink: 0;
+}
+
+.location-card-typeline {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+.location-card-status {
+  color: var(--color-primary);
+  font-weight: var(--font-medium);
+}
+
+.location-card-rating {
+  font-size: var(--text-sm);
+  margin-top: var(--space-1);
+  color: var(--color-accent);
+  letter-spacing: 1px;
+}
+.location-card-rating .muted {
+  color: var(--color-border);
 }
 
 .location-card-tags {
@@ -1647,7 +1677,9 @@
   position: relative;
   overflow: hidden;
   transition: max-height 200ms ease, opacity 200ms ease;
-  max-height: 200px;
+  max-height: 400px;
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--space-3);
 }
 .location-swipe-row.removing {
   max-height: 0;
@@ -1660,6 +1692,7 @@
   transform: translateX(0);
   transition: transform 220ms cubic-bezier(0.32, 0.72, 0.24, 1);
   background: var(--color-surface);
+  margin-bottom: 0;
 }
 .location-swipe-row.revealed .location-card {
   transform: translateX(-92px);
@@ -1675,13 +1708,20 @@
   align-items: center;
   justify-content: center;
   gap: 4px;
-  background: var(--color-error, #dc2626);
+  background: #dc2626;
   color: #fff;
   border: none;
   cursor: pointer;
   font-size: 12px;
   font-weight: 500;
   z-index: 1;
+  opacity: 0;
+  transition: opacity 180ms ease;
+  pointer-events: none;
+}
+.location-swipe-row.revealed .location-swipe-delete {
+  opacity: 1;
+  pointer-events: auto;
 }
 .location-swipe-delete svg { stroke: #fff; }
 
