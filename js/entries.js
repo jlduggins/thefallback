@@ -38,6 +38,7 @@ const Entries = {
     this.initForm();
     this.initFilters();
     this.updateEntriesCount();
+    this._installGlobalSwipeCloser();
   },
 
   updateEntriesCount() {
@@ -414,9 +415,16 @@ const Entries = {
     // Add click handlers
     container.querySelectorAll('.location-card').forEach(card => {
       card.addEventListener('click', () => {
+        // If this card is in "revealed" state, a click closes the swipe instead of selecting
+        const row = card.closest('.location-swipe-row');
+        if (row && row.classList.contains('revealed')) {
+          row.classList.remove('revealed');
+          return;
+        }
+        // Also close any other revealed swipe rows
+        container.querySelectorAll('.location-swipe-row.revealed').forEach(r => r.classList.remove('revealed'));
+
         const id = card.dataset.id;
-        
-        // Toggle selection - click again to deselect
         if (State.selectedEntryId === id) {
           State.selectEntry(null);
           MapModule.fitAllMarkers();
@@ -426,13 +434,80 @@ const Entries = {
           if (entry && entry.lat && entry.lng) {
             MapModule.flyTo(entry.lat, entry.lng, 14);
           }
-          // On mobile, drop drawer to half so user can see the map
           if (window.matchMedia('(max-width: 767px)').matches) {
             document.body.setAttribute('data-drawer-snap', 'half');
           }
         }
       });
     });
+
+    // Swipe-to-reveal-delete on mobile
+    if (window.matchMedia('(max-width: 767px)').matches) {
+      container.querySelectorAll('.location-swipe-row').forEach(row => this._bindSwipeToDelete(row, container));
+    }
+  },
+
+  _bindSwipeToDelete(row, container) {
+    let startX = 0, startY = 0, tracking = false, decided = false, isHorizontal = false;
+    const THRESHOLD = 40; // pixels to reveal
+
+    const onStart = e => {
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+      tracking = true;
+      decided = false;
+      isHorizontal = false;
+    };
+    const onMove = e => {
+      if (!tracking) return;
+      const dx = e.touches[0].clientX - startX;
+      const dy = e.touches[0].clientY - startY;
+      if (!decided) {
+        if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+        isHorizontal = Math.abs(dx) > Math.abs(dy);
+        decided = true;
+      }
+      if (!isHorizontal) return; // let vertical scroll happen
+      // Close any other open rows as soon as a new swipe begins
+      container.querySelectorAll('.location-swipe-row.revealed').forEach(r => { if (r !== row) r.classList.remove('revealed'); });
+      if (dx < -THRESHOLD) {
+        row.classList.add('revealed');
+      } else if (dx > THRESHOLD) {
+        row.classList.remove('revealed');
+      }
+    };
+    const onEnd = () => { tracking = false; };
+
+    row.addEventListener('touchstart', onStart, { passive: true });
+    row.addEventListener('touchmove', onMove, { passive: true });
+    row.addEventListener('touchend', onEnd);
+    row.addEventListener('touchcancel', onEnd);
+  },
+
+  // Global listener: any tap outside a revealed row closes it
+  _installGlobalSwipeCloser() {
+    if (this._swipeCloserInstalled) return;
+    this._swipeCloserInstalled = true;
+    document.addEventListener('click', e => {
+      const openRows = document.querySelectorAll('.location-swipe-row.revealed');
+      if (openRows.length === 0) return;
+      openRows.forEach(row => {
+        if (!row.contains(e.target)) row.classList.remove('revealed');
+      });
+    }, true);
+  },
+
+  deleteEntryFromSwipe(id) {
+    const row = document.querySelector(`.location-swipe-row[data-id="${id}"]`);
+    if (row) row.classList.remove('revealed');
+    // Animate out then delete
+    if (row) row.classList.add('removing');
+    setTimeout(() => {
+      Firebase.deleteEntry(id).catch(err => {
+        console.error('[Entries] delete failed', err);
+        UI.showToast('Delete failed', 'error');
+      });
+    }, 180);
   },
   
   renderLocationCard(entry) {
@@ -448,14 +523,20 @@ const Entries = {
     });
     
     return `
-      <div class="location-card ${isSelected ? 'selected' : ''}" data-id="${entry.id}">
-        <div class="location-card-image" style="${entry.photos?.[0] ? `background-image: url(${entry.photos[0]})` : ''}"></div>
-        <div class="location-card-content">
-          <div class="location-card-name">${this.escapeHtml(entry.name)}</div>
-          <div class="location-card-address">${this.escapeHtml(entry.address || entry.type || '')}</div>
-          <div class="location-card-tags">
-            <span class="location-card-tag cost" style="color: ${State.costColor(entry.cost)}">${costLabel}</span>
-            ${tags.slice(0, 3).join('')}
+      <div class="location-swipe-row" data-id="${entry.id}">
+        <button class="location-swipe-delete" onclick="Entries.deleteEntryFromSwipe('${entry.id}')" aria-label="Delete">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+          <span>Delete</span>
+        </button>
+        <div class="location-card ${isSelected ? 'selected' : ''}" data-id="${entry.id}">
+          <div class="location-card-image" style="${entry.photos?.[0] ? `background-image: url(${entry.photos[0]})` : ''}"></div>
+          <div class="location-card-content">
+            <div class="location-card-name">${this.escapeHtml(entry.name)}</div>
+            <div class="location-card-address">${this.escapeHtml(entry.address || entry.type || '')}</div>
+            <div class="location-card-tags">
+              <span class="location-card-tag cost" style="color: ${State.costColor(entry.cost)}">${costLabel}</span>
+              ${tags.slice(0, 3).join('')}
+            </div>
           </div>
         </div>
       </div>
