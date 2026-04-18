@@ -56,6 +56,7 @@ const Entries = {
         this.filters.search = e.target.value.trim().toLowerCase();
         this.renderSavedList();
         this.updateActiveChips();
+        this.updateFilterCount();
       });
     }
 
@@ -104,10 +105,51 @@ const Entries = {
     this.populateStateDropdown();
   },
 
+  // US state bounds for reverse-lookup from entry lat/lng (ported from v1)
+  STATE_BOUNDS: {
+    'Alabama':{lat:[30.2,35.0],lng:[-88.5,-84.9]},'Alaska':{lat:[51.2,71.4],lng:[-179.2,-129.9]},
+    'Arizona':{lat:[31.3,37.0],lng:[-114.8,-109.0]},'Arkansas':{lat:[33.0,36.5],lng:[-94.6,-89.6]},
+    'California':{lat:[32.5,42.0],lng:[-124.4,-114.1]},'Colorado':{lat:[37.0,41.0],lng:[-109.1,-102.0]},
+    'Connecticut':{lat:[40.9,42.1],lng:[-73.7,-71.8]},'Delaware':{lat:[38.5,39.8],lng:[-75.8,-75.0]},
+    'Florida':{lat:[24.5,31.0],lng:[-87.6,-80.0]},'Georgia':{lat:[30.4,35.0],lng:[-85.6,-80.8]},
+    'Hawaii':{lat:[18.9,22.2],lng:[-160.2,-154.8]},'Idaho':{lat:[42.0,49.0],lng:[-117.2,-111.0]},
+    'Illinois':{lat:[36.9,42.5],lng:[-91.5,-87.5]},'Indiana':{lat:[37.8,41.8],lng:[-88.1,-84.8]},
+    'Iowa':{lat:[40.4,43.5],lng:[-96.6,-90.1]},'Kansas':{lat:[37.0,40.0],lng:[-102.1,-94.6]},
+    'Kentucky':{lat:[36.5,39.1],lng:[-89.6,-81.9]},'Louisiana':{lat:[29.0,33.0],lng:[-94.0,-89.0]},
+    'Maine':{lat:[43.0,47.5],lng:[-71.1,-66.9]},'Maryland':{lat:[37.9,39.7],lng:[-79.5,-75.0]},
+    'Massachusetts':{lat:[41.2,42.9],lng:[-73.5,-69.9]},'Michigan':{lat:[41.7,48.2],lng:[-90.4,-82.4]},
+    'Minnesota':{lat:[43.5,49.4],lng:[-97.2,-89.5]},'Mississippi':{lat:[30.2,35.0],lng:[-91.7,-88.1]},
+    'Missouri':{lat:[36.0,40.6],lng:[-95.8,-89.1]},'Montana':{lat:[44.4,49.0],lng:[-116.0,-104.0]},
+    'Nebraska':{lat:[40.0,43.0],lng:[-104.1,-95.3]},'Nevada':{lat:[35.0,42.0],lng:[-120.0,-114.0]},
+    'New Hampshire':{lat:[42.7,45.3],lng:[-72.6,-70.7]},'New Jersey':{lat:[38.9,41.4],lng:[-75.6,-73.9]},
+    'New Mexico':{lat:[31.3,37.0],lng:[-109.1,-103.0]},'New York':{lat:[40.5,45.0],lng:[-79.8,-71.9]},
+    'North Carolina':{lat:[33.8,36.6],lng:[-84.3,-75.5]},'North Dakota':{lat:[45.9,49.0],lng:[-104.1,-96.6]},
+    'Ohio':{lat:[38.4,42.0],lng:[-84.8,-80.5]},'Oklahoma':{lat:[33.6,37.0],lng:[-103.0,-94.4]},
+    'Oregon':{lat:[42.0,46.3],lng:[-124.6,-116.5]},'Pennsylvania':{lat:[39.7,42.3],lng:[-80.5,-74.7]},
+    'Rhode Island':{lat:[41.1,42.0],lng:[-71.9,-71.1]},'South Carolina':{lat:[32.0,35.2],lng:[-83.4,-78.5]},
+    'South Dakota':{lat:[42.5,45.9],lng:[-104.1,-96.4]},'Tennessee':{lat:[35.0,36.7],lng:[-90.3,-81.6]},
+    'Texas':{lat:[25.8,36.5],lng:[-106.6,-93.5]},'Utah':{lat:[37.0,42.0],lng:[-114.1,-109.0]},
+    'Vermont':{lat:[42.7,45.0],lng:[-73.4,-71.5]},'Virginia':{lat:[36.5,39.5],lng:[-83.7,-75.2]},
+    'Washington':{lat:[45.5,49.0],lng:[-124.8,-116.9]},'West Virginia':{lat:[37.2,40.6],lng:[-82.6,-77.7]},
+    'Wisconsin':{lat:[42.5,47.1],lng:[-92.9,-86.8]},'Wyoming':{lat:[41.0,45.0],lng:[-111.1,-104.1]}
+  },
+
+  getStateFromCoords(lat, lng) {
+    if (lat == null || lng == null) return null;
+    for (const [state, b] of Object.entries(this.STATE_BOUNDS)) {
+      if (lat >= b.lat[0] && lat <= b.lat[1] && lng >= b.lng[0] && lng <= b.lng[1]) return state;
+    }
+    return null;
+  },
+
+  _entryState(e) {
+    return e.state || this.getStateFromCoords(e.lat, e.lng);
+  },
+
   populateStateDropdown() {
     const sel = document.getElementById('loc-filter-state');
     if (!sel) return;
-    const states = [...new Set(State.entries.map(e => e.state).filter(Boolean))].sort();
+    const states = [...new Set(State.entries.map(e => this._entryState(e)).filter(Boolean))].sort();
     const currentVal = sel.value;
     sel.innerHTML = '<option value="">All states</option>' +
       states.map(s => `<option value="${this.escapeHtml(s)}">${this.escapeHtml(s)}</option>`).join('');
@@ -124,12 +166,14 @@ const Entries = {
 
   updateFilterCount() {
     const count = this.filters.type.size + this.filters.status.size + this.filters.cost.size +
-      (this.filters.rating ? 1 : 0) + (this.filters.state ? 1 : 0);
+      (this.filters.rating ? 1 : 0) + (this.filters.state ? 1 : 0) + (this.filters.search ? 1 : 0);
     const el = document.getElementById('loc-filter-count');
     if (el) {
       el.textContent = count;
       el.style.display = count > 0 ? 'inline-flex' : 'none';
     }
+    const clearBtn = document.getElementById('loc-filter-clear');
+    if (clearBtn) clearBtn.style.display = count > 0 ? 'inline-flex' : 'none';
   },
 
   updateActiveChips() {
@@ -342,7 +386,8 @@ const Entries = {
 
     if (f.search) {
       entries = entries.filter(e => {
-        const hay = `${e.name || ''} ${e.notes || ''} ${e.address || ''} ${e.type || ''} ${e.state || ''}`.toLowerCase();
+        const st = this._entryState(e) || '';
+        const hay = `${e.name || ''} ${e.notes || ''} ${e.address || ''} ${e.type || ''} ${st}`.toLowerCase();
         return hay.includes(f.search);
       });
     }
@@ -350,7 +395,7 @@ const Entries = {
     if (f.status.size > 0) entries = entries.filter(e => f.status.has(e.status));
     if (f.cost.size > 0) entries = entries.filter(e => [...f.cost].some(r => this._matchesCostRange(e.cost, r)));
     if (f.rating) entries = entries.filter(e => (e.rating || 0) >= +f.rating);
-    if (f.state) entries = entries.filter(e => e.state === f.state);
+    if (f.state) entries = entries.filter(e => this._entryState(e) === f.state);
 
     if (entries.length === 0) {
       const hasAnyFilter = f.search || f.type.size || f.status.size || f.cost.size || f.rating || f.state;
@@ -380,6 +425,10 @@ const Entries = {
           const entry = State.getEntry(id);
           if (entry && entry.lat && entry.lng) {
             MapModule.flyTo(entry.lat, entry.lng, 14);
+          }
+          // On mobile, drop drawer to half so user can see the map
+          if (window.matchMedia('(max-width: 767px)').matches) {
+            document.body.setAttribute('data-drawer-snap', 'half');
           }
         }
       });
