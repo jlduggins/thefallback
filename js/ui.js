@@ -360,17 +360,21 @@ const UI = {
   // between three positions: peek, half, full.
   // ═══════════════════════════════════════════════════════════════════════════
 
-  _drawerIds: ['locations-panel', 'trips-list-panel', 'location-detail-panel', 'explore-backup-panel'],
+  _drawerIds: ['locations-panel', 'trips-list-panel', 'location-detail-panel', 'explore-backup-panel', 'explore-left-drawer'],
 
   initMobileDrawers() {
     if (!window.matchMedia('(max-width: 767px)').matches) return;
+    // Ensure the Explore left column has an id so it can be treated as a drawer
+    const exploreLeft = document.querySelector('#view-explore .explore-left');
+    if (exploreLeft && !exploreLeft.id) exploreLeft.id = 'explore-left-drawer';
+
     this._drawerIds.forEach(id => {
       const panel = document.getElementById(id);
-      if (!panel || panel.dataset.drawerInit) return;
+      if (!panel) return;
+      // Always reset to half on (re)initialization so returning to a view starts at half
+      panel.setAttribute('data-snap', 'half');
+      if (panel.dataset.drawerInit) return;
       panel.dataset.drawerInit = '1';
-      // Default snap
-      if (!panel.dataset.snap) panel.setAttribute('data-snap', 'half');
-      // Insert grabber at the top
       if (!panel.querySelector('.drawer-grabber')) {
         const grabber = document.createElement('div');
         grabber.className = 'drawer-grabber';
@@ -381,45 +385,52 @@ const UI = {
   },
 
   _bindDrawerDrag(panel, grabber) {
-    let startY = 0, startH = 0, dragging = false;
+    let startY = 0, startH = 0, dragging = false, moved = false;
     const snapFromHeight = h => {
       const vh = window.innerHeight;
-      if (h < vh * 0.25) return 'peek';
-      if (h < vh * 0.75) return 'half';
+      if (h < vh * 0.28) return 'peek';
+      if (h < vh * 0.72) return 'half';
       return 'full';
     };
     const onMove = e => {
       if (!dragging) return;
       const y = (e.touches ? e.touches[0].clientY : e.clientY);
       const delta = startY - y;
+      if (Math.abs(delta) > 3) moved = true;
       const newH = Math.max(60, Math.min(window.innerHeight * 0.95, startH + delta));
       panel.style.height = newH + 'px';
-      e.preventDefault();
+      if (e.cancelable) e.preventDefault();
     };
     const onEnd = () => {
       if (!dragging) return;
       dragging = false;
       const finalH = panel.getBoundingClientRect().height;
+      panel.removeAttribute('data-dragging');
       panel.style.height = '';
       panel.setAttribute('data-snap', snapFromHeight(finalH));
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onEnd);
       document.removeEventListener('touchmove', onMove);
       document.removeEventListener('touchend', onEnd);
+      document.removeEventListener('touchcancel', onEnd);
     };
     const onStart = e => {
       dragging = true;
+      moved = false;
       startY = (e.touches ? e.touches[0].clientY : e.clientY);
       startH = panel.getBoundingClientRect().height;
+      panel.setAttribute('data-dragging', '1');
       document.addEventListener('mousemove', onMove);
       document.addEventListener('mouseup', onEnd);
       document.addEventListener('touchmove', onMove, { passive: false });
       document.addEventListener('touchend', onEnd);
+      document.addEventListener('touchcancel', onEnd);
     };
     grabber.addEventListener('mousedown', onStart);
     grabber.addEventListener('touchstart', onStart, { passive: true });
-    // Tap grabber to cycle: peek → half → full → peek
+    // Tap (no drag) to cycle: peek → half → full → peek
     grabber.addEventListener('click', () => {
+      if (moved) { moved = false; return; }
       const s = panel.getAttribute('data-snap') || 'half';
       panel.setAttribute('data-snap', s === 'peek' ? 'half' : s === 'half' ? 'full' : 'peek');
     });
