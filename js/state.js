@@ -30,7 +30,7 @@ const State = {
   // Map state
   mapReady: false,
   isSatellite: false,
-  showPublicLands: true,
+  showPublicLands: false,
   
   // User location
   userLat: null,

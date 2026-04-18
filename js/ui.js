@@ -15,9 +15,12 @@ const UI = {
     // Subscribe to state changes
     State.on('view:changed', ({ from, to }) => {
       this.showView(to);
+      // Initialize mobile drawer snap behavior on every view change (in case drawers render late)
+      setTimeout(() => this.initMobileDrawers(), 60);
       // Leaving Saved with a selected entry: deselect so the map isn't stuck zoomed in
       if (from === 'saved' && to !== 'saved' && State.selectedEntryId) {
         State.selectEntry(null);
+        if (MapModule.map) setTimeout(() => MapModule.fitAllMarkers(), 80);
       }
     });
     State.on('auth:signed-in', user => this.handleSignIn(user));
@@ -349,6 +352,77 @@ const UI = {
     if (!dateStr) return '';
     const d = new Date(dateStr);
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MOBILE DRAWER SNAP SYSTEM
+  // Adds a grabber handle to each mobile drawer and supports drag-to-snap
+  // between three positions: peek, half, full.
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  _drawerIds: ['locations-panel', 'trips-list-panel', 'location-detail-panel', 'explore-backup-panel'],
+
+  initMobileDrawers() {
+    if (!window.matchMedia('(max-width: 767px)').matches) return;
+    this._drawerIds.forEach(id => {
+      const panel = document.getElementById(id);
+      if (!panel || panel.dataset.drawerInit) return;
+      panel.dataset.drawerInit = '1';
+      // Default snap
+      if (!panel.dataset.snap) panel.setAttribute('data-snap', 'half');
+      // Insert grabber at the top
+      if (!panel.querySelector('.drawer-grabber')) {
+        const grabber = document.createElement('div');
+        grabber.className = 'drawer-grabber';
+        panel.insertBefore(grabber, panel.firstChild);
+        this._bindDrawerDrag(panel, grabber);
+      }
+    });
+  },
+
+  _bindDrawerDrag(panel, grabber) {
+    let startY = 0, startH = 0, dragging = false;
+    const snapFromHeight = h => {
+      const vh = window.innerHeight;
+      if (h < vh * 0.25) return 'peek';
+      if (h < vh * 0.75) return 'half';
+      return 'full';
+    };
+    const onMove = e => {
+      if (!dragging) return;
+      const y = (e.touches ? e.touches[0].clientY : e.clientY);
+      const delta = startY - y;
+      const newH = Math.max(60, Math.min(window.innerHeight * 0.95, startH + delta));
+      panel.style.height = newH + 'px';
+      e.preventDefault();
+    };
+    const onEnd = () => {
+      if (!dragging) return;
+      dragging = false;
+      const finalH = panel.getBoundingClientRect().height;
+      panel.style.height = '';
+      panel.setAttribute('data-snap', snapFromHeight(finalH));
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onEnd);
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('touchend', onEnd);
+    };
+    const onStart = e => {
+      dragging = true;
+      startY = (e.touches ? e.touches[0].clientY : e.clientY);
+      startH = panel.getBoundingClientRect().height;
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onEnd);
+      document.addEventListener('touchmove', onMove, { passive: false });
+      document.addEventListener('touchend', onEnd);
+    };
+    grabber.addEventListener('mousedown', onStart);
+    grabber.addEventListener('touchstart', onStart, { passive: true });
+    // Tap grabber to cycle: peek → half → full → peek
+    grabber.addEventListener('click', () => {
+      const s = panel.getAttribute('data-snap') || 'half';
+      panel.setAttribute('data-snap', s === 'peek' ? 'half' : s === 'half' ? 'full' : 'peek');
+    });
   }
 };
 
