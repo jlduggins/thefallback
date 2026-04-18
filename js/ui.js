@@ -395,69 +395,87 @@ const UI = {
         const grabber = document.createElement('div');
         grabber.className = 'drawer-grabber';
         panel.insertBefore(grabber, panel.firstChild);
-        this._bindDrawerSwipe(grabber);
+        this._bindDrawerDrag(panel, grabber);
       }
     });
-    // Reset to half on every (re)init
     this._applySnap('half');
   },
 
-  // V1-style swipe: track drag distance, snap to CLOSEST of {peek, half, full} on release.
-  // User can go from full → peek in one swipe if they drag far enough.
-  _bindDrawerSwipe(grabber) {
+  // Drawer is positioned fixed at bottom with height 92vh. We use translateY on
+  // the panel to move it. During drag: transition:none for 1:1 finger tracking.
+  // On release: restore transition and snap to closest anchor.
+  //   full → translateY(0)                            (fully up)
+  //   half → translateY(baseH - 55vh)                 (55% visible)
+  //   peek → translateY(baseH - peekPx)               (140px visible, clears 80px nav + FAB)
+  _bindDrawerDrag(panel, grabber) {
     const self = this;
+    const PEEK_PX = 140; // visible sliver height; must clear 80px bottom nav + FAB
 
-    // Pixel heights for each snap (must mirror CSS)
-    const snapPx = snap => {
+    const anchorTy = snap => {
       const vh = window.innerHeight;
-      if (snap === 'peek') return 140;
-      if (snap === 'full') return Math.round(vh * 0.92);
-      return Math.round(vh * 0.55);
+      const baseH = vh * 0.92;
+      if (snap === 'full') return 0;
+      if (snap === 'half') return baseH - vh * 0.55;
+      return baseH - PEEK_PX;
     };
-    const closestSnap = px => {
-      const candidates = [
-        { s: 'peek', h: snapPx('peek') },
-        { s: 'half', h: snapPx('half') },
-        { s: 'full', h: snapPx('full') }
+    const closestSnap = ty => {
+      const cands = [
+        { s: 'full', y: anchorTy('full') },
+        { s: 'half', y: anchorTy('half') },
+        { s: 'peek', y: anchorTy('peek') }
       ];
-      return candidates.reduce((a, b) => Math.abs(b.h - px) < Math.abs(a.h - px) ? b : a).s;
+      return cands.reduce((a, b) => Math.abs(b.y - ty) < Math.abs(a.y - ty) ? b : a).s;
     };
 
-    let startY = 0, startH = 0, tracking = false, moved = false;
+    let startY = 0, startTy = 0, dragging = false, moved = false, currTy = 0;
 
-    const onStart = e => {
-      startY = (e.touches ? e.touches[0].clientY : e.clientY);
-      // Current drawer height at the start of the drag
-      startH = snapPx(document.body.getAttribute('data-drawer-snap') || 'half');
-      tracking = true;
+    const beginDrag = clientY => {
+      startY = clientY;
+      startTy = anchorTy(document.body.getAttribute('data-drawer-snap') || 'half');
+      currTy = startTy;
+      dragging = true;
       moved = false;
+      panel.style.transition = 'none';           // 1:1 finger tracking
+      panel.setAttribute('data-dragging', '1');  // CSS can suppress other transitions
     };
-    const onMove = e => {
-      if (!tracking) return;
-      const y = (e.touches ? e.touches[0].clientY : e.clientY);
-      const diff = startY - y;
-      if (Math.abs(diff) > 5) moved = true;
+    const moveDrag = clientY => {
+      if (!dragging) return;
+      const dy = clientY - startY;
+      if (Math.abs(dy) > 3) moved = true;
+      const minTy = anchorTy('full');
+      const maxTy = anchorTy('peek') + 40; // small overshoot allowance
+      currTy = Math.max(minTy, Math.min(maxTy, startTy + dy));
+      panel.style.transform = `translateY(${currTy}px)`;
     };
-    const onEnd = e => {
-      if (!tracking) return;
-      tracking = false;
-      const endY = e && e.changedTouches ? e.changedTouches[0].clientY :
-                   (e && typeof e.clientY === 'number' ? e.clientY : startY);
-      const diff = startY - endY;
-      if (Math.abs(diff) < 10) return; // tap, let click handler cycle
-      const targetH = Math.max(80, Math.min(window.innerHeight * 0.95, startH + diff));
-      self._applySnap(closestSnap(targetH));
+    const endDrag = () => {
+      if (!dragging) return;
+      dragging = false;
+      panel.removeAttribute('data-dragging');
+      const snap = closestSnap(currTy);
+      // Re-enable transition, clear inline transform → CSS snap rule animates to anchor
+      panel.style.transition = '';
+      panel.style.transform = '';
+      self._applySnap(snap);
     };
 
-    grabber.addEventListener('touchstart', onStart, { passive: true });
-    grabber.addEventListener('touchmove', onMove, { passive: true });
-    grabber.addEventListener('touchend', onEnd);
-    grabber.addEventListener('touchcancel', onEnd);
+    // Touch
+    grabber.addEventListener('touchstart', e => {
+      beginDrag(e.touches[0].clientY);
+    }, { passive: true });
+    grabber.addEventListener('touchmove', e => {
+      if (!dragging) return;
+      moveDrag(e.touches[0].clientY);
+      if (e.cancelable) e.preventDefault();
+    }, { passive: false });
+    grabber.addEventListener('touchend', endDrag);
+    grabber.addEventListener('touchcancel', endDrag);
+
+    // Mouse
     grabber.addEventListener('mousedown', e => {
-      onStart(e);
-      const mm = ev => onMove(ev);
-      const mu = ev => {
-        onEnd(ev);
+      beginDrag(e.clientY);
+      const mm = ev => moveDrag(ev.clientY);
+      const mu = () => {
+        endDrag();
         document.removeEventListener('mousemove', mm);
         document.removeEventListener('mouseup', mu);
       };
@@ -465,7 +483,7 @@ const UI = {
       document.addEventListener('mouseup', mu);
     });
 
-    // Tap (no drag) cycles: peek → half → full → peek
+    // Tap (no drag) cycles peek → half → full → peek
     grabber.addEventListener('click', () => {
       if (moved) { moved = false; return; }
       const s = document.body.getAttribute('data-drawer-snap') || 'half';
