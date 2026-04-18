@@ -1718,15 +1718,18 @@ body[data-view="login"] .map-layers-panel { display: none !important; }
     display: none !important;
   }
 
-  /* Tray sits above the current drawer height, with a smooth transition */
+  /* Tray positions itself based on the current snap (not live drawer height)
+     so it doesn't jitter with every finger movement. */
   .map-controls-global {
-    bottom: calc(var(--drawer-height, 92px) + 16px);
     z-index: 500;
     transition: bottom 240ms cubic-bezier(0.32, 0.72, 0.24, 1);
   }
-  .map-controls-global[data-dragging] {
-    transition: none;
-  }
+  body[data-drawer-snap="peek"] .map-controls-global { bottom: 180px; }
+  body[data-drawer-snap="half"] .map-controls-global { bottom: calc(55vh + 16px); }
+  body[data-drawer-snap="full"] .map-controls-global { bottom: calc(92vh + 16px); }
+  /* Fallback if no snap set */
+  body:not([data-drawer-snap]) .map-controls-global { bottom: calc(55vh + 16px); }
+
   body[data-view="explore"] .map-controls-global,
   body[data-view="saved"] .map-controls-global,
   body[data-view="trips"] .map-controls-global {
