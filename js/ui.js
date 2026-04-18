@@ -402,42 +402,51 @@ const UI = {
     this._applySnap('half');
   },
 
-  // V1-style swipe: detect direction past threshold, update snap class,
-  // let CSS transitions handle all animation. No per-frame height changes.
+  // V1-style swipe: track drag distance, snap to CLOSEST of {peek, half, full} on release.
+  // User can go from full → peek in one swipe if they drag far enough.
   _bindDrawerSwipe(grabber) {
-    const THRESHOLD = 50;
-    let startY = 0, tracking = false, handled = false;
-
-    const getSnap = () => document.body.getAttribute('data-drawer-snap') || 'half';
     const self = this;
 
-    const swipeUp = () => {
-      const s = getSnap();
-      if (s === 'peek') self._applySnap('half');
-      else if (s === 'half') self._applySnap('full');
+    // Pixel heights for each snap (must mirror CSS)
+    const snapPx = snap => {
+      const vh = window.innerHeight;
+      if (snap === 'peek') return 140;
+      if (snap === 'full') return Math.round(vh * 0.92);
+      return Math.round(vh * 0.55);
     };
-    const swipeDown = () => {
-      const s = getSnap();
-      if (s === 'full') self._applySnap('half');
-      else if (s === 'half') self._applySnap('peek');
+    const closestSnap = px => {
+      const candidates = [
+        { s: 'peek', h: snapPx('peek') },
+        { s: 'half', h: snapPx('half') },
+        { s: 'full', h: snapPx('full') }
+      ];
+      return candidates.reduce((a, b) => Math.abs(b.h - px) < Math.abs(a.h - px) ? b : a).s;
     };
+
+    let startY = 0, startH = 0, tracking = false, moved = false;
 
     const onStart = e => {
       startY = (e.touches ? e.touches[0].clientY : e.clientY);
+      // Current drawer height at the start of the drag
+      startH = snapPx(document.body.getAttribute('data-drawer-snap') || 'half');
       tracking = true;
-      handled = false;
+      moved = false;
     };
     const onMove = e => {
-      if (!tracking || handled) return;
+      if (!tracking) return;
       const y = (e.touches ? e.touches[0].clientY : e.clientY);
       const diff = startY - y;
-      if (diff > THRESHOLD) { swipeUp(); handled = true; }
-      else if (diff < -THRESHOLD) { swipeDown(); handled = true; }
+      if (Math.abs(diff) > 5) moved = true;
     };
-    const onEnd = () => {
+    const onEnd = e => {
+      if (!tracking) return;
       tracking = false;
-      // handled is reset on next start; but click fires after touchend synthetically,
-      // so we intentionally keep handled=true until the click handler sees it once.
+      const endY = e && e.changedTouches ? e.changedTouches[0].clientY :
+                   (e && typeof e.clientY === 'number' ? e.clientY : startY);
+      const diff = startY - endY;
+      if (Math.abs(diff) < 10) return; // tap, let click handler cycle
+      const targetH = Math.max(80, Math.min(window.innerHeight * 0.95, startH + diff));
+      self._applySnap(closestSnap(targetH));
     };
 
     grabber.addEventListener('touchstart', onStart, { passive: true });
@@ -447,8 +456,8 @@ const UI = {
     grabber.addEventListener('mousedown', e => {
       onStart(e);
       const mm = ev => onMove(ev);
-      const mu = () => {
-        onEnd();
+      const mu = ev => {
+        onEnd(ev);
         document.removeEventListener('mousemove', mm);
         document.removeEventListener('mouseup', mu);
       };
@@ -456,10 +465,10 @@ const UI = {
       document.addEventListener('mouseup', mu);
     });
 
-    // Tap to cycle: peek → half → full → peek
+    // Tap (no drag) cycles: peek → half → full → peek
     grabber.addEventListener('click', () => {
-      if (handled) { handled = false; return; }
-      const s = getSnap();
+      if (moved) { moved = false; return; }
+      const s = document.body.getAttribute('data-drawer-snap') || 'half';
       const next = s === 'peek' ? 'half' : s === 'half' ? 'full' : 'peek';
       self._applySnap(next);
     });
