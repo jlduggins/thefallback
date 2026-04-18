@@ -190,11 +190,71 @@
         <div class="map-side-panel" id="locations-panel">
           <div class="side-panel-hd">
             <div class="side-panel-title">Locations</div>
-            <div id="location-filters" class="filter-chips">
-              <button class="chip active" data-filter="all">All</button>
-              <button class="chip" data-filter="nearby">Nearby</button>
-              <button class="chip" data-filter="planned">Planned</button>
-              <button class="chip" data-filter="visited">Visited</button>
+
+            <!-- Search + filter toggle -->
+            <div class="loc-search-row">
+              <div class="loc-search">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" id="loc-search-input" placeholder="Search locations…" />
+              </div>
+              <button type="button" id="loc-filter-toggle" class="loc-filter-btn" onclick="Entries.toggleFilterPanel()" aria-label="Filters">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                <span class="loc-filter-count" id="loc-filter-count" style="display:none">0</span>
+              </button>
+            </div>
+
+            <!-- Active filter chips (appear when filters applied) -->
+            <div id="loc-active-chips" class="loc-active-chips" style="display:none"></div>
+
+            <!-- Expanding filter panel -->
+            <div id="loc-filter-panel" class="loc-filter-panel" style="display:none">
+              <div class="loc-filter-section">
+                <div class="loc-filter-label">Type</div>
+                <div class="loc-filter-chips" data-filter-group="type">
+                  <button class="loc-chip" data-value="National Park">National Park</button>
+                  <button class="loc-chip" data-value="National Forest">National Forest</button>
+                  <button class="loc-chip" data-value="State Park">State Park</button>
+                  <button class="loc-chip" data-value="BLM">BLM</button>
+                  <button class="loc-chip" data-value="Dispersed">Dispersed</button>
+                  <button class="loc-chip" data-value="Private">Private</button>
+                  <button class="loc-chip" data-value="Other">Other</button>
+                </div>
+              </div>
+              <div class="loc-filter-section">
+                <div class="loc-filter-label">Status</div>
+                <div class="loc-filter-chips" data-filter-group="status">
+                  <button class="loc-chip" data-value="planned">Planned</button>
+                  <button class="loc-chip" data-value="visited">Visited</button>
+                  <button class="loc-chip" data-value="saved">Saved</button>
+                </div>
+              </div>
+              <div class="loc-filter-section">
+                <div class="loc-filter-label">Cost</div>
+                <div class="loc-filter-chips" data-filter-group="cost">
+                  <button class="loc-chip" data-value="0">Free</button>
+                  <button class="loc-chip" data-value="1-15">$1–15</button>
+                  <button class="loc-chip" data-value="16-30">$16–30</button>
+                  <button class="loc-chip" data-value="31-50">$31–50</button>
+                  <button class="loc-chip" data-value="51-75">$51–75</button>
+                  <button class="loc-chip" data-value="76+">$76+</button>
+                </div>
+              </div>
+              <div class="loc-filter-section">
+                <div class="loc-filter-label">State</div>
+                <select id="loc-filter-state" class="loc-filter-select">
+                  <option value="">All states</option>
+                </select>
+              </div>
+              <div class="loc-filter-section">
+                <div class="loc-filter-label">Min rating</div>
+                <div class="loc-filter-chips" data-filter-group="rating">
+                  <button class="loc-chip" data-value="1">★+</button>
+                  <button class="loc-chip" data-value="2">★★+</button>
+                  <button class="loc-chip" data-value="3">★★★+</button>
+                  <button class="loc-chip" data-value="4">★★★★+</button>
+                  <button class="loc-chip" data-value="5">★★★★★</button>
+                </div>
+              </div>
             </div>
           </div>
           <div class="side-panel-body">
