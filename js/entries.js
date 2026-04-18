@@ -4,8 +4,16 @@
  */
 
 const Entries = {
-  // Current filter
-  currentFilter: 'all',
+  // Filter state
+  filters: {
+    search: '',
+    type: new Set(),       // Set of type strings
+    status: new Set(),     // Set of status strings
+    cost: new Set(),       // Set of range strings
+    rating: null,          // single min-rating value
+    state: ''              // single state string
+  },
+  filterPanelOpen: false,
   
   // ═══════════════════════════════════════════════════════════════════════════
   // INITIALIZATION
@@ -41,24 +49,141 @@ const Entries = {
   },
   
   initFilters() {
-    const filterContainer = document.getElementById('location-filters');
-    if (!filterContainer) return;
-    
-    filterContainer.addEventListener('click', (e) => {
-      const chip = e.target.closest('.chip');
-      if (!chip) return;
-      
-      const filter = chip.dataset.filter;
-      if (!filter) return;
-      
-      // Update active state
-      filterContainer.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
-      chip.classList.add('active');
-      
-      // Apply filter
-      this.currentFilter = filter;
-      this.renderSavedList();
+    // Search input
+    const searchInput = document.getElementById('loc-search-input');
+    if (searchInput) {
+      searchInput.addEventListener('input', e => {
+        this.filters.search = e.target.value.trim().toLowerCase();
+        this.renderSavedList();
+        this.updateActiveChips();
+      });
+    }
+
+    // Multi-select chip groups
+    document.querySelectorAll('.loc-filter-chips').forEach(group => {
+      const groupName = group.dataset.filterGroup;
+      group.addEventListener('click', e => {
+        const chip = e.target.closest('.loc-chip');
+        if (!chip) return;
+        const value = chip.dataset.value;
+        if (groupName === 'rating') {
+          // Single-select: clicking active chip clears it
+          if (this.filters.rating === value) {
+            this.filters.rating = null;
+            chip.classList.remove('active');
+          } else {
+            this.filters.rating = value;
+            group.querySelectorAll('.loc-chip').forEach(c => c.classList.remove('active'));
+            chip.classList.add('active');
+          }
+        } else {
+          // Multi-select
+          const set = this.filters[groupName];
+          if (set.has(value)) { set.delete(value); chip.classList.remove('active'); }
+          else { set.add(value); chip.classList.add('active'); }
+        }
+        this.renderSavedList();
+        this.updateActiveChips();
+        this.updateFilterCount();
+      });
     });
+
+    // State dropdown
+    const stateSel = document.getElementById('loc-filter-state');
+    if (stateSel) {
+      stateSel.addEventListener('change', e => {
+        this.filters.state = e.target.value;
+        this.renderSavedList();
+        this.updateActiveChips();
+        this.updateFilterCount();
+      });
+    }
+
+    // Populate state dropdown when entries load
+    State.on('entries:changed', () => this.populateStateDropdown());
+    this.populateStateDropdown();
+  },
+
+  populateStateDropdown() {
+    const sel = document.getElementById('loc-filter-state');
+    if (!sel) return;
+    const states = [...new Set(State.entries.map(e => e.state).filter(Boolean))].sort();
+    const currentVal = sel.value;
+    sel.innerHTML = '<option value="">All states</option>' +
+      states.map(s => `<option value="${this.escapeHtml(s)}">${this.escapeHtml(s)}</option>`).join('');
+    if (states.includes(currentVal)) sel.value = currentVal;
+  },
+
+  toggleFilterPanel() {
+    this.filterPanelOpen = !this.filterPanelOpen;
+    const panel = document.getElementById('loc-filter-panel');
+    const btn = document.getElementById('loc-filter-toggle');
+    if (panel) panel.style.display = this.filterPanelOpen ? 'block' : 'none';
+    if (btn) btn.classList.toggle('active', this.filterPanelOpen);
+  },
+
+  updateFilterCount() {
+    const count = this.filters.type.size + this.filters.status.size + this.filters.cost.size +
+      (this.filters.rating ? 1 : 0) + (this.filters.state ? 1 : 0);
+    const el = document.getElementById('loc-filter-count');
+    if (el) {
+      el.textContent = count;
+      el.style.display = count > 0 ? 'inline-flex' : 'none';
+    }
+  },
+
+  updateActiveChips() {
+    const container = document.getElementById('loc-active-chips');
+    if (!container) return;
+    const chips = [];
+    const mk = (label, clearAction) => `<button class="loc-active-chip" onclick="${clearAction}">${this.escapeHtml(label)} <span class="x">×</span></button>`;
+    this.filters.type.forEach(v => chips.push(mk(v, `Entries.clearFilter('type','${v}')`)));
+    this.filters.status.forEach(v => chips.push(mk(v[0].toUpperCase() + v.slice(1), `Entries.clearFilter('status','${v}')`)));
+    this.filters.cost.forEach(v => chips.push(mk(v === '0' ? 'Free' : '$' + v, `Entries.clearFilter('cost','${v}')`)));
+    if (this.filters.rating) chips.push(mk('★'.repeat(+this.filters.rating) + '+', `Entries.clearFilter('rating')`));
+    if (this.filters.state) chips.push(mk(this.filters.state, `Entries.clearFilter('state')`));
+    if (chips.length > 0) chips.push(`<button class="loc-active-clear" onclick="Entries.clearAllFilters()">Clear all</button>`);
+    container.innerHTML = chips.join('');
+    container.style.display = chips.length > 0 ? 'flex' : 'none';
+  },
+
+  clearFilter(group, value) {
+    if (group === 'rating') this.filters.rating = null;
+    else if (group === 'state') { this.filters.state = ''; const sel = document.getElementById('loc-filter-state'); if (sel) sel.value = ''; }
+    else this.filters[group].delete(value);
+    // Sync chip active state
+    document.querySelectorAll(`.loc-filter-chips[data-filter-group="${group}"] .loc-chip`).forEach(c => {
+      if (c.dataset.value === value || group === 'rating') c.classList.remove('active');
+    });
+    this.renderSavedList();
+    this.updateActiveChips();
+    this.updateFilterCount();
+  },
+
+  clearAllFilters() {
+    this.filters.search = '';
+    this.filters.type.clear();
+    this.filters.status.clear();
+    this.filters.cost.clear();
+    this.filters.rating = null;
+    this.filters.state = '';
+    const si = document.getElementById('loc-search-input'); if (si) si.value = '';
+    const ss = document.getElementById('loc-filter-state'); if (ss) ss.value = '';
+    document.querySelectorAll('.loc-chip').forEach(c => c.classList.remove('active'));
+    this.renderSavedList();
+    this.updateActiveChips();
+    this.updateFilterCount();
+  },
+
+  _matchesCostRange(cost, range) {
+    if (cost == null) return false;
+    if (range === '0') return cost === 0;
+    if (range === '1-15') return cost >= 1 && cost <= 15;
+    if (range === '16-30') return cost >= 16 && cost <= 30;
+    if (range === '31-50') return cost >= 31 && cost <= 50;
+    if (range === '51-75') return cost >= 51 && cost <= 75;
+    if (range === '76+') return cost >= 76;
+    return false;
   },
   
   updateSelectedCard(selectedId) {
@@ -211,31 +336,29 @@ const Entries = {
   renderSavedList() {
     const container = document.getElementById('locations-list');
     if (!container) return;
-    
-    let entries = State.entries;
-    
-    // Apply filter
-    if (this.currentFilter === 'nearby') {
-      if (State.userLat && State.userLng) {
-        entries = State.getNearbyEntries(State.userLat, State.userLng, 50);
-      }
-    } else if (this.currentFilter === 'planned') {
-      entries = entries.filter(e => e.status === 'planned');
-    } else if (this.currentFilter === 'visited') {
-      entries = entries.filter(e => e.status === 'visited');
+
+    let entries = State.entries.slice();
+    const f = this.filters;
+
+    if (f.search) {
+      entries = entries.filter(e => {
+        const hay = `${e.name || ''} ${e.notes || ''} ${e.address || ''} ${e.type || ''} ${e.state || ''}`.toLowerCase();
+        return hay.includes(f.search);
+      });
     }
-    // 'all' shows everything
-    
+    if (f.type.size > 0) entries = entries.filter(e => f.type.has(e.type));
+    if (f.status.size > 0) entries = entries.filter(e => f.status.has(e.status));
+    if (f.cost.size > 0) entries = entries.filter(e => [...f.cost].some(r => this._matchesCostRange(e.cost, r)));
+    if (f.rating) entries = entries.filter(e => (e.rating || 0) >= +f.rating);
+    if (f.state) entries = entries.filter(e => e.state === f.state);
+
     if (entries.length === 0) {
-      const emptyMessage = this.currentFilter === 'all' 
-        ? 'Tap the + button to add your first camping spot'
-        : `No ${this.currentFilter} locations`;
-      
+      const hasAnyFilter = f.search || f.type.size || f.status.size || f.cost.size || f.rating || f.state;
       container.innerHTML = `
         <div class="empty-state">
           <div class="empty-state-icon">🗺</div>
           <div class="empty-state-title">No locations</div>
-          <div class="empty-state-text">${emptyMessage}</div>
+          <div class="empty-state-text">${hasAnyFilter ? 'Try adjusting your filters' : 'Tap the + button to add your first camping spot'}</div>
         </div>
       `;
       return;
