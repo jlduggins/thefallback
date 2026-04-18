@@ -1121,12 +1121,13 @@ body[data-view="trips"] #app.authenticated #map-global {
    Hidden on views without a map via body[data-view=...] below. */
 .map-controls-global {
   position: fixed;
-  right: var(--space-3);
-  bottom: var(--space-6);
+  right: 12px;
+  bottom: 24px;
   display: flex;
   flex-direction: column;
-  gap: 1px;
-  z-index: 50;
+  align-items: center;
+  gap: 8px;
+  z-index: 500;
 }
 
 /* Hide tray on views that don't show a map */
@@ -1142,33 +1143,101 @@ body[data-view="login"] .map-controls-global {
   }
 }
 
+/* Map Layers panel (fixed, opens from tray) */
+.map-layers-panel {
+  position: fixed;
+  right: calc(var(--space-3) + 48px);
+  bottom: var(--space-6);
+  background: var(--color-surface);
+  border: 0.5px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+  padding: var(--space-4);
+  z-index: 51;
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+body[data-view="settings"] .map-layers-panel,
+body[data-view="login"] .map-layers-panel { display: none !important; }
+@media (max-width: 767px) {
+  body[data-view="explore"] .map-layers-panel { display: none !important; }
+}
+.map-layers-hd {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.map-layers-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+.map-layers-section { }
+.map-layers-label {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  letter-spacing: 0.5px;
+  margin-bottom: 6px;
+}
+.map-layers-opt {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  padding: 4px 0;
+  font-size: 13px;
+  color: var(--color-text);
+}
+.map-layers-opt input { accent-color: var(--color-primary); }
+
+.map-layers-legend {
+  margin-left: 26px;
+  margin-top: 2px;
+  margin-bottom: 6px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+.map-layers-legend .lg-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 0;
+}
+.map-layers-legend .lg-sw {
+  width: 12px;
+  height: 12px;
+  border: 1px solid #ccc;
+  border-radius: 2px;
+  display: inline-block;
+}
+
 .map-control-btn {
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--color-surface);
-  border: 0.5px solid var(--color-border);
+  border: none;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
   cursor: pointer;
   transition: background var(--transition-fast);
+  color: var(--color-text);
 }
 .map-control-btn:hover { background: var(--color-surface-alt); }
-.map-control-btn:first-child { border-radius: var(--radius-md) var(--radius-md) 0 0; }
-.map-control-btn:last-child  { border-radius: 0 0 var(--radius-md) var(--radius-md); }
-.map-control-btn svg { width: 16px; height: 16px; stroke: var(--color-text); }
+.map-control-btn svg { width: 22px; height: 22px; stroke: currentColor; }
 
 /* Backups toggle button (inside the tray, shown when journey active) */
 .map-control-backups {
-  margin-top: 4px !important;
-  border-radius: var(--radius-md) !important;
   color: var(--color-text-muted);
 }
 .map-control-backups.active {
   background: var(--color-accent);
-  border-color: var(--color-accent);
+  color: white;
 }
-.map-control-backups.active svg { stroke: white; }
 
 /* Top-right count overlay (entries count / journeys count) */
 .map-count-overlay {
