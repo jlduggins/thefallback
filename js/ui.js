@@ -434,7 +434,11 @@ const UI = {
       if (diff > THRESHOLD) { swipeUp(); handled = true; }
       else if (diff < -THRESHOLD) { swipeDown(); handled = true; }
     };
-    const onEnd = () => { tracking = false; };
+    const onEnd = () => {
+      tracking = false;
+      // handled is reset on next start; but click fires after touchend synthetically,
+      // so we intentionally keep handled=true until the click handler sees it once.
+    };
 
     grabber.addEventListener('touchstart', onStart, { passive: true });
     grabber.addEventListener('touchmove', onMove, { passive: true });
