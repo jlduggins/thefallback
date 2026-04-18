@@ -201,6 +201,9 @@
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
                 <span class="loc-filter-count" id="loc-filter-count" style="display:none">0</span>
               </button>
+              <button type="button" id="loc-filter-clear" class="loc-filter-btn" onclick="Entries.clearAllFilters()" aria-label="Clear all filters" title="Clear all filters" style="display:none">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
             </div>
 
             <!-- Active filter chips (appear when filters applied) -->
@@ -279,7 +282,6 @@
             <div class="side-panel-hd">
               <div class="trips-hd-row">
                 <div class="side-panel-title">Journeys</div>
-                <button class="btn btn-primary" style="padding:6px 12px;font-size:12px" onclick="Trips.openNewJourneyModal()">+ New</button>
               </div>
               <div class="fuel-bar" onclick="Trips.openFuelSettingsModal()">
                 <span style="font-size:14px">⛽</span>
