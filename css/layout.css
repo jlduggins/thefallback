@@ -529,15 +529,34 @@
 @media (max-width: 767px) {
   #view-explore {
     flex-direction: column !important;
+    position: relative;
+    background: transparent !important;
   }
+  /* Convert .explore-left into a mobile drawer over the global map */
   .explore-left {
     width: 100%;
     max-width: none;
     min-width: 0;
-    flex: 1;
+    flex: none;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    z-index: 40;
+    background: var(--color-surface);
+    border-top: 0.5px solid var(--color-border);
+    border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.12);
+    transition: height 180ms ease;
+    overflow: hidden;
   }
   .explore-right {
     display: none;
+  }
+  /* Map visible on Explore too on mobile */
+  body[data-view="explore"] #app.authenticated #map-global {
+    display: block;
   }
 }
 
@@ -1643,7 +1662,8 @@ body[data-view="login"] .map-layers-panel { display: none !important; }
 
   .map-side-panel,
   #location-detail-panel,
-  #explore-backup-panel {
+  #explore-backup-panel,
+  .explore-left {
     width: 100% !important;
     max-width: 100% !important;
     border-right: none;
@@ -1656,33 +1676,45 @@ body[data-view="login"] .map-layers-panel { display: none !important; }
     top: auto;
     z-index: 40;
     box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.12);
-    transition: height 220ms ease;
     overflow: hidden;
+    will-change: height;
+  }
+
+  /* Smooth snap animation only when not being dragged */
+  .map-side-panel:not([data-dragging]),
+  #location-detail-panel:not([data-dragging]),
+  #explore-backup-panel:not([data-dragging]),
+  .explore-left:not([data-dragging]) {
+    transition: height 220ms cubic-bezier(0.32, 0.72, 0.24, 1);
   }
 
   /* Drawer snap heights */
   .map-side-panel[data-snap="peek"],
   #location-detail-panel[data-snap="peek"],
-  #explore-backup-panel[data-snap="peek"] { height: 92px; }
+  #explore-backup-panel[data-snap="peek"],
+  .explore-left[data-snap="peek"] { height: 92px; }
 
   .map-side-panel[data-snap="half"],
   #location-detail-panel[data-snap="half"],
-  #explore-backup-panel[data-snap="half"] { height: 55vh; }
+  #explore-backup-panel[data-snap="half"],
+  .explore-left[data-snap="half"] { height: 55vh; }
 
   .map-side-panel[data-snap="full"],
   #location-detail-panel[data-snap="full"],
-  #explore-backup-panel[data-snap="full"] { height: 92vh; }
+  #explore-backup-panel[data-snap="full"],
+  .explore-left[data-snap="full"] { height: 92vh; }
 
   .map-side-panel:not([data-snap]),
   #location-detail-panel:not([data-snap]),
-  #explore-backup-panel:not([data-snap]) { height: 55vh; }
+  #explore-backup-panel:not([data-snap]),
+  .explore-left:not([data-snap]) { height: 55vh; }
 
   /* Grab handle at the top of each drawer */
   .drawer-grabber {
     display: flex;
     justify-content: center;
     align-items: center;
-    padding: 8px 0 4px;
+    padding: 10px 0 6px;
     cursor: grab;
     flex-shrink: 0;
     user-select: none;
@@ -1706,9 +1738,20 @@ body[data-view="login"] .map-layers-panel { display: none !important; }
     display: none !important;
   }
 
-  /* Tray sits above peek drawer so it's never covered */
+  /* Tray always visible on mobile; raised above peek drawer so it's never covered */
   .map-controls-global {
     bottom: 108px;
+    z-index: 500;
+    display: flex !important;
+  }
+  body[data-view="explore"] .map-controls-global,
+  body[data-view="saved"] .map-controls-global,
+  body[data-view="trips"] .map-controls-global {
+    display: flex !important;
+  }
+  body[data-view="settings"] .map-controls-global,
+  body[data-view="login"] .map-controls-global {
+    display: none !important;
   }
 }
 }
