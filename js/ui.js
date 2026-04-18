@@ -377,27 +377,8 @@ const UI = {
 
   _drawerIds: ['locations-panel', 'trips-list-panel', 'location-detail-panel', 'explore-backup-panel', 'explore-left-drawer'],
 
-  _snapToHeight(snap) {
-    const vh = window.innerHeight;
-    if (snap === 'peek') return 140;
-    if (snap === 'full') return Math.round(vh * 0.92);
-    return Math.round(vh * 0.55);
-  },
-
-  _heightToSnap(h) {
-    const vh = window.innerHeight;
-    if (h < vh * 0.28) return 'peek';
-    if (h < vh * 0.72) return 'half';
-    return 'full';
-  },
-
-  _setDrawerHeightPx(px) {
-    document.documentElement.style.setProperty('--drawer-height', px + 'px');
-  },
-
   _applySnap(snap) {
     document.body.setAttribute('data-drawer-snap', snap);
-    this._setDrawerHeightPx(this._snapToHeight(snap));
   },
 
   initMobileDrawers() {
@@ -414,62 +395,69 @@ const UI = {
         const grabber = document.createElement('div');
         grabber.className = 'drawer-grabber';
         panel.insertBefore(grabber, panel.firstChild);
-        this._bindDrawerDrag(panel, grabber);
+        this._bindDrawerSwipe(grabber);
       }
     });
-    // Every view entrance resets to half
+    // Reset to half on every (re)init
     this._applySnap('half');
   },
 
-  _bindDrawerDrag(panel, grabber) {
-    let startY = 0, startH = 0, dragging = false, moved = false;
+  // V1-style swipe: detect direction past threshold, update snap class,
+  // let CSS transitions handle all animation. No per-frame height changes.
+  _bindDrawerSwipe(grabber) {
+    const THRESHOLD = 50;
+    let startY = 0, tracking = false, handled = false;
 
-    const onMove = e => {
-      if (!dragging) return;
-      const y = (e.touches ? e.touches[0].clientY : e.clientY);
-      const delta = startY - y;
-      if (Math.abs(delta) > 3) moved = true;
-      const newH = Math.max(80, Math.min(window.innerHeight * 0.95, startH + delta));
-      // Update CSS var directly — drives drawer height only. Tray stays put.
-      document.documentElement.style.setProperty('--drawer-height', newH + 'px');
-      if (e.cancelable) e.preventDefault();
+    const getSnap = () => document.body.getAttribute('data-drawer-snap') || 'half';
+    const self = this;
+
+    const swipeUp = () => {
+      const s = getSnap();
+      if (s === 'peek') self._applySnap('half');
+      else if (s === 'half') self._applySnap('full');
     };
-    const onEnd = () => {
-      if (!dragging) return;
-      dragging = false;
-      panel.removeAttribute('data-dragging');
-      const currH = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--drawer-height')) || this._snapToHeight('half');
-      const snap = this._heightToSnap(currH);
-      // Animate to final snap height + update body attr (tray moves once, smoothly)
-      this._applySnap(snap);
-      document.removeEventListener('mousemove', onMoveBound);
-      document.removeEventListener('mouseup', onEndBound);
-      document.removeEventListener('touchmove', onMoveBound);
-      document.removeEventListener('touchend', onEndBound);
-      document.removeEventListener('touchcancel', onEndBound);
+    const swipeDown = () => {
+      const s = getSnap();
+      if (s === 'full') self._applySnap('half');
+      else if (s === 'half') self._applySnap('peek');
     };
-    const onMoveBound = e => onMove.call(this, e);
-    const onEndBound = () => onEnd.call(this);
+
     const onStart = e => {
-      dragging = true;
-      moved = false;
       startY = (e.touches ? e.touches[0].clientY : e.clientY);
-      startH = panel.getBoundingClientRect().height;
-      panel.setAttribute('data-dragging', '1');
-      document.addEventListener('mousemove', onMoveBound);
-      document.addEventListener('mouseup', onEndBound);
-      document.addEventListener('touchmove', onMoveBound, { passive: false });
-      document.addEventListener('touchend', onEndBound);
-      document.addEventListener('touchcancel', onEndBound);
+      tracking = true;
+      handled = false;
     };
-    grabber.addEventListener('mousedown', onStart);
+    const onMove = e => {
+      if (!tracking || handled) return;
+      const y = (e.touches ? e.touches[0].clientY : e.clientY);
+      const diff = startY - y;
+      if (diff > THRESHOLD) { swipeUp(); handled = true; }
+      else if (diff < -THRESHOLD) { swipeDown(); handled = true; }
+    };
+    const onEnd = () => { tracking = false; };
+
     grabber.addEventListener('touchstart', onStart, { passive: true });
-    // Tap (no drag) to cycle: peek → half → full → peek
+    grabber.addEventListener('touchmove', onMove, { passive: true });
+    grabber.addEventListener('touchend', onEnd);
+    grabber.addEventListener('touchcancel', onEnd);
+    grabber.addEventListener('mousedown', e => {
+      onStart(e);
+      const mm = ev => onMove(ev);
+      const mu = () => {
+        onEnd();
+        document.removeEventListener('mousemove', mm);
+        document.removeEventListener('mouseup', mu);
+      };
+      document.addEventListener('mousemove', mm);
+      document.addEventListener('mouseup', mu);
+    });
+
+    // Tap to cycle: peek → half → full → peek
     grabber.addEventListener('click', () => {
-      if (moved) { moved = false; return; }
-      const s = document.body.getAttribute('data-drawer-snap') || 'half';
+      if (handled) { handled = false; return; }
+      const s = getSnap();
       const next = s === 'peek' ? 'half' : s === 'half' ? 'full' : 'peek';
-      this._applySnap(next);
+      self._applySnap(next);
     });
   }
 };
