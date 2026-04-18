@@ -472,10 +472,27 @@
   background: var(--color-base);
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  overflow: hidden; /* children scroll internally */
   padding: var(--space-5) var(--space-4);
   gap: var(--space-4);
+}
+
+.explore-nearby-wrap {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0; /* allow children to shrink & scroll */
+  overflow: hidden;
+}
+.explore-nearby-wrap .section-header {
+  flex-shrink: 0;
+}
+.explore-nearby-wrap #nearby-list,
+.explore-nearby-wrap .nearby-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .explore-brand {
