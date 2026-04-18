@@ -59,10 +59,25 @@ const UI = {
       });
     });
     
-    // Add button
+    // Dynamic + button based on current view/context
     const addBtn = document.getElementById('nav-add-btn');
     if (addBtn) {
-      addBtn.addEventListener('click', () => this.openAddModal());
+      addBtn.addEventListener('click', () => {
+        const view = State.currentView;
+        if (view === 'trips') {
+          // If a journey detail is open, add a destination; otherwise new journey
+          if (window.Trips?._defaultPanelContent && State.currentJourneyId) {
+            Trips.openAddLegModal(State.currentJourneyId);
+          } else if (window.Trips?.openNewJourneyModal) {
+            Trips.openNewJourneyModal();
+          } else {
+            this.openAddModal();
+          }
+        } else {
+          // Explore / Saved / elsewhere → add a location
+          this.openAddModal();
+        }
+      });
     }
   },
   
@@ -362,30 +377,37 @@ const UI = {
 
   _drawerIds: ['locations-panel', 'trips-list-panel', 'location-detail-panel', 'explore-backup-panel', 'explore-left-drawer'],
 
-  _updateBodyDrawerSnap() {
-    // Find the visible drawer for the current view and reflect its snap on body
-    const view = State.currentView;
-    let id = null;
-    if (view === 'explore') id = 'explore-left-drawer';
-    else if (view === 'saved') id = 'locations-panel';
-    else if (view === 'trips') id = document.getElementById('location-detail-panel')?.style.display === 'flex'
-      ? 'location-detail-panel' : 'trips-list-panel';
-    const panel = id ? document.getElementById(id) : null;
-    const snap = panel?.getAttribute('data-snap') || 'half';
+  _snapToHeight(snap) {
+    const vh = window.innerHeight;
+    if (snap === 'peek') return 92;
+    if (snap === 'full') return Math.round(vh * 0.92);
+    return Math.round(vh * 0.55);
+  },
+
+  _heightToSnap(h) {
+    const vh = window.innerHeight;
+    if (h < vh * 0.28) return 'peek';
+    if (h < vh * 0.72) return 'half';
+    return 'full';
+  },
+
+  _setDrawerHeightPx(px) {
+    document.documentElement.style.setProperty('--drawer-height', px + 'px');
+  },
+
+  _applySnap(snap) {
     document.body.setAttribute('data-drawer-snap', snap);
+    this._setDrawerHeightPx(this._snapToHeight(snap));
   },
 
   initMobileDrawers() {
     if (!window.matchMedia('(max-width: 767px)').matches) return;
-    // Ensure the Explore left column has an id so it can be treated as a drawer
     const exploreLeft = document.querySelector('#view-explore .explore-left');
     if (exploreLeft && !exploreLeft.id) exploreLeft.id = 'explore-left-drawer';
 
     this._drawerIds.forEach(id => {
       const panel = document.getElementById(id);
       if (!panel) return;
-      // Always reset to half on (re)initialization so returning to a view starts at half
-      panel.setAttribute('data-snap', 'half');
       if (panel.dataset.drawerInit) return;
       panel.dataset.drawerInit = '1';
       if (!panel.querySelector('.drawer-grabber')) {
@@ -395,75 +417,64 @@ const UI = {
         this._bindDrawerDrag(panel, grabber);
       }
     });
-    this._updateBodyDrawerSnap();
+    // Every view entrance resets to half
+    this._applySnap('half');
   },
 
   _bindDrawerDrag(panel, grabber) {
     let startY = 0, startH = 0, dragging = false, moved = false;
-    const snapFromHeight = h => {
-      const vh = window.innerHeight;
-      if (h < vh * 0.28) return 'peek';
-      if (h < vh * 0.72) return 'half';
-      return 'full';
-    };
-    const snapHeight = snap => {
-      const vh = window.innerHeight;
-      if (snap === 'peek') return 92;
-      if (snap === 'full') return vh * 0.92;
-      return vh * 0.55;
-    };
+    const tray = () => document.getElementById('map-controls');
+
     const onMove = e => {
       if (!dragging) return;
       const y = (e.touches ? e.touches[0].clientY : e.clientY);
       const delta = startY - y;
       if (Math.abs(delta) > 3) moved = true;
       const newH = Math.max(60, Math.min(window.innerHeight * 0.95, startH + delta));
-      panel.style.height = newH + 'px';
-      // Live-update body drawer-snap during drag so tray reacts immediately
-      document.body.setAttribute('data-drawer-snap', snapFromHeight(newH));
+      // Update CSS var directly — drives drawer height AND tray offset smoothly
+      this._setDrawerHeightPx(newH);
       if (e.cancelable) e.preventDefault();
     };
     const onEnd = () => {
       if (!dragging) return;
       dragging = false;
-      const finalH = panel.getBoundingClientRect().height;
-      const finalSnap = snapFromHeight(finalH);
       panel.removeAttribute('data-dragging');
-      // Animate to exact snap height
-      panel.style.height = snapHeight(finalSnap) + 'px';
-      // After transition, clear inline height so CSS snap rule takes over
-      setTimeout(() => {
-        panel.style.height = '';
-        panel.setAttribute('data-snap', finalSnap);
-        document.body.setAttribute('data-drawer-snap', finalSnap);
-      }, 240);
+      const t = tray();
+      if (t) t.removeAttribute('data-dragging');
+      const currH = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--drawer-height')) || this._snapToHeight('half');
+      const snap = this._heightToSnap(currH);
+      // Let CSS transition animate to the snap height
+      this._applySnap(snap);
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onEnd);
       document.removeEventListener('touchmove', onMove);
       document.removeEventListener('touchend', onEnd);
       document.removeEventListener('touchcancel', onEnd);
     };
+    const onMoveBound = e => onMove.call(this, e);
+    const onEndBound = () => onEnd.call(this);
     const onStart = e => {
       dragging = true;
       moved = false;
       startY = (e.touches ? e.touches[0].clientY : e.clientY);
       startH = panel.getBoundingClientRect().height;
       panel.setAttribute('data-dragging', '1');
-      document.addEventListener('mousemove', onMove);
-      document.addEventListener('mouseup', onEnd);
-      document.addEventListener('touchmove', onMove, { passive: false });
-      document.addEventListener('touchend', onEnd);
-      document.addEventListener('touchcancel', onEnd);
+      const t = tray();
+      if (t) t.setAttribute('data-dragging', '1');
+      document.addEventListener('mousemove', onMoveBound);
+      document.addEventListener('mouseup', onEndBound);
+      document.addEventListener('touchmove', onMoveBound, { passive: false });
+      document.addEventListener('touchend', onEndBound);
+      document.addEventListener('touchcancel', onEndBound);
     };
     grabber.addEventListener('mousedown', onStart);
     grabber.addEventListener('touchstart', onStart, { passive: true });
     // Tap (no drag) to cycle: peek → half → full → peek
     grabber.addEventListener('click', () => {
       if (moved) { moved = false; return; }
-      const s = panel.getAttribute('data-snap') || 'half';
+      const s = document.body.getAttribute('data-drawer-snap') || 'half';
       const next = s === 'peek' ? 'half' : s === 'half' ? 'full' : 'peek';
-      panel.setAttribute('data-snap', next);
-      document.body.setAttribute('data-drawer-snap', next);
+      this._applySnap(next);
     });
   }
 };
