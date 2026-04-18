@@ -514,14 +514,28 @@ const Entries = {
     const isSelected = State.selectedEntryId === entry.id;
     const costLabel = State.costLabel(entry.cost);
     const tags = [];
-    
-    // Add amenities as tags
     State.AMENITY_META.forEach(am => {
       if (entry[am.id]) {
         tags.push(`<span class="location-card-tag amenity">${am.icon} ${am.label}</span>`);
       }
     });
-    
+
+    // Type · Status line (v1 style)
+    const typeStatusParts = [];
+    if (entry.type) typeStatusParts.push(this.escapeHtml(entry.type));
+    if (entry.status) typeStatusParts.push(`<span class="location-card-status">${this.escapeHtml(entry.status[0].toUpperCase() + entry.status.slice(1))}</span>`);
+    const typeStatusLine = typeStatusParts.join(' · ');
+
+    // Rating stars (inline top-right)
+    const ratingHtml = entry.rating
+      ? `<div class="location-card-rating">${'★'.repeat(entry.rating)}<span class="muted">${'★'.repeat(5 - entry.rating)}</span></div>`
+      : '';
+
+    // Address (only if different from type)
+    const addressHtml = entry.address
+      ? `<div class="location-card-address">${this.escapeHtml(entry.address)}</div>`
+      : '';
+
     return `
       <div class="location-swipe-row" data-id="${entry.id}">
         <button class="location-swipe-delete" onclick="Entries.deleteEntryFromSwipe('${entry.id}')" aria-label="Delete">
@@ -531,12 +545,14 @@ const Entries = {
         <div class="location-card ${isSelected ? 'selected' : ''}" data-id="${entry.id}">
           <div class="location-card-image" style="${entry.photos?.[0] ? `background-image: url(${entry.photos[0]})` : ''}"></div>
           <div class="location-card-content">
-            <div class="location-card-name">${this.escapeHtml(entry.name)}</div>
-            <div class="location-card-address">${this.escapeHtml(entry.address || entry.type || '')}</div>
-            <div class="location-card-tags">
-              <span class="location-card-tag cost" style="color: ${State.costColor(entry.cost)}">${costLabel}</span>
-              ${tags.slice(0, 3).join('')}
+            <div class="location-card-topline">
+              <div class="location-card-name">${this.escapeHtml(entry.name)}</div>
+              <div class="location-card-cost" style="color: ${State.costColor(entry.cost)}">${costLabel}</div>
             </div>
+            ${typeStatusLine ? `<div class="location-card-typeline">${typeStatusLine}</div>` : ''}
+            ${addressHtml}
+            ${ratingHtml}
+            ${tags.length ? `<div class="location-card-tags">${tags.join('')}</div>` : ''}
           </div>
         </div>
       </div>
