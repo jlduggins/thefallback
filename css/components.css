@@ -1531,6 +1531,12 @@
   color: var(--color-primary);
   border-color: var(--color-primary);
 }
+#loc-filter-clear {
+  color: var(--color-text-muted);
+}
+#loc-filter-clear:hover {
+  background: var(--color-surface-alt);
+}
 .loc-filter-count {
   position: absolute;
   top: -4px;
