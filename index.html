@@ -91,12 +91,49 @@
         <button class="map-control-btn" onclick="MapModule.zoomOut()" title="Zoom out">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </button>
+        <button class="map-control-btn" id="map-layers-btn" onclick="MapModule.toggleLayersPanel()" title="Map layers">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+        </button>
         <button class="map-control-btn" onclick="MapModule.centerOnUser()" title="My location">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="6"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="2" y1="12" x2="6" y2="12"/><line x1="18" y1="12" x2="22" y2="12"/></svg>
         </button>
         <button class="map-control-btn map-control-backups" id="map-backups-btn" onclick="Trips.toggleBackupMarkers()" title="Toggle backup spots" style="display:none">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          <svg viewBox="0 0 36 36" fill="none">
+            <path d="M5 8 L5 4 L31 4 L31 8" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            <path d="M5 28 L5 32 L31 32 L31 28" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+            <text x="18" y="16" text-anchor="middle" font-family="system-ui, sans-serif" font-size="8" font-weight="700" fill="currentColor">BACK</text>
+            <text x="18" y="26" text-anchor="middle" font-family="system-ui, sans-serif" font-size="10" font-weight="900" fill="currentColor">UP</text>
+          </svg>
         </button>
+      </div>
+
+      <!-- Layers panel (toggle from tray) -->
+      <div id="map-layers-panel" class="map-layers-panel" style="display:none">
+        <div class="map-layers-hd">
+          <div class="map-layers-title">Map Layers</div>
+          <button onclick="MapModule.closeLayersPanel()" class="btn btn-ghost btn-icon" style="width:28px;height:28px" aria-label="Close">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <div class="map-layers-section">
+          <div class="map-layers-label">BASE MAP</div>
+          <label class="map-layers-opt"><input type="radio" name="basemap" value="street" checked onchange="MapModule.setBasemap('street')"><span>Street</span></label>
+          <label class="map-layers-opt"><input type="radio" name="basemap" value="satellite" onchange="MapModule.setBasemap('satellite')"><span>Satellite</span></label>
+        </div>
+        <div class="map-layers-section">
+          <div class="map-layers-label">PUBLIC LANDS</div>
+          <label class="map-layers-opt"><input type="checkbox" id="layer-sma" onchange="MapModule.togglePublicLands()"><span>Federal Lands (BLM/NF/NP)</span></label>
+          <div id="sma-legend" class="map-layers-legend" style="display:none">
+            <div class="lg-row"><span class="lg-sw" style="background:#FEF0AC"></span> BLM</div>
+            <div class="lg-row"><span class="lg-sw" style="background:#D2F6C5"></span> Forest Service</div>
+            <div class="lg-row"><span class="lg-sw" style="background:#C9ECD3"></span> National Park</div>
+            <div class="lg-row"><span class="lg-sw" style="background:#D6EBF2"></span> Fish &amp; Wildlife</div>
+          </div>
+          <label class="map-layers-opt"><input type="checkbox" id="layer-stateparks" onchange="MapModule.toggleStateParks()"><span>State Parks</span><span id="stateparks-loading" style="display:none;font-size:11px;color:var(--color-text-muted);margin-left:6px">(loading…)</span></label>
+          <div id="stateparks-legend" class="map-layers-legend" style="display:none">
+            <div class="lg-row"><span class="lg-sw" style="background:rgba(59,130,246,0.25);border-color:#2563eb"></span> State Park</div>
+          </div>
+        </div>
       </div>
 
       <!-- ═══ EXPLORE VIEW ═══ -->
