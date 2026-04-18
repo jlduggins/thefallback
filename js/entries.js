@@ -245,6 +245,18 @@ const Entries = {
   },
   
   initForm() {
+    // Render amenity chips from AMENITY_META (uses v1 SVG icons for custom ones)
+    const ac = document.getElementById('f-amenities');
+    if (ac) {
+      ac.innerHTML = State.AMENITY_META.map(a => `
+        <label class="toggle-chip" data-amenity="${a.id}">
+          <input type="checkbox" name="${a.id}">
+          <span class="tc-icon">${a.icon}</span>
+          <span class="tc-label">${a.label}</span>
+        </label>
+      `).join('');
+    }
+
     // Star rating
     document.querySelectorAll('#modal-add-location .star').forEach(star => {
       star.addEventListener('click', () => {
@@ -252,6 +264,91 @@ const Entries = {
         this.updateStars();
       });
     });
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PHOTOS (v1-style: base64 compressed, stored inline in Firestore)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  pendingPhotos: [],
+
+  handlePhotos(input) {
+    Array.from(input.files).forEach(file => {
+      this._compressImage(file, 800, 0.7).then(data => {
+        this.pendingPhotos.push({ id: this._genId(), data, name: file.name });
+        this.renderPhotoRow();
+      }).catch(err => {
+        console.error('[Entries] photo compression failed', err);
+        const reader = new FileReader();
+        reader.onload = ev => {
+          this.pendingPhotos.push({ id: this._genId(), data: ev.target.result, name: file.name });
+          this.renderPhotoRow();
+        };
+        reader.readAsDataURL(file);
+      });
+    });
+    input.value = '';
+  },
+
+  _compressImage(file, maxWidth, quality) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = e => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let w = img.width, h = img.height;
+          if (w > maxWidth) { h = h * (maxWidth / w); w = maxWidth; }
+          canvas.width = w; canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = reject;
+        img.src = e.target.result;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  },
+
+  _genId() {
+    return 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  },
+
+  renderPhotoRow() {
+    const row = document.getElementById('f-photo-row');
+    if (!row) return;
+    row.innerHTML = this.pendingPhotos.map(p => `
+      <div class="photo-wrap">
+        <img src="${p.data}" alt="" onclick="Entries.openPhotoLightbox('${p.id}')"/>
+        <button type="button" class="photo-remove" onclick="Entries.removePhoto('${p.id}')">✕</button>
+      </div>
+    `).join('');
+  },
+
+  removePhoto(id) {
+    this.pendingPhotos = this.pendingPhotos.filter(p => p.id !== id);
+    this.renderPhotoRow();
+  },
+
+  openPhotoLightbox(id) {
+    const p = this.pendingPhotos.find(x => x.id === id);
+    if (!p) return;
+    this._showLightbox(p.data);
+  },
+
+  _showLightbox(src) {
+    let lb = document.getElementById('photo-lightbox');
+    if (!lb) {
+      lb = document.createElement('div');
+      lb.id = 'photo-lightbox';
+      lb.className = 'photo-lightbox';
+      lb.onclick = () => lb.classList.remove('visible');
+      lb.innerHTML = '<img alt="">';
+      document.body.appendChild(lb);
+    }
+    lb.querySelector('img').src = src;
+    lb.classList.add('visible');
   },
   
   // ═══════════════════════════════════════════════════════════════════════════
@@ -663,7 +760,8 @@ const Entries = {
     State.pendingLat = null;
     State.pendingLng = null;
     State.currentRating = 0;
-    State.pendingPhotos = [];
+    this.pendingPhotos = [];
+    this.renderPhotoRow();
     
     // Reset form fields
     const form = document.getElementById('modal-add-location');
@@ -696,7 +794,12 @@ const Entries = {
     State.pendingLat = entry.lat;
     State.pendingLng = entry.lng;
     State.currentRating = entry.rating || 0;
-    State.pendingPhotos = entry.photos || [];
+    // Load existing photos into pending state (support legacy string[] and {id,data}[])
+    this.pendingPhotos = (entry.photos || []).map(p => {
+      if (typeof p === 'string') return { id: this._genId(), data: p };
+      return { id: p.id || this._genId(), data: p.data, name: p.name };
+    });
+    this.renderPhotoRow();
     
     const form = document.getElementById('modal-add-location');
     if (!form) return;
@@ -812,7 +915,7 @@ const Entries = {
       rating: State.currentRating,
       notes: form.querySelector('#f-notes').value.trim(),
       link: form.querySelector('#f-link').value.trim(),
-      photos: State.pendingPhotos
+      photos: this.pendingPhotos.map(p => p.data || p)
     };
     
     // Add amenities

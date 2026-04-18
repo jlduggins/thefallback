@@ -73,10 +73,10 @@ const State = {
   
   AMENITY_META: [
     { id: 'hasPotableWater', label: 'Potable Water', icon: '💧', group: 'amenity' },
-    { id: 'hasDumpStation', label: 'Dump Station', icon: '🚽', group: 'amenity' },
+    { id: 'hasDumpStation', label: 'Dump Station', icon: '<svg width="16" height="16" viewBox="-12 -12 24 24" style="vertical-align:middle"><rect x="-10" y="-10" width="14" height="9" rx="3" fill="#1f2937"/><rect x="-8" y="-8" width="3" height="3" rx="0.5" fill="white"/><rect x="-3" y="-8" width="3" height="3" rx="0.5" fill="white"/><circle cx="3" cy="-3" r="3" fill="#1f2937"/><circle cx="3" cy="-3" r="1.5" fill="white"/><rect x="5" y="-4" width="3" height="2" fill="#1f2937"/><rect x="-10" y="2" width="18" height="8" rx="1" fill="#1f2937"/><path d="M-5 4 L-5 6 L-7 6 L-3 9 L1 6 L-1 6 L-1 4 Z" fill="white"/></svg>', group: 'amenity' },
     { id: 'hasHookups', label: 'Hookups', icon: '⚡', group: 'amenity' },
     { id: 'hasTrash', label: 'Trash', icon: '🗑️', group: 'amenity' },
-    { id: 'hasWaterFill', label: 'Water Fill', icon: '🚰', group: 'amenity' },
+    { id: 'hasWaterFill', label: 'Water Fill', icon: '<svg width="16" height="16" viewBox="-8 -14 16 28" style="vertical-align:middle"><rect x="-4" y="-12" width="8" height="3" rx="1" fill="#0ea5e9"/><rect x="-6" y="-9" width="12" height="17" rx="2" fill="#0ea5e9"/><path d="M0 -4 Q-3 1 0 5 Q3 1 0 -4 Z" fill="white"/></svg>', group: 'amenity' },
     { id: 'isSeasonal', label: 'Seasonal', icon: '📅', group: 'tag' },
     { id: 'hasPets', label: 'Pets Allowed', icon: '🐾', group: 'tag' },
     { id: 'needs4x4', label: '4x4 Required', icon: '🚙', group: 'tag' },
