@@ -379,7 +379,7 @@ const UI = {
 
   _snapToHeight(snap) {
     const vh = window.innerHeight;
-    if (snap === 'peek') return 92;
+    if (snap === 'peek') return 140;
     if (snap === 'full') return Math.round(vh * 0.92);
     return Math.round(vh * 0.55);
   },
@@ -423,33 +423,30 @@ const UI = {
 
   _bindDrawerDrag(panel, grabber) {
     let startY = 0, startH = 0, dragging = false, moved = false;
-    const tray = () => document.getElementById('map-controls');
 
     const onMove = e => {
       if (!dragging) return;
       const y = (e.touches ? e.touches[0].clientY : e.clientY);
       const delta = startY - y;
       if (Math.abs(delta) > 3) moved = true;
-      const newH = Math.max(60, Math.min(window.innerHeight * 0.95, startH + delta));
-      // Update CSS var directly — drives drawer height AND tray offset smoothly
-      this._setDrawerHeightPx(newH);
+      const newH = Math.max(80, Math.min(window.innerHeight * 0.95, startH + delta));
+      // Update CSS var directly — drives drawer height only. Tray stays put.
+      document.documentElement.style.setProperty('--drawer-height', newH + 'px');
       if (e.cancelable) e.preventDefault();
     };
     const onEnd = () => {
       if (!dragging) return;
       dragging = false;
       panel.removeAttribute('data-dragging');
-      const t = tray();
-      if (t) t.removeAttribute('data-dragging');
       const currH = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--drawer-height')) || this._snapToHeight('half');
       const snap = this._heightToSnap(currH);
-      // Let CSS transition animate to the snap height
+      // Animate to final snap height + update body attr (tray moves once, smoothly)
       this._applySnap(snap);
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onEnd);
-      document.removeEventListener('touchmove', onMove);
-      document.removeEventListener('touchend', onEnd);
-      document.removeEventListener('touchcancel', onEnd);
+      document.removeEventListener('mousemove', onMoveBound);
+      document.removeEventListener('mouseup', onEndBound);
+      document.removeEventListener('touchmove', onMoveBound);
+      document.removeEventListener('touchend', onEndBound);
+      document.removeEventListener('touchcancel', onEndBound);
     };
     const onMoveBound = e => onMove.call(this, e);
     const onEndBound = () => onEnd.call(this);
@@ -459,8 +456,6 @@ const UI = {
       startY = (e.touches ? e.touches[0].clientY : e.clientY);
       startH = panel.getBoundingClientRect().height;
       panel.setAttribute('data-dragging', '1');
-      const t = tray();
-      if (t) t.setAttribute('data-dragging', '1');
       document.addEventListener('mousemove', onMoveBound);
       document.addEventListener('mouseup', onEndBound);
       document.addEventListener('touchmove', onMoveBound, { passive: false });
