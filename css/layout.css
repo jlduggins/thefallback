@@ -1251,7 +1251,7 @@ body[data-view="login"] .map-layers-panel { display: none !important; }
 
 /* Backups toggle button (inside the tray, shown when journey active) */
 .map-control-backups {
-  color: var(--color-text-muted);
+  color: var(--color-text);
 }
 .map-control-backups.active {
   background: var(--color-accent);
@@ -1738,11 +1738,11 @@ body[data-view="login"] .map-layers-panel { display: none !important; }
     display: none !important;
   }
 
-  /* Tray always visible on mobile; raised above peek drawer so it's never covered */
+  /* Tray always visible on mobile AT PEEK; raised above peek drawer.
+     Hidden when a drawer is at half/full (tray would overlap the drawer). */
   .map-controls-global {
     bottom: 108px;
     z-index: 500;
-    display: flex !important;
   }
   body[data-view="explore"] .map-controls-global,
   body[data-view="saved"] .map-controls-global,
@@ -1751,6 +1751,11 @@ body[data-view="login"] .map-layers-panel { display: none !important; }
   }
   body[data-view="settings"] .map-controls-global,
   body[data-view="login"] .map-controls-global {
+    display: none !important;
+  }
+  /* When body has data-drawer-snap=half|full, hide the tray (drawer covers map) */
+  body[data-drawer-snap="half"] .map-controls-global,
+  body[data-drawer-snap="full"] .map-controls-global {
     display: none !important;
   }
 }
