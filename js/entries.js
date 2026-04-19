@@ -591,7 +591,7 @@ const Entries = {
       openRows.forEach(row => {
         if (!row.contains(e.target)) row.classList.remove('revealed');
       });
-    }, true);
+    });
   },
 
   deleteEntryFromSwipe(id) {

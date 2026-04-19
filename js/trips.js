@@ -535,7 +535,7 @@ const Trips = {
               <div class="leg-stop-dot${isCurrent?' here':''}"></div>
               <div class="leg-stop-actions">
                 ${lc>0?`<div class="leg-stop-cost">$${Math.round(lc)}</div>`:`<div class="leg-stop-cost free">Free</div>`}
-                <div class="leg-stop-edit-btns">
+                <div class="leg-stop-edit-btns desktop-only">
                   <button onclick="event.stopPropagation();Trips.editLeg('${journey.id}',${i})" style="background:none;border:none;cursor:pointer;font-size:13px;padding:1px" title="Edit">✏️</button>
                   <button onclick="event.stopPropagation();Trips.deleteLeg('${journey.id}',${i})" style="background:none;border:none;cursor:pointer;font-size:13px;padding:1px" title="Delete">🗑️</button>
                 </div>
@@ -591,10 +591,12 @@ const Trips = {
     if (!this._legSwipeCloser) {
       this._legSwipeCloser = true;
       document.addEventListener('click', e => {
-        document.querySelectorAll('.leg-swipe-row.revealed,.leg-swipe-row.revealed-edit').forEach(r => {
+        const open = document.querySelectorAll('.leg-swipe-row.revealed,.leg-swipe-row.revealed-edit');
+        if (open.length === 0) return;
+        open.forEach(r => {
           if (!r.contains(e.target)) { r.classList.remove('revealed'); r.classList.remove('revealed-edit'); }
         });
-      }, true);
+      });
     }
   },
 
@@ -648,6 +650,10 @@ const Trips = {
     this.updateFuelSummary();
     this.closeLocationDetail();
     this.clearJourneyFromMap();
+    // Reset drawer on mobile
+    if (window.matchMedia('(max-width: 767px)').matches) {
+      document.body.setAttribute('data-drawer-snap', 'half');
+    }
     if (MapModule.map) MapModule.map.invalidateSize();
   },
 
@@ -792,27 +798,33 @@ const Trips = {
   },
 
   async deleteLeg(journeyId,legIndex) {
-    const j=State.getJourney(journeyId);if(!j?.legs)return;
-    const legs=[...j.legs];legs.splice(legIndex,1);
-    // Recalculate the leg that now falls into the deleted slot
-    if(legIndex>0&&legIndex<legs.length){
-      const pl=legs[legIndex-1],nl={...legs[legIndex]},pe=State.getEntry(pl.destId),ne=State.getEntry(nl.destId);
-      if(pe?.lat&&ne?.lat){
-        try{
-          const r=await this.getRoute(pe.lat,pe.lng,ne.lat,ne.lng);
-          if(r){
-            nl.fromLat=pe.lat;nl.fromLng=pe.lng;nl.fromName=pe.name;
-            nl.distance=Math.round(r.distance);nl.duration=Math.round(r.duration);
-            nl.fuelCost=Math.round(this.calcFuelCost(r.distance,nl.fuelPrice,nl.fuelPriceUnit));
-            nl.routeGeometry=r.geometry?JSON.stringify(r.geometry):null;
-            legs[legIndex]=nl;
-          }
-        }catch(e){}
+    if (this._deletingLeg) return;
+    this._deletingLeg = true;
+    try {
+      const j=State.getJourney(journeyId);if(!j?.legs)return;
+      const legs=[...j.legs];legs.splice(legIndex,1);
+      // Recalculate the leg that now falls into the deleted slot
+      if(legIndex>0&&legIndex<legs.length){
+        const pl=legs[legIndex-1],nl={...legs[legIndex]},pe=State.getEntry(pl.destId),ne=State.getEntry(nl.destId);
+        if(pe?.lat&&ne?.lat){
+          try{
+            const r=await this.getRoute(pe.lat,pe.lng,ne.lat,ne.lng);
+            if(r){
+              nl.fromLat=pe.lat;nl.fromLng=pe.lng;nl.fromName=pe.name;
+              nl.distance=Math.round(r.distance);nl.duration=Math.round(r.duration);
+              nl.fuelCost=Math.round(this.calcFuelCost(r.distance,nl.fuelPrice,nl.fuelPriceUnit));
+              nl.routeGeometry=r.geometry?JSON.stringify(r.geometry):null;
+              legs[legIndex]=nl;
+            }
+          }catch(e){}
+        }
       }
+      // If we deleted the very first leg (legIndex 0), the new first leg keeps its
+      // original fromLat/fromLng (the journey starting point), so no recalc needed.
+      await Firebase.saveJourney({...j,legs});this.openJourneyDetail(journeyId);
+    } finally {
+      this._deletingLeg = false;
     }
-    // If we deleted the very first leg (legIndex 0), the new first leg keeps its
-    // original fromLat/fromLng (the journey starting point), so no recalc needed.
-    await Firebase.saveJourney({...j,legs});this.openJourneyDetail(journeyId);
   },
 
   // ─── Location Detail Panel ────────────────────────────────────────────────
