@@ -1875,3 +1875,34 @@
 @media (max-width: 767px) {
   .desktop-only { display: none !important; }
 }
+
+/* Swipe-right edit button on location rows */
+.location-swipe-edit {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 92px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: var(--color-primary);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  z-index: 1;
+  opacity: 0;
+  transition: opacity 180ms ease;
+  pointer-events: none;
+}
+.location-swipe-edit svg { stroke: #fff; }
+.location-swipe-row.revealed-edit .location-card { transform: translateX(92px); }
+.location-swipe-row.revealed-edit .location-swipe-edit { opacity: 1; pointer-events: auto; }
+
+@media (min-width: 768px) {
+  .location-swipe-edit { display: none; }
+}
