@@ -400,10 +400,20 @@ const Trips = {
     if (countEl) countEl.textContent = `${journeys.length} journey${journeys.length !== 1 ? 's' : ''}`;
   },
 
+  _legFuel(l) {
+    if (l.fuelCost != null && l.fuelCost !== 0) return l.fuelCost;
+    if (!l.distance) return 0;
+    const { mpg, pricePerGal, priceUnit } = State.fuelSettings || {};
+    if (!mpg || !pricePerGal) return 0;
+    const price = l.fuelPrice != null ? l.fuelPrice : pricePerGal;
+    const unit = l.fuelPriceUnit || priceUnit || 'gal';
+    return (l.distance / mpg) * (unit === 'L' ? price * 3.78541 : price);
+  },
+
   renderJourneyCard(j) {
     const legs = j.legs||[];
     const totalMiles = legs.reduce((s,l)=>s+(l.distance||0),0);
-    const totalFuel = legs.reduce((s,l)=>s+(l.fuelCost||0),0);
+    const totalFuel = legs.reduce((s,l)=>s+this._legFuel(l),0);
     const totalNights = legs.reduce((s,l)=>{ if(!l.arriveDate||!l.departDate)return s; return s+Math.max(0,Math.round((new Date(l.departDate)-new Date(l.arriveDate))/86400000)); },0);
     const totalLodging = legs.reduce((s,l)=>{ const e=State.getEntry(l.destId); if(!e||!l.arriveDate||!l.departDate)return s; const n=Math.round((new Date(l.departDate)-new Date(l.arriveDate))/86400000); if(n<=0)return s; let c=(e.cost||0)*n; if(e.discountPercent&&e.discountType)c=c*(1-e.discountPercent/100); return s+c; },0);
     const totalCost = Math.round(totalFuel + totalLodging);
@@ -435,7 +445,7 @@ const Trips = {
     const legs = journey.legs||[];
     const today = State.today();
     const totalMiles = legs.reduce((s,l)=>s+(l.distance||0),0);
-    const totalFuel = legs.reduce((s,l)=>s+(l.fuelCost||0),0);
+    const totalFuel = legs.reduce((s,l)=>s+this._legFuel(l),0);
     const totalNights = legs.reduce((s,l)=>{ if(!l.arriveDate||!l.departDate)return s;return s+Math.max(0,Math.round((new Date(l.departDate)-new Date(l.arriveDate))/86400000));},0);
     const totalLodging = legs.reduce((s,l)=>{ const e=State.getEntry(l.destId);if(!e||!l.arriveDate||!l.departDate)return s;const n=Math.round((new Date(l.departDate)-new Date(l.arriveDate))/86400000);if(n<=0)return s;let c=(e.cost||0)*n;if(e.discountPercent&&e.discountType)c=c*(1-e.discountPercent/100);return s+c;},0);
 
@@ -495,7 +505,7 @@ const Trips = {
             <div class="leg-stop-dot start"></div>
             ${legs[0].fromId?`<div class="leg-stop-name" onclick="Trips.openLocationDetail('${legs[0].fromId}')">${this.esc(legs[0].fromName)}</div>`:`<div class="leg-stop-name muted">${this.esc(legs[0].fromName)}</div>`}
             <div class="leg-stop-dates">${atStart?'📍 Currently here':'Starting point'}</div>
-            <div class="leg-drive-info">🚐 ${legs[0].distance||'--'} mi · ${legs[0].duration?Math.floor(legs[0].duration/60)+'h '+Math.round(legs[0].duration%60)+'m':'--'} · $${legs[0].fuelCost||0} fuel</div>
+            <div class="leg-drive-info">🚐 ${legs[0].distance||'--'} mi · ${legs[0].duration?Math.floor(legs[0].duration/60)+'h '+Math.round(legs[0].duration%60)+'m':'--'} · $${Math.round(fuelForLeg(legs[0]))} fuel</div>
           </div>`:''}
         ${legs.map((l,i)=>{
           const isPast=l.departDate&&l.departDate<today;
@@ -503,30 +513,117 @@ const Trips = {
           const entry=State.getEntry(l.destId);
           const nights=l.arriveDate&&l.departDate?Math.max(0,Math.round((new Date(l.departDate)-new Date(l.arriveDate))/86400000)):0;
           let lc=entry?(entry.cost||0)*nights:0; if(entry?.discountPercent&&entry?.discountType)lc=lc*(1-entry.discountPercent/100);
-          return `<div class="leg-item leg-stop" draggable="true" data-leg-index="${i}" style="${isPast?'opacity:0.5':''}${isCurrent?'background:var(--color-primary-muted);border-radius:var(--radius-md);':''}">
-            ${i<legs.length-1?`<div class="leg-stop-line" style="${isPast?'opacity:0.2':''}"></div>`:''}
-            <div class="drag-handle">⋮⋮</div>
-            <div class="leg-stop-dot${isCurrent?' here':''}"></div>
-            <div class="leg-stop-actions">
-              ${lc>0?`<div class="leg-stop-cost">$${Math.round(lc)}</div>`:`<div class="leg-stop-cost free">Free</div>`}
-              <div class="leg-stop-edit-btns">
-                <button onclick="Trips.editLeg('${journey.id}',${i})" style="background:none;border:none;cursor:pointer;font-size:13px;padding:1px" title="Edit">✏️</button>
-                <button onclick="Trips.deleteLeg('${journey.id}',${i})" style="background:none;border:none;cursor:pointer;font-size:13px;padding:1px" title="Delete">🗑</button>
+          const nextLegFuel = i<legs.length-1 ? Math.round(fuelForLeg(legs[i+1])) : 0;
+          return `<div class="leg-swipe-row" data-journey-id="${journey.id}" data-leg-index="${i}">
+            <button class="leg-swipe-delete" onclick="event.stopPropagation();Trips.deleteLegFromSwipe('${journey.id}',${i})" aria-label="Delete leg">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+              <span>Delete</span>
+            </button>
+            <div class="leg-item leg-stop" draggable="true" data-leg-index="${i}" style="${isPast?'opacity:0.5':''}${isCurrent?'background:var(--color-primary-muted);border-radius:var(--radius-md);':''}">
+              ${i<legs.length-1?`<div class="leg-stop-line" style="${isPast?'opacity:0.2':''}"></div>`:''}
+              <div class="drag-handle">⋮⋮</div>
+              <div class="leg-stop-dot${isCurrent?' here':''}"></div>
+              <div class="leg-stop-actions">
+                ${lc>0?`<div class="leg-stop-cost">$${Math.round(lc)}</div>`:`<div class="leg-stop-cost free">Free</div>`}
+                <div class="leg-stop-edit-btns">
+                  <button onclick="event.stopPropagation();Trips.editLeg('${journey.id}',${i})" style="background:none;border:none;cursor:pointer;font-size:13px;padding:1px" title="Edit">✏️</button>
+                </div>
               </div>
+              <div class="leg-stop-name" onclick="Trips.openLocationDetail('${l.destId}',{journeyId:'${journey.id}',legIndex:${i}})">${this.esc(l.destName)}</div>
+              ${isCurrent?`<div class="leg-stop-here">📍 Currently here</div>`:''}
+              <div class="leg-stop-dates">${l.arriveDate?new Date(l.arriveDate+'T12:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}):''} ${l.departDate?' – '+new Date(l.departDate+'T12:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}):''} ${nights>0?' · '+nights+' night'+(nights>1?'s':''):''}</div>
+              ${l.notes?`<div style="font-size:11px;color:var(--color-text-muted);margin-top:2px;font-style:italic">${this.esc(l.notes)}</div>`:''}
+              ${i<legs.length-1?`<div class="leg-drive-info">🚐 ${legs[i+1].distance||'--'} mi · ${legs[i+1].duration?Math.floor(legs[i+1].duration/60)+'h '+Math.round(legs[i+1].duration%60)+'m':'--'} · $${nextLegFuel} fuel</div>`:''}
             </div>
-            <div class="leg-stop-name" onclick="Trips.openLocationDetail('${l.destId}',{journeyId:'${journey.id}',legIndex:${i}})">${this.esc(l.destName)}</div>
-            ${isCurrent?`<div class="leg-stop-here">📍 Currently here</div>`:''}
-            <div class="leg-stop-dates">${l.arriveDate?new Date(l.arriveDate+'T12:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}):''} ${l.departDate?' – '+new Date(l.departDate+'T12:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}):''} ${nights>0?' · '+nights+' night'+(nights>1?'s':''):''}</div>
-            ${l.notes?`<div style="font-size:11px;color:var(--color-text-muted);margin-top:2px;font-style:italic">${this.esc(l.notes)}</div>`:''}
-            ${i<legs.length-1?`<div class="leg-drive-info">🚐 ${legs[i+1].distance||'--'} mi · ${legs[i+1].duration?Math.floor(legs[i+1].duration/60)+'h '+Math.round(legs[i+1].duration%60)+'m':'--'} · $${legs[i+1].fuelCost||0} fuel</div>`:''}
           </div>`;
         }).join('')}
         <button class="add-stop-btn" onclick="Trips.openAddLegModal('${journey.id}')">+ Add next destination</button>
       </div>`;
 
     this.setupLegDragDrop(journeyId);
+    this.bindLegSwipeToDelete();
     this.showJourneyOnMap(journeyId);
     if (MapModule.map) MapModule.map.invalidateSize();
+  },
+
+  bindLegSwipeToDelete() {
+    if (!window.matchMedia('(max-width: 767px)').matches) return;
+    document.querySelectorAll('.leg-swipe-row').forEach(row => {
+      if (row.dataset.swipeInit) return;
+      row.dataset.swipeInit = '1';
+      let startX = 0, startY = 0, tracking = false, decided = false, isHorizontal = false;
+      const THRESHOLD = 40;
+      row.addEventListener('touchstart', e => {
+        startX = e.touches[0].clientX;
+        startY = e.touches[0].clientY;
+        tracking = true; decided = false; isHorizontal = false;
+      }, { passive: true });
+      row.addEventListener('touchmove', e => {
+        if (!tracking) return;
+        const dx = e.touches[0].clientX - startX;
+        const dy = e.touches[0].clientY - startY;
+        if (!decided) {
+          if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+          isHorizontal = Math.abs(dx) > Math.abs(dy);
+          decided = true;
+        }
+        if (!isHorizontal) return;
+        document.querySelectorAll('.leg-swipe-row.revealed').forEach(r => { if (r !== row) r.classList.remove('revealed'); });
+        if (dx < -THRESHOLD) row.classList.add('revealed');
+        else if (dx > THRESHOLD) row.classList.remove('revealed');
+      }, { passive: true });
+      row.addEventListener('touchend', () => { tracking = false; });
+      row.addEventListener('touchcancel', () => { tracking = false; });
+    });
+    // Close any open swipes on tap outside
+    if (!this._legSwipeCloser) {
+      this._legSwipeCloser = true;
+      document.addEventListener('click', e => {
+        document.querySelectorAll('.leg-swipe-row.revealed').forEach(r => {
+          if (!r.contains(e.target)) r.classList.remove('revealed');
+        });
+      }, true);
+    }
+  },
+
+  async deleteLegFromSwipe(journeyId, legIndex) {
+    const j = State.getJourney(journeyId); if (!j?.legs) return;
+    const legs = [...j.legs];
+    legs.splice(legIndex, 1);
+    // Recalculate route for the leg that now follows the removed one
+    if (legIndex > 0 && legIndex < legs.length) {
+      const pl = legs[legIndex - 1], nl = legs[legIndex];
+      const pe = State.getEntry(pl.destId), ne = State.getEntry(nl.destId);
+      if (pe?.lat && ne?.lat) {
+        try {
+          const r = await this.getRoute(pe.lat, pe.lng, ne.lat, ne.lng);
+          if (r) {
+            nl.fromLat = pe.lat; nl.fromLng = pe.lng; nl.fromName = pe.name;
+            nl.distance = Math.round(r.distance);
+            nl.duration = Math.round(r.duration);
+            nl.fuelCost = Math.round(this.calcFuelCost(r.distance, nl.fuelPrice, nl.fuelPriceUnit));
+            nl.routeGeometry = r.geometry ? JSON.stringify(r.geometry) : null;
+            legs[legIndex] = nl;
+          }
+        } catch (e) { console.error('[Trips] route recalc failed', e); }
+      }
+    } else if (legIndex === 0 && legs.length > 0) {
+      // Removed the first leg — new first leg keeps its `from*` from the journey's start
+      const nl = legs[0], ne = State.getEntry(nl.destId);
+      if (nl.fromLat && ne?.lat) {
+        try {
+          const r = await this.getRoute(nl.fromLat, nl.fromLng, ne.lat, ne.lng);
+          if (r) {
+            nl.distance = Math.round(r.distance);
+            nl.duration = Math.round(r.duration);
+            nl.fuelCost = Math.round(this.calcFuelCost(r.distance, nl.fuelPrice, nl.fuelPriceUnit));
+            nl.routeGeometry = r.geometry ? JSON.stringify(r.geometry) : null;
+          }
+        } catch (e) { console.error('[Trips] route recalc failed', e); }
+      }
+    }
+    await Firebase.saveJourney({ ...j, legs });
+    this.openJourneyDetail(journeyId);
   },
 
   closeJourneyDetail() {
@@ -683,10 +780,26 @@ const Trips = {
   },
 
   async deleteLeg(journeyId,legIndex) {
-    if(!confirm('Delete this stop?'))return;
     const j=State.getJourney(journeyId);if(!j?.legs)return;
     const legs=[...j.legs];legs.splice(legIndex,1);
-    if(legIndex>0&&legIndex<legs.length){const pl=legs[legIndex-1],nl=legs[legIndex],pe=State.getEntry(pl.destId),ne=State.getEntry(nl.destId);if(pe?.lat&&ne?.lat){try{const r=await this.getRoute(pe.lat,pe.lng,ne.lat,ne.lng);if(r){nl.fromLat=pe.lat;nl.fromLng=pe.lng;nl.fromName=pe.name;nl.distance=Math.round(r.distance);nl.duration=Math.round(r.duration);nl.fuelCost=Math.round(this.calcFuelCost(r.distance));nl.routeGeometry=r.geometry?JSON.stringify(r.geometry):null;}}catch(e){}}}
+    // Recalculate the leg that now falls into the deleted slot
+    if(legIndex>0&&legIndex<legs.length){
+      const pl=legs[legIndex-1],nl={...legs[legIndex]},pe=State.getEntry(pl.destId),ne=State.getEntry(nl.destId);
+      if(pe?.lat&&ne?.lat){
+        try{
+          const r=await this.getRoute(pe.lat,pe.lng,ne.lat,ne.lng);
+          if(r){
+            nl.fromLat=pe.lat;nl.fromLng=pe.lng;nl.fromName=pe.name;
+            nl.distance=Math.round(r.distance);nl.duration=Math.round(r.duration);
+            nl.fuelCost=Math.round(this.calcFuelCost(r.distance,nl.fuelPrice,nl.fuelPriceUnit));
+            nl.routeGeometry=r.geometry?JSON.stringify(r.geometry):null;
+            legs[legIndex]=nl;
+          }
+        }catch(e){}
+      }
+    }
+    // If we deleted the very first leg (legIndex 0), the new first leg keeps its
+    // original fromLat/fromLng (the journey starting point), so no recalc needed.
     await Firebase.saveJourney({...j,legs});this.openJourneyDetail(journeyId);
   },
 
@@ -857,7 +970,7 @@ const Trips = {
 
   async togglePinJourney(journeyId){this.closeJourneyMenu();const j=State.getJourney(journeyId);if(!j)return;if(j.pinned){await Firebase.saveJourney({...j,pinned:false});if(State.currentJourneyId===journeyId)State.setCurrentJourney(null);}else{await Firebase.pinJourney(journeyId);}},
 
-  async confirmDeleteJourney(journeyId){const j=State.getJourney(journeyId);if(!confirm(`Delete journey "${j?.name}"? This cannot be undone.`))return;await Firebase.deleteJourney(journeyId);this.closeJourneyDetail();if(State.currentJourneyId===journeyId)State.setCurrentJourney(null);this.clearJourneyFromMap();},
+  async confirmDeleteJourney(journeyId){const j=State.getJourney(journeyId);if(!j)return;await Firebase.deleteJourney(journeyId);this.closeJourneyDetail();if(State.currentJourneyId===journeyId)State.setCurrentJourney(null);this.clearJourneyFromMap();},
 
   // ─── Modals (journey, fuel) ───────────────────────────────────────────────
 

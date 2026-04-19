@@ -413,7 +413,7 @@ const UI = {
 
     const anchorTy = snap => {
       const vh = window.innerHeight;
-      const baseH = vh * 0.92;
+      const baseH = vh - 8; // matches CSS: height: calc(100vh - 8px)
       if (snap === 'full') return 0;
       if (snap === 'half') return baseH - vh * 0.55;
       return baseH - PEEK_PX;
