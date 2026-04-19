@@ -1906,3 +1906,34 @@
 @media (min-width: 768px) {
   .location-swipe-edit { display: none; }
 }
+
+/* Desktop: Add/Edit Location modal opens as a right-side drawer over the Locations panel,
+   leaving the map accessible so the user can drag the pin. */
+@media (min-width: 768px) {
+  #modal-add-location.modal-sheet {
+    top: 0;
+    left: 0;
+    right: auto;
+    bottom: 0;
+    width: 420px;
+    max-width: 90vw;
+    max-height: 100vh;
+    border-radius: 0;
+    transform: translateX(-100%);
+    box-shadow: 4px 0 20px rgba(0,0,0,0.15);
+    z-index: 400; /* below map controls (500) so zoom buttons still work; above panels (40) */
+  }
+  #modal-add-location.modal-sheet.visible {
+    transform: translateX(0);
+  }
+  #modal-add-location .modal-handle { display: none; }
+  #modal-add-location .modal-body {
+    flex: 1;
+    overflow-y: auto;
+  }
+}
+
+/* Desktop: when Add Location drawer is open, hide the dimming backdrop so map is clickable */
+@media (min-width: 768px) {
+  body.add-location-drawer-open .modal-backdrop { display: none; }
+}
