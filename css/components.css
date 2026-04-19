@@ -1921,21 +1921,24 @@
     border-radius: 0;
     transform: translateX(-100%);
     box-shadow: 4px 0 20px rgba(0,0,0,0.15);
-    z-index: 400; /* below map controls (500) so zoom buttons still work; above panels (40) */
+    z-index: var(--z-modal);
+    pointer-events: auto;
   }
   #modal-add-location.modal-sheet.visible {
     transform: translateX(0);
+    pointer-events: auto;
   }
   #modal-add-location .modal-handle { display: none; }
   #modal-add-location .modal-body {
     flex: 1;
     overflow-y: auto;
+    pointer-events: auto;
   }
 }
 
 /* When Add/Edit Location drawer is open, hide the dimming backdrop
    so the map remains interactive (drag pin, zoom, etc.) */
-body.add-location-drawer-open .modal-backdrop { display: none; }
+body.add-location-drawer-open .modal-backdrop { display: none !important; pointer-events: none !important; }
 
 /* Hide the map popup Edit/View Details button while the edit drawer is open */
 body.add-location-drawer-open .map-popup-edit-btn,
@@ -1950,6 +1953,8 @@ body.add-location-drawer-open .leaflet-popup-pane { display: none !important; }
     max-height: 90vh;
     transform: translateY(100%);
     transition: transform 300ms ease-out;
+    pointer-events: auto;
+    z-index: var(--z-modal);
   }
   #modal-add-location.modal-sheet.visible {
     transform: translateY(0);
