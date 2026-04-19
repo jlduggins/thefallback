@@ -1816,3 +1816,55 @@
 .toggle-chip .tc-icon svg {
   vertical-align: middle;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LEG SWIPE ACTIONS (mobile: swipe-left delete, swipe-right edit)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.leg-swipe-row {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+}
+.leg-swipe-row .leg-item {
+  position: relative;
+  z-index: 2;
+  transform: translateX(0);
+  transition: transform 220ms cubic-bezier(0.32, 0.72, 0.24, 1);
+  background: var(--color-surface);
+}
+.leg-swipe-row.revealed .leg-item { transform: translateX(-92px); }
+.leg-swipe-row.revealed-edit .leg-item { transform: translateX(92px); }
+
+.leg-swipe-delete,
+.leg-swipe-edit {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 92px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  z-index: 1;
+  opacity: 0;
+  transition: opacity 180ms ease;
+  pointer-events: none;
+}
+.leg-swipe-delete { right: 0; background: #dc2626; }
+.leg-swipe-edit   { left: 0;  background: var(--color-primary); }
+.leg-swipe-delete svg, .leg-swipe-edit svg { stroke: #fff; }
+.leg-swipe-row.revealed .leg-swipe-delete { opacity: 1; pointer-events: auto; }
+.leg-swipe-row.revealed-edit .leg-swipe-edit { opacity: 1; pointer-events: auto; }
+
+/* Desktop: no swipe; inline trash + edit icons are visible and clickable */
+@media (min-width: 768px) {
+  .leg-swipe-delete, .leg-swipe-edit { display: none; }
+  .leg-swipe-row .leg-item { transform: none !important; }
+}
