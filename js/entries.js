@@ -860,7 +860,16 @@ const Entries = {
     // Close detail panel
     this.closeDetail();
     
-    // Open modal
+    // Open via UI.openAddModal-equivalent to set body class + hide backdrop
+    document.body.classList.add('add-location-drawer-open');
+    document.body.style.overflow = '';
+    if (!window.matchMedia('(min-width: 768px)').matches) {
+      const modal = document.getElementById('modal-add-location');
+      if (modal) {
+        modal.removeAttribute('data-snap');
+        UI._bindAddModalSnap(modal);
+      }
+    }
     UI.openModal('modal-add-location');
   },
   
