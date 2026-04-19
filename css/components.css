@@ -1933,7 +1933,48 @@
   }
 }
 
-/* Desktop: when Add Location drawer is open, hide the dimming backdrop so map is clickable */
-@media (min-width: 768px) {
-  body.add-location-drawer-open .modal-backdrop { display: none; }
+/* When Add/Edit Location drawer is open, hide the dimming backdrop
+   so the map remains interactive (drag pin, zoom, etc.) */
+body.add-location-drawer-open .modal-backdrop { display: none; }
+
+/* Hide the map popup Edit/View Details button while the edit drawer is open */
+body.add-location-drawer-open .map-popup-edit-btn,
+body.add-location-drawer-open .leaflet-popup,
+body.add-location-drawer-open .leaflet-popup-pane { display: none !important; }
+
+/* Mobile: Edit Location modal is resizable between two snap heights so user
+   can see the map underneath to drag the pin */
+@media (max-width: 767px) {
+  #modal-add-location.modal-sheet {
+    height: 90vh;
+    max-height: 90vh;
+    transform: translateY(100%);
+    transition: transform 300ms ease-out;
+  }
+  #modal-add-location.modal-sheet.visible {
+    transform: translateY(0);
+  }
+  #modal-add-location.modal-sheet.visible[data-snap="half"] {
+    transform: translateY(calc(90vh - 55vh));
+  }
+  /* The handle is the drag target */
+  #modal-add-location .modal-handle {
+    cursor: grab;
+    touch-action: none;
+    padding: 14px 0;
+    width: 100%;
+    height: auto;
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+  }
+  #modal-add-location .modal-handle::before {
+    content: '';
+    width: 40px;
+    height: 4px;
+    background: var(--color-border);
+    border-radius: 2px;
+  }
 }
