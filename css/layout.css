@@ -1721,11 +1721,13 @@ body[data-view="login"] .map-layers-panel { display: none !important; }
     display: flex;
     justify-content: center;
     align-items: center;
-    padding: 10px 0 6px;
+    padding: calc(10px + env(safe-area-inset-top, 0px)) 0 6px;
     cursor: grab;
     flex-shrink: 0;
     user-select: none;
     touch-action: none;
+    position: relative;
+    z-index: 10;
   }
   .drawer-grabber::before {
     content: '';

@@ -1680,6 +1680,7 @@
   max-height: 400px;
   border-radius: var(--radius-lg);
   margin-bottom: var(--space-3);
+  touch-action: pan-y;
 }
 .location-swipe-row.removing {
   max-height: 0;
@@ -1825,6 +1826,7 @@
   position: relative;
   overflow: hidden;
   border-radius: var(--radius-md);
+  touch-action: pan-y;
 }
 .leg-swipe-row .leg-item {
   position: relative;
@@ -1867,4 +1869,9 @@
 @media (min-width: 768px) {
   .leg-swipe-delete, .leg-swipe-edit { display: none; }
   .leg-swipe-row .leg-item { transform: none !important; }
+}
+
+/* Hide desktop-only edit/trash on mobile */
+@media (max-width: 767px) {
+  .desktop-only { display: none !important; }
 }
