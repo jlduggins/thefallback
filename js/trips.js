@@ -401,13 +401,19 @@ const Trips = {
   },
 
   _legFuel(l) {
-    if (l.fuelCost != null && l.fuelCost !== 0) return l.fuelCost;
-    if (!l.distance) return 0;
+    const stored = Number(l.fuelCost);
+    if (Number.isFinite(stored) && stored > 0) return stored;
+    const dist = Number(l.distance);
+    if (!Number.isFinite(dist) || dist <= 0) return 0;
     const { mpg, pricePerGal, priceUnit } = State.fuelSettings || {};
-    if (!mpg || !pricePerGal) return 0;
-    const price = l.fuelPrice != null ? l.fuelPrice : pricePerGal;
+    const mpgN = Number(mpg), priceDefault = Number(pricePerGal);
+    if (!Number.isFinite(mpgN) || mpgN <= 0) return 0;
+    const priceL = Number(l.fuelPrice);
+    const price = Number.isFinite(priceL) && priceL > 0 ? priceL : (Number.isFinite(priceDefault) ? priceDefault : 0);
+    if (price <= 0) return 0;
     const unit = l.fuelPriceUnit || priceUnit || 'gal';
-    return (l.distance / mpg) * (unit === 'L' ? price * 3.78541 : price);
+    const cost = (dist / mpgN) * (unit === 'L' ? price * 3.78541 : price);
+    return Number.isFinite(cost) ? cost : 0;
   },
 
   renderJourneyCard(j) {
@@ -505,7 +511,7 @@ const Trips = {
             <div class="leg-stop-dot start"></div>
             ${legs[0].fromId?`<div class="leg-stop-name" onclick="Trips.openLocationDetail('${legs[0].fromId}')">${this.esc(legs[0].fromName)}</div>`:`<div class="leg-stop-name muted">${this.esc(legs[0].fromName)}</div>`}
             <div class="leg-stop-dates">${atStart?'📍 Currently here':'Starting point'}</div>
-            <div class="leg-drive-info">🚐 ${legs[0].distance||'--'} mi · ${legs[0].duration?Math.floor(legs[0].duration/60)+'h '+Math.round(legs[0].duration%60)+'m':'--'} · $${Math.round(fuelForLeg(legs[0]))} fuel</div>
+            <div class="leg-drive-info">🚐 ${legs[0].distance||'--'} mi · ${legs[0].duration?Math.floor(legs[0].duration/60)+'h '+Math.round(legs[0].duration%60)+'m':'--'} · $${Math.round(this._legFuel(legs[0]))} fuel</div>
           </div>`:''}
         ${legs.map((l,i)=>{
           const isPast=l.departDate&&l.departDate<today;
@@ -513,8 +519,12 @@ const Trips = {
           const entry=State.getEntry(l.destId);
           const nights=l.arriveDate&&l.departDate?Math.max(0,Math.round((new Date(l.departDate)-new Date(l.arriveDate))/86400000)):0;
           let lc=entry?(entry.cost||0)*nights:0; if(entry?.discountPercent&&entry?.discountType)lc=lc*(1-entry.discountPercent/100);
-          const nextLegFuel = i<legs.length-1 ? Math.round(fuelForLeg(legs[i+1])) : 0;
+          const nextLegFuel = i<legs.length-1 ? Math.round(this._legFuel(legs[i+1])) : 0;
           return `<div class="leg-swipe-row" data-journey-id="${journey.id}" data-leg-index="${i}">
+            <button class="leg-swipe-edit" onclick="event.stopPropagation();Trips.editLeg('${journey.id}',${i})" aria-label="Edit leg">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              <span>Edit</span>
+            </button>
             <button class="leg-swipe-delete" onclick="event.stopPropagation();Trips.deleteLegFromSwipe('${journey.id}',${i})" aria-label="Delete leg">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
               <span>Delete</span>
@@ -527,6 +537,7 @@ const Trips = {
                 ${lc>0?`<div class="leg-stop-cost">$${Math.round(lc)}</div>`:`<div class="leg-stop-cost free">Free</div>`}
                 <div class="leg-stop-edit-btns">
                   <button onclick="event.stopPropagation();Trips.editLeg('${journey.id}',${i})" style="background:none;border:none;cursor:pointer;font-size:13px;padding:1px" title="Edit">✏️</button>
+                  <button onclick="event.stopPropagation();Trips.deleteLeg('${journey.id}',${i})" style="background:none;border:none;cursor:pointer;font-size:13px;padding:1px" title="Delete">🗑️</button>
                 </div>
               </div>
               <div class="leg-stop-name" onclick="Trips.openLocationDetail('${l.destId}',{journeyId:'${journey.id}',legIndex:${i}})">${this.esc(l.destName)}</div>
@@ -568,9 +579,10 @@ const Trips = {
           decided = true;
         }
         if (!isHorizontal) return;
-        document.querySelectorAll('.leg-swipe-row.revealed').forEach(r => { if (r !== row) r.classList.remove('revealed'); });
-        if (dx < -THRESHOLD) row.classList.add('revealed');
-        else if (dx > THRESHOLD) row.classList.remove('revealed');
+        document.querySelectorAll('.leg-swipe-row.revealed,.leg-swipe-row.revealed-edit').forEach(r => { if (r !== row) { r.classList.remove('revealed'); r.classList.remove('revealed-edit'); } });
+        if (dx < -THRESHOLD) { row.classList.add('revealed'); row.classList.remove('revealed-edit'); }
+        else if (dx > THRESHOLD) { row.classList.add('revealed-edit'); row.classList.remove('revealed'); }
+        else { row.classList.remove('revealed'); row.classList.remove('revealed-edit'); }
       }, { passive: true });
       row.addEventListener('touchend', () => { tracking = false; });
       row.addEventListener('touchcancel', () => { tracking = false; });
@@ -579,8 +591,8 @@ const Trips = {
     if (!this._legSwipeCloser) {
       this._legSwipeCloser = true;
       document.addEventListener('click', e => {
-        document.querySelectorAll('.leg-swipe-row.revealed').forEach(r => {
-          if (!r.contains(e.target)) r.classList.remove('revealed');
+        document.querySelectorAll('.leg-swipe-row.revealed,.leg-swipe-row.revealed-edit').forEach(r => {
+          if (!r.contains(e.target)) { r.classList.remove('revealed'); r.classList.remove('revealed-edit'); }
         });
       }, true);
     }
