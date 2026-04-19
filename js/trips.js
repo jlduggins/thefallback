@@ -529,7 +529,7 @@ const Trips = {
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
               <span>Delete</span>
             </button>
-            <div class="leg-item leg-stop" draggable="true" data-leg-index="${i}" style="${isPast?'opacity:0.5':''}${isCurrent?'background:var(--color-primary-muted);border-radius:var(--radius-md);':''}">
+            <div class="leg-item leg-stop" data-leg-index="${i}" style="${isPast?'opacity:0.5':''}${isCurrent?'background:var(--color-primary-muted);border-radius:var(--radius-md);':''}">
               ${i<legs.length-1?`<div class="leg-stop-line" style="${isPast?'opacity:0.2':''}"></div>`:''}
               <div class="drag-handle">⋮⋮</div>
               <div class="leg-stop-dot${isCurrent?' here':''}"></div>
@@ -640,12 +640,36 @@ const Trips = {
     this.openJourneyDetail(journeyId);
   },
 
-  closeJourneyDetail() {
+  _renderDefaultTripsPanel() {
     const content = document.getElementById('trips-panel-content');
-    if (content && this._defaultPanelContent) {
-      content.innerHTML = this._defaultPanelContent;
-    }
+    if (!content) return;
+    content.innerHTML = `
+      <div class="side-panel-hd">
+        <div class="trips-hd-row">
+          <div class="side-panel-title">Journeys</div>
+        </div>
+        <div class="fuel-bar" onclick="Trips.openFuelSettingsModal()">
+          <span style="font-size:14px">⛽</span>
+          <span id="fuel-summary">Diesel · 18 mpg · $3.89/gal</span>
+          <span class="fuel-edit">Edit</span>
+        </div>
+      </div>
+      <div class="side-panel-body">
+        <div id="journeys-list">
+          <div id="no-journeys" class="empty-state" style="display:none">
+            <div class="empty-state-icon">🗺</div>
+            <div class="empty-state-title">No journeys yet</div>
+            <div class="empty-state-text">Create a journey to start planning your route</div>
+            <button class="btn btn-primary" onclick="Trips.openNewJourneyModal()">Create Journey</button>
+          </div>
+        </div>
+      </div>
+    `;
+  },
+
+  closeJourneyDetail() {
     this._defaultPanelContent = null;
+    this._renderDefaultTripsPanel();
     this.renderJourneys();
     this.updateFuelSummary();
     this.closeLocationDetail();
@@ -675,9 +699,11 @@ const Trips = {
   // ─── Leg drag/drop ────────────────────────────────────────────────────────
 
   setupLegDragDrop(journeyId) {
+    if (window.matchMedia('(max-width: 767px)').matches) return; // drag-drop is desktop-only
     const items = document.querySelectorAll('.leg-item');
     let dragged = null;
     items.forEach(item => {
+      item.setAttribute('draggable', 'true');
       item.addEventListener('dragstart', e => { dragged=item; item.style.opacity='0.5'; e.dataTransfer.effectAllowed='move'; });
       item.addEventListener('dragend', () => { item.style.opacity=''; dragged=null; items.forEach(i=>i.style.background=''); });
       item.addEventListener('dragover', e => { e.preventDefault(); if(item!==dragged) item.style.background='var(--color-primary-muted)'; });
@@ -1011,7 +1037,27 @@ const Trips = {
 
   // ─── Routing & calculations ───────────────────────────────────────────────
 
-  async getRoute(fromLat,fromLng,toLat,toLng){const KEY=window.ORS_API_KEY||(window.CONFIG?.ORS_API_KEY)||'';if(!KEY){console.warn('[Route] No ORS_API_KEY configured — returning straight-line estimate (no geometry). Set window.CONFIG.ORS_API_KEY in config.js to render real routes.');const m=this.haversine(fromLat,fromLng,toLat,toLng);return{distance:m*1.3,duration:m*1.3/45*60,geometry:null};}try{const r=await fetch(`https://api.openrouteservice.org/v2/directions/driving-car?api_key=${KEY}&start=${fromLng},${fromLat}&end=${toLng},${toLat}`);const d=await r.json();if(d.features?.[0]){const f=d.features[0],p=f.properties.summary;return{distance:p.distance*0.000621371,duration:p.duration/60,geometry:f.geometry?.coordinates||null};}if(d.error){console.error('[Route] ORS API error:',d.error);}}catch(e){console.error('[Route] fetch failed:',e);}const m=this.haversine(fromLat,fromLng,toLat,toLng);return{distance:m*1.3,duration:m*1.3/45*60,geometry:null};},
+  async getRoute(fromLat,fromLng,toLat,toLng){
+    const KEY = (typeof CONFIG !== 'undefined' && CONFIG.ORS_API_KEY) || (window.CONFIG && window.CONFIG.ORS_API_KEY) || window.ORS_API_KEY || '';
+    if (!this._orsKeyLogged) { this._orsKeyLogged = true; console.log('[Route] ORS_API_KEY:', KEY ? 'set' : 'EMPTY'); }
+    if (!KEY) {
+      const m = this.haversine(fromLat,fromLng,toLat,toLng);
+      return { distance: m*1.3, duration: m*1.3/45*60, geometry: null };
+    }
+    try {
+      const r = await fetch(`https://api.openrouteservice.org/v2/directions/driving-car?api_key=${KEY}&start=${fromLng},${fromLat}&end=${toLng},${toLat}`);
+      const d = await r.json();
+      if (d.features?.[0]) {
+        const f = d.features[0], p = f.properties.summary;
+        return { distance: p.distance*0.000621371, duration: p.duration/60, geometry: f.geometry?.coordinates || null };
+      }
+      if (d.error) console.error('[Route] ORS API error:', d.error);
+    } catch (e) {
+      console.error('[Route] fetch failed:', e);
+    }
+    const m = this.haversine(fromLat,fromLng,toLat,toLng);
+    return { distance: m*1.3, duration: m*1.3/45*60, geometry: null };
+  },
 
   haversine(lat1,lon1,lat2,lon2){const R=3959,dl=(lat2-lat1)*Math.PI/180,dn=(lon2-lon1)*Math.PI/180,a=Math.sin(dl/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dn/2)**2;return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));},
   isInSeason(d){if(!d)return true;const m=new Date(d+'T12:00').getMonth();return m>=4&&m<=8;},

@@ -546,7 +546,7 @@ const Entries = {
 
   _bindSwipeToDelete(row, container) {
     let startX = 0, startY = 0, tracking = false, decided = false, isHorizontal = false;
-    const THRESHOLD = 40; // pixels to reveal
+    const THRESHOLD = 40;
 
     const onStart = e => {
       startX = e.touches[0].clientX;
@@ -564,14 +564,13 @@ const Entries = {
         isHorizontal = Math.abs(dx) > Math.abs(dy);
         decided = true;
       }
-      if (!isHorizontal) return; // let vertical scroll happen
-      // Close any other open rows as soon as a new swipe begins
-      container.querySelectorAll('.location-swipe-row.revealed').forEach(r => { if (r !== row) r.classList.remove('revealed'); });
-      if (dx < -THRESHOLD) {
-        row.classList.add('revealed');
-      } else if (dx > THRESHOLD) {
-        row.classList.remove('revealed');
-      }
+      if (!isHorizontal) return;
+      container.querySelectorAll('.location-swipe-row.revealed,.location-swipe-row.revealed-edit').forEach(r => {
+        if (r !== row) { r.classList.remove('revealed'); r.classList.remove('revealed-edit'); }
+      });
+      if (dx < -THRESHOLD) { row.classList.add('revealed'); row.classList.remove('revealed-edit'); }
+      else if (dx > THRESHOLD) { row.classList.add('revealed-edit'); row.classList.remove('revealed'); }
+      else { row.classList.remove('revealed'); row.classList.remove('revealed-edit'); }
     };
     const onEnd = () => { tracking = false; };
 
@@ -581,17 +580,23 @@ const Entries = {
     row.addEventListener('touchcancel', onEnd);
   },
 
-  // Global listener: any tap outside a revealed row closes it
   _installGlobalSwipeCloser() {
     if (this._swipeCloserInstalled) return;
     this._swipeCloserInstalled = true;
     document.addEventListener('click', e => {
-      const openRows = document.querySelectorAll('.location-swipe-row.revealed');
-      if (openRows.length === 0) return;
-      openRows.forEach(row => {
-        if (!row.contains(e.target)) row.classList.remove('revealed');
+      const open = document.querySelectorAll('.location-swipe-row.revealed,.location-swipe-row.revealed-edit');
+      if (open.length === 0) return;
+      open.forEach(row => {
+        if (!row.contains(e.target)) { row.classList.remove('revealed'); row.classList.remove('revealed-edit'); }
       });
     });
+  },
+
+  editEntryFromSwipe(id) {
+    const row = document.querySelector(`.location-swipe-row[data-id="${id}"]`);
+    if (row) { row.classList.remove('revealed'); row.classList.remove('revealed-edit'); }
+    const entry = State.getEntry(id);
+    if (entry) this.openEditForm(entry);
   },
 
   deleteEntryFromSwipe(id) {
@@ -635,6 +640,10 @@ const Entries = {
 
     return `
       <div class="location-swipe-row" data-id="${entry.id}">
+        <button class="location-swipe-edit" onclick="Entries.editEntryFromSwipe('${entry.id}')" aria-label="Edit">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          <span>Edit</span>
+        </button>
         <button class="location-swipe-delete" onclick="Entries.deleteEntryFromSwipe('${entry.id}')" aria-label="Delete">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
           <span>Delete</span>
@@ -884,7 +893,7 @@ const Entries = {
     // Geocode address if no coords
     if (!lat && !lng) {
       const address = form.querySelector('#f-address').value.trim();
-      if (address && window.CONFIG?.GEOCODIO_KEY) {
+      if (address && (window.CONFIG?.GEOCODIO_KEY||(typeof CONFIG!=="undefined"&&CONFIG.GEOCODIO_KEY))) {
         try {
           const coords = await this.geocodeAddress(address);
           if (coords) {
@@ -937,7 +946,7 @@ const Entries = {
   },
   
   async geocodeAddress(address) {
-    const key = window.CONFIG?.GEOCODIO_KEY;
+    const key = (window.CONFIG?.GEOCODIO_KEY||(typeof CONFIG!=="undefined"&&CONFIG.GEOCODIO_KEY));
     if (!key) return null;
     
     const response = await fetch(
