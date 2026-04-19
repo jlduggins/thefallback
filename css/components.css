@@ -1962,18 +1962,22 @@ body.add-location-drawer-open .leaflet-popup-pane { display: none !important; }
   #modal-add-location.modal-sheet.visible[data-snap="half"] {
     transform: translateY(calc(90vh - 55vh));
   }
-  /* The handle is the drag target */
+  /* The handle is the drag target — must be tall/wide enough and override base .modal-handle rule */
   #modal-add-location .modal-handle {
+    width: 100% !important;
+    height: auto !important;
+    padding: 14px 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
+    border-radius: 0 !important;
     cursor: grab;
     touch-action: none;
-    padding: 14px 0;
-    width: 100%;
-    height: auto;
-    background: transparent;
-    display: flex;
+    display: flex !important;
     align-items: center;
     justify-content: center;
-    margin: 0;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 5;
   }
   #modal-add-location .modal-handle::before {
     content: '';
@@ -1981,5 +1985,6 @@ body.add-location-drawer-open .leaflet-popup-pane { display: none !important; }
     height: 4px;
     background: var(--color-border);
     border-radius: 2px;
+    display: block;
   }
 }
