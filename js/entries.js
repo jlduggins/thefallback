@@ -546,6 +546,7 @@ const Entries = {
 
   _bindSwipeToDelete(row, container) {
     let startX = 0, startY = 0, tracking = false, decided = false, isHorizontal = false;
+    let startState = 'neutral'; // 'neutral' | 'revealed' (delete) | 'revealed-edit'
     const THRESHOLD = 40;
 
     const onStart = e => {
@@ -554,6 +555,9 @@ const Entries = {
       tracking = true;
       decided = false;
       isHorizontal = false;
+      if (row.classList.contains('revealed')) startState = 'revealed';
+      else if (row.classList.contains('revealed-edit')) startState = 'revealed-edit';
+      else startState = 'neutral';
     };
     const onMove = e => {
       if (!tracking) return;
@@ -568,9 +572,16 @@ const Entries = {
       container.querySelectorAll('.location-swipe-row.revealed,.location-swipe-row.revealed-edit').forEach(r => {
         if (r !== row) { r.classList.remove('revealed'); r.classList.remove('revealed-edit'); }
       });
-      if (dx < -THRESHOLD) { row.classList.add('revealed'); row.classList.remove('revealed-edit'); }
-      else if (dx > THRESHOLD) { row.classList.add('revealed-edit'); row.classList.remove('revealed'); }
-      else { row.classList.remove('revealed'); row.classList.remove('revealed-edit'); }
+      if (startState === 'neutral') {
+        if (dx < -THRESHOLD) { row.classList.add('revealed'); row.classList.remove('revealed-edit'); }
+        else if (dx > THRESHOLD) { row.classList.add('revealed-edit'); row.classList.remove('revealed'); }
+      } else if (startState === 'revealed') {
+        // Delete is open — only a swipe RIGHT (positive dx) can close it, cannot cross to edit
+        if (dx > THRESHOLD * 0.5) { row.classList.remove('revealed'); }
+      } else if (startState === 'revealed-edit') {
+        // Edit is open — only a swipe LEFT (negative dx) can close it
+        if (dx < -THRESHOLD * 0.5) { row.classList.remove('revealed-edit'); }
+      }
     };
     const onEnd = () => { tracking = false; };
 

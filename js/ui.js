@@ -248,7 +248,12 @@ const UI = {
   
   openAddModal() {
     this.openModal('modal-add-location');
-    
+    document.body.classList.add('add-location-drawer-open');
+    // On desktop, don't lock body scroll — map must stay interactive
+    if (window.matchMedia('(min-width: 768px)').matches) {
+      document.body.style.overflow = '';
+    }
+
     // Reset form
     Entries.resetForm();
     
@@ -262,6 +267,7 @@ const UI = {
   
   closeAddModal() {
     this.closeModal('modal-add-location');
+    document.body.classList.remove('add-location-drawer-open');
     MapModule.hideDragPin();
   },
   
@@ -413,7 +419,7 @@ const UI = {
 
     const anchorTy = snap => {
       const vh = window.innerHeight;
-      const baseH = vh - 8; // matches CSS: height: calc(100vh - 8px)
+      const baseH = vh - 48; // matches CSS: height: calc(100vh - 48px)
       if (snap === 'full') return 0;
       if (snap === 'half') return baseH - vh * 0.55;
       return baseH - PEEK_PX;

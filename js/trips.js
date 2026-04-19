@@ -563,11 +563,15 @@ const Trips = {
       if (row.dataset.swipeInit) return;
       row.dataset.swipeInit = '1';
       let startX = 0, startY = 0, tracking = false, decided = false, isHorizontal = false;
+      let startState = 'neutral';
       const THRESHOLD = 40;
       row.addEventListener('touchstart', e => {
         startX = e.touches[0].clientX;
         startY = e.touches[0].clientY;
         tracking = true; decided = false; isHorizontal = false;
+        if (row.classList.contains('revealed')) startState = 'revealed';
+        else if (row.classList.contains('revealed-edit')) startState = 'revealed-edit';
+        else startState = 'neutral';
       }, { passive: true });
       row.addEventListener('touchmove', e => {
         if (!tracking) return;
@@ -579,10 +583,17 @@ const Trips = {
           decided = true;
         }
         if (!isHorizontal) return;
-        document.querySelectorAll('.leg-swipe-row.revealed,.leg-swipe-row.revealed-edit').forEach(r => { if (r !== row) { r.classList.remove('revealed'); r.classList.remove('revealed-edit'); } });
-        if (dx < -THRESHOLD) { row.classList.add('revealed'); row.classList.remove('revealed-edit'); }
-        else if (dx > THRESHOLD) { row.classList.add('revealed-edit'); row.classList.remove('revealed'); }
-        else { row.classList.remove('revealed'); row.classList.remove('revealed-edit'); }
+        document.querySelectorAll('.leg-swipe-row.revealed,.leg-swipe-row.revealed-edit').forEach(r => {
+          if (r !== row) { r.classList.remove('revealed'); r.classList.remove('revealed-edit'); }
+        });
+        if (startState === 'neutral') {
+          if (dx < -THRESHOLD) { row.classList.add('revealed'); row.classList.remove('revealed-edit'); }
+          else if (dx > THRESHOLD) { row.classList.add('revealed-edit'); row.classList.remove('revealed'); }
+        } else if (startState === 'revealed') {
+          if (dx > THRESHOLD * 0.5) row.classList.remove('revealed');
+        } else if (startState === 'revealed-edit') {
+          if (dx < -THRESHOLD * 0.5) row.classList.remove('revealed-edit');
+        }
       }, { passive: true });
       row.addEventListener('touchend', () => { tracking = false; });
       row.addEventListener('touchcancel', () => { tracking = false; });
