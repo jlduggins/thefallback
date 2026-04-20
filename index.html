@@ -448,15 +448,18 @@
     </div>
   </div>
 
-  <!-- Delete Confirm -->
-  <div id="modal-delete-confirm" class="modal modal-center">
-    <div class="modal-header"><h2 class="modal-title">Delete Location?</h2></div>
-    <div class="modal-body"><p>Are you sure you want to delete <strong id="delete-location-name"></strong>? This cannot be undone.</p></div>
-    <div class="modal-footer">
-      <button class="btn btn-outline" onclick="UI.closeDeleteConfirm()">Cancel</button>
-      <button class="btn btn-primary" style="background:var(--color-error)" onclick="UI.confirmDelete()">Delete</button>
+  <!-- Delete confirm -->
+<div class="confirm-overlay" id="confirm-overlay">
+  <div class="confirm-box">
+    <div style="font-size:36px;margin-bottom:12px">🗑</div>
+    <h3 style="font-size:18px;font-weight:700;margin-bottom:6px;color:var(--forest);letter-spacing:-.3px">Delete this location?</h3>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:24px;line-height:1.5">This cannot be undone.</p>
+    <div style="display:flex;gap:10px;justify-content:center">
+      <button onclick="closeConfirm()" style="padding:10px 22px;border-radius:var(--radius-sm);border:1.5px solid var(--border);background:white;font-weight:600;font-size:14px;color:var(--text-mid)">Cancel</button>
+      <button onclick="executeDelete()" style="padding:10px 22px;border-radius:var(--radius-sm);border:none;background:#e76f51;color:white;font-weight:700;font-size:14px">Delete</button>
     </div>
   </div>
+</div>
 
   <!-- New Journey -->
   <div id="modal-new-journey" class="modal modal-center">
