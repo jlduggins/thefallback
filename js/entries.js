@@ -346,6 +346,10 @@ const Entries = {
       const mapboxToken = (typeof CONFIG !== 'undefined' && CONFIG.MAPBOX_TOKEN)
         || (window.CONFIG && window.CONFIG.MAPBOX_TOKEN) || '';
       const mapboxEnabled = mapboxToken && !mapboxToken.startsWith('YOUR_');
+      if (!this._mapboxDiagLogged) {
+        this._mapboxDiagLogged = true;
+        console.log('[Autocomplete] Mapbox token:', mapboxToken ? (mapboxToken.slice(0, 6) + '…len=' + mapboxToken.length) : 'EMPTY', 'enabled:', mapboxEnabled);
+      }
       const proximity = (State.userLat && State.userLng)
         ? `&proximity=${State.userLng},${State.userLat}` : '';
       const mbxUrl = mapboxEnabled
