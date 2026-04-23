@@ -283,6 +283,196 @@ const Entries = {
         this.updateStars();
       });
     });
+
+    // Place autocomplete on name field
+    const nameInput = document.getElementById('f-name');
+    if (nameInput && !nameInput._autocompleteBound) {
+      nameInput.addEventListener('input', (e) => this.searchPlaces(e.target.value));
+      nameInput._autocompleteBound = true;
+    }
+    if (!document._placeSuggestClickBound) {
+      document.addEventListener('click', (e) => {
+        const sug = document.getElementById('place-suggestions');
+        const input = document.getElementById('f-name');
+        if (sug && !sug.contains(e.target) && e.target !== input) {
+          sug.style.display = 'none';
+        }
+      });
+      document._placeSuggestClickBound = true;
+    }
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PLACE AUTOCOMPLETE (Photon + Nominatim fuzzy fallback)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  _placeSearchTimer: null,
+  _lastPlaceQuery: '',
+
+  _levenshtein(a, b) {
+    a = (a || '').toLowerCase();
+    b = (b || '').toLowerCase();
+    if (!a.length) return b.length;
+    if (!b.length) return a.length;
+    const dp = Array(b.length + 1).fill(0).map((_, i) => i);
+    for (let i = 1; i <= a.length; i++) {
+      let prev = dp[0]; dp[0] = i;
+      for (let j = 1; j <= b.length; j++) {
+        const tmp = dp[j];
+        dp[j] = a[i - 1] === b[j - 1]
+          ? prev
+          : 1 + Math.min(prev, dp[j - 1], dp[j]);
+        prev = tmp;
+      }
+    }
+    return dp[b.length];
+  },
+
+  async searchPlaces(query) {
+    const sug = document.getElementById('place-suggestions');
+    if (!sug) return;
+    if (this._placeSearchTimer) clearTimeout(this._placeSearchTimer);
+    query = (query || '').trim();
+    if (query.length < 3) { sug.style.display = 'none'; return; }
+
+    this._placeSearchTimer = setTimeout(async () => {
+      sug.innerHTML = `<div style="padding:12px;color:var(--color-text-muted);font-size:13px">🔍 Searching…</div>`;
+      sug.style.display = 'block';
+
+      const bias = (State.userLat && State.userLng)
+        ? `&lat=${State.userLat}&lon=${State.userLng}` : '';
+      const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=8${bias}`;
+
+      const results = [];
+      try {
+        const res = await fetch(photonUrl);
+        if (res.ok) {
+          const data = await res.json();
+          (data.features || []).forEach(f => results.push(this._normalizePlace(f, 'photon')));
+        }
+      } catch (e) { console.warn('[Autocomplete] Photon failed', e); }
+
+      // Fuzzy fallback — if sparse results, ask Nominatim (more tolerant of typos)
+      if (results.length < 3) {
+        try {
+          const nomUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=jsonv2&limit=5&addressdetails=1`;
+          const res = await fetch(nomUrl, { headers: { 'Accept-Language': 'en' } });
+          if (res.ok) {
+            const arr = await res.json();
+            arr.forEach(r => results.push(this._normalizePlace(r, 'nominatim')));
+          }
+        } catch (e) { console.warn('[Autocomplete] Nominatim failed', e); }
+      }
+
+      // Dedupe by rounded coords + name
+      const seen = new Set();
+      const unique = results.filter(p => {
+        if (!p.lat || !p.lng) return false;
+        const k = `${p.lat.toFixed(3)},${p.lng.toFixed(3)}|${(p.name || '').toLowerCase()}`;
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
+
+      // Rank: Levenshtein distance between query and name (lower = better)
+      const q = query.toLowerCase();
+      unique.forEach(p => {
+        const n = (p.name || '').toLowerCase();
+        const base = this._levenshtein(q, n.slice(0, Math.max(q.length, n.length)));
+        const contains = n.includes(q) ? -2 : 0;
+        p._score = base + contains;
+      });
+      unique.sort((a, b) => a._score - b._score);
+      const top = unique.slice(0, 8);
+
+      if (top.length === 0) {
+        sug.innerHTML = `<div style="padding:12px;color:var(--color-text-muted);font-size:13px">No places found. Try a different search or enter details manually.</div>`;
+        return;
+      }
+
+      sug.innerHTML = top.map((p, i) => `
+        <div data-idx="${i}" class="place-suggestion" style="padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--color-border)">
+          <div style="font-size:13px;font-weight:600;color:var(--color-text)">${this.escapeHtml(p.name || 'Unknown')}</div>
+          <div style="font-size:11px;color:var(--color-text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${this.escapeHtml(p.address || '')}</div>
+          ${p.typeLabel ? `<div style="font-size:10px;color:var(--color-primary);margin-top:2px">${this.escapeHtml(p.typeLabel)}</div>` : ''}
+        </div>
+      `).join('');
+
+      sug._results = top;
+      sug.querySelectorAll('.place-suggestion').forEach(el => {
+        el.addEventListener('click', () => this.selectPlaceResult(parseInt(el.dataset.idx, 10)));
+        el.addEventListener('mouseover', () => el.style.background = 'var(--color-surface-alt)');
+        el.addEventListener('mouseout', () => el.style.background = 'transparent');
+      });
+      this._lastPlaceQuery = query;
+    }, 350);
+  },
+
+  _normalizePlace(raw, source) {
+    if (source === 'photon') {
+      const p = raw.properties || {};
+      const coords = raw.geometry?.coordinates || [];
+      const name = p.name || p.street || 'Unknown';
+      const city = p.city || p.county || '';
+      const state = p.state || '';
+      const country = p.country || '';
+      let address = name;
+      if (p.street && p.street !== name) address = p.street;
+      if (p.housenumber) address = p.housenumber + ' ' + address;
+      if (city) address += ', ' + city;
+      if (state && state !== city) address += ', ' + state;
+      if (country && country !== 'United States') address += ', ' + country;
+      const type = p.osm_value || p.type || '';
+      return {
+        name,
+        address,
+        typeLabel: type ? type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : '',
+        lat: coords[1],
+        lng: coords[0]
+      };
+    }
+    // Nominatim
+    const a = raw.address || {};
+    const display = raw.display_name || '';
+    const name = raw.name || a.amenity || a.attraction || a.tourism || a.natural || a.leisure
+      || a.road || display.split(',')[0] || 'Unknown';
+    const city = a.city || a.town || a.village || a.county || '';
+    const state = a.state || '';
+    const country = a.country || '';
+    let address = name;
+    if (city) address += ', ' + city;
+    if (state && state !== city) address += ', ' + state;
+    if (country && country !== 'United States') address += ', ' + country;
+    const type = raw.type || raw.category || '';
+    return {
+      name,
+      address,
+      typeLabel: type ? type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : '',
+      lat: parseFloat(raw.lat),
+      lng: parseFloat(raw.lon)
+    };
+  },
+
+  selectPlaceResult(i) {
+    const sug = document.getElementById('place-suggestions');
+    if (!sug) return;
+    const p = (sug._results || [])[i];
+    if (!p) return;
+    sug.style.display = 'none';
+
+    const form = document.getElementById('modal-add-location');
+    if (!form) return;
+    form.querySelector('#f-name').value = p.name || '';
+    form.querySelector('#f-address').value = p.address || '';
+    if (p.lat != null && p.lng != null) {
+      form.querySelector('#f-coords').value = p.lat.toFixed(6) + ', ' + p.lng.toFixed(6);
+      State.pendingLat = p.lat;
+      State.pendingLng = p.lng;
+      if (typeof MapModule !== 'undefined') {
+        MapModule.showDragPin(p.lat, p.lng);
+        if (MapModule.map) MapModule.map.flyTo([p.lat, p.lng], 14, { duration: 1 });
+      }
+    }
   },
 
   toggleDiscountPercent() {
@@ -830,6 +1020,8 @@ const Entries = {
     form.querySelector('#f-name').value = '';
     form.querySelector('#f-address').value = '';
     form.querySelector('#f-coords').value = '';
+    const sug = document.getElementById('place-suggestions');
+    if (sug) sug.style.display = 'none';
     form.querySelector('#f-type').value = 'Dispersed';
     form.querySelector('#f-status').value = 'planned';
     form.querySelector('#f-cost').value = '';
