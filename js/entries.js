@@ -364,6 +364,23 @@ const Entries = {
         } catch (e) { console.warn('[Autocomplete] Nominatim failed', e); }
       }
 
+      // Tier 3 — Mapbox (Foursquare + Mapbox POI data) for businesses OSM doesn't have
+      const mapboxToken = (typeof CONFIG !== 'undefined' && CONFIG.MAPBOX_TOKEN)
+        || (window.CONFIG && window.CONFIG.MAPBOX_TOKEN) || '';
+      if (results.length < 3 && mapboxToken && !mapboxToken.startsWith('YOUR_')) {
+        try {
+          const proximity = (State.userLat && State.userLng)
+            ? `&proximity=${State.userLng},${State.userLat}` : '';
+          const mbxUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json`
+            + `?access_token=${mapboxToken}&autocomplete=true&limit=6&types=poi,address,place${proximity}`;
+          const res = await fetch(mbxUrl);
+          if (res.ok) {
+            const data = await res.json();
+            (data.features || []).forEach(f => results.push(this._normalizePlace(f, 'mapbox')));
+          }
+        } catch (e) { console.warn('[Autocomplete] Mapbox failed', e); }
+      }
+
       // Dedupe by rounded coords + name
       const seen = new Set();
       const unique = results.filter(p => {
@@ -427,6 +444,20 @@ const Entries = {
         name,
         address,
         typeLabel: type ? type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : '',
+        lat: coords[1],
+        lng: coords[0]
+      };
+    }
+    if (source === 'mapbox') {
+      const coords = raw.center || [];
+      const name = raw.text || raw.place_name || 'Unknown';
+      const address = raw.place_name || name;
+      const type = (raw.properties && raw.properties.category)
+        || (raw.place_type && raw.place_type[0]) || '';
+      return {
+        name,
+        address,
+        typeLabel: type ? type.split(',')[0].replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) : '',
         lat: coords[1],
         lng: coords[0]
       };
