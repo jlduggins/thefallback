@@ -290,6 +290,23 @@ const Entries = {
       nameInput.addEventListener('input', (e) => this.searchPlaces(e.target.value));
       nameInput._autocompleteBound = true;
     }
+
+    // Link preview card
+    const linkInput = document.getElementById('f-link');
+    if (linkInput && !linkInput._previewBound) {
+      linkInput.addEventListener('input', (e) => this.updateLinkPreview(e.target.value));
+      linkInput._previewBound = true;
+    }
+    const linkPreview = document.getElementById('link-preview');
+    if (linkPreview && !linkPreview._clickBound) {
+      linkPreview.addEventListener('click', () => {
+        const url = linkPreview.dataset.url;
+        if (url) window.open(url, '_blank', 'noopener');
+      });
+      linkPreview.addEventListener('mouseover', () => linkPreview.style.background = 'var(--color-surface-alt)');
+      linkPreview.addEventListener('mouseout', () => linkPreview.style.background = 'var(--color-surface)');
+      linkPreview._clickBound = true;
+    }
     if (!document._placeSuggestClickBound) {
       document.addEventListener('click', (e) => {
         const sug = document.getElementById('place-suggestions');
@@ -493,6 +510,56 @@ const Entries = {
         if (MapModule.map) MapModule.map.flyTo([p.lat, p.lng], 14, { duration: 1 });
       }
     }
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // LINK PREVIEW CARD
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  _linkPreviewTimer: null,
+
+  _knownSites: [
+    { match: 'recreation.gov', title: 'Recreation.gov', desc: 'Federal recreation reservation site' },
+    { match: 'hipcamp.com', title: 'Hipcamp', desc: 'Discover and book unique outdoor stays' },
+    { match: 'campendium.com', title: 'Campendium', desc: 'Find campgrounds and campsites' },
+    { match: 'freecampsites.net', title: 'Free Campsites', desc: 'Free camping locations database' },
+    { match: 'ioverlander.com', title: 'iOverlander', desc: 'Overlanding and camping spots worldwide' },
+    { match: 'reservecalifornia.com', title: 'Reserve California', desc: 'California state parks reservations' },
+    { match: 'reserveamerica.com', title: 'ReserveAmerica', desc: 'Campground and outdoor reservations' },
+    { match: 'fs.usda.gov', title: 'USDA Forest Service', desc: 'National forest info and recreation' },
+    { match: 'nps.gov', title: 'National Park Service', desc: 'U.S. national parks information' },
+    { match: 'blm.gov', title: 'Bureau of Land Management', desc: 'BLM public lands and camping' },
+    { match: 'harvesthosts.com', title: 'Harvest Hosts', desc: 'Unique overnight stays at farms & wineries' },
+    { match: 'boondocking.org', title: 'Boondocking.org', desc: 'Free and dispersed camping' }
+  ],
+
+  updateLinkPreview(url) {
+    if (this._linkPreviewTimer) clearTimeout(this._linkPreviewTimer);
+    const preview = document.getElementById('link-preview');
+    if (!preview) return;
+    url = (url || '').trim();
+    if (!/^https?:\/\/.+/.test(url)) { preview.style.display = 'none'; return; }
+
+    this._linkPreviewTimer = setTimeout(() => {
+      let domain = url;
+      try {
+        domain = new URL(url).hostname.replace(/^www\./, '');
+      } catch (e) {
+        preview.style.display = 'none';
+        return;
+      }
+      const match = this._knownSites.find(s => url.includes(s.match));
+      const title = match ? match.title : domain;
+      const desc = match ? match.desc : 'Click to visit this website';
+
+      document.getElementById('link-preview-title').textContent = title;
+      document.getElementById('link-preview-desc').textContent = desc;
+      document.getElementById('link-preview-url').textContent = url;
+      document.getElementById('link-preview-img').style.display = 'none';
+      preview.dataset.url = url;
+      preview.dataset.title = title;
+      preview.style.display = 'block';
+    }, 300);
   },
 
   toggleDiscountPercent() {
@@ -1042,6 +1109,8 @@ const Entries = {
     form.querySelector('#f-coords').value = '';
     const sug = document.getElementById('place-suggestions');
     if (sug) sug.style.display = 'none';
+    const lp = document.getElementById('link-preview');
+    if (lp) lp.style.display = 'none';
     form.querySelector('#f-type').value = 'Dispersed';
     form.querySelector('#f-status').value = 'planned';
     form.querySelector('#f-cost').value = '';
@@ -1092,6 +1161,7 @@ const Entries = {
     form.querySelector('#f-cost').value = entry.cost || '';
     form.querySelector('#f-notes').value = entry.notes || '';
     form.querySelector('#f-link').value = entry.link || '';
+    this.updateLinkPreview(entry.link || '');
     const dtEl = form.querySelector('#f-discount-type');
     const dpEl = form.querySelector('#f-discount-percent');
     if (dtEl) dtEl.value = entry.discountType || '';
@@ -1205,6 +1275,7 @@ const Entries = {
       rating: State.currentRating,
       notes: form.querySelector('#f-notes').value.trim(),
       link: form.querySelector('#f-link').value.trim(),
+      linkTitle: (document.getElementById('link-preview')?.dataset.title) || null,
       discountType: dtVal || null,
       discountPercent: (dpRaw === '' || dpRaw == null) ? null : parseInt(dpRaw, 10),
       photos: this.pendingPhotos.map(p => p.data || p)
