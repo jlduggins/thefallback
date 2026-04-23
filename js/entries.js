@@ -343,43 +343,28 @@ const Entries = {
         ? `&lat=${State.userLat}&lon=${State.userLng}` : '';
       const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=8${bias}`;
 
-      const results = [];
-      try {
-        const res = await fetch(photonUrl);
-        if (res.ok) {
-          const data = await res.json();
-          (data.features || []).forEach(f => results.push(this._normalizePlace(f, 'photon')));
-        }
-      } catch (e) { console.warn('[Autocomplete] Photon failed', e); }
-
-      // Fuzzy fallback — if sparse results, ask Nominatim (more tolerant of typos)
-      if (results.length < 3) {
-        try {
-          const nomUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=jsonv2&limit=5&addressdetails=1`;
-          const res = await fetch(nomUrl, { headers: { 'Accept-Language': 'en' } });
-          if (res.ok) {
-            const arr = await res.json();
-            arr.forEach(r => results.push(this._normalizePlace(r, 'nominatim')));
-          }
-        } catch (e) { console.warn('[Autocomplete] Nominatim failed', e); }
-      }
-
-      // Tier 3 — Mapbox (Foursquare + Mapbox POI data) for businesses OSM doesn't have
       const mapboxToken = (typeof CONFIG !== 'undefined' && CONFIG.MAPBOX_TOKEN)
         || (window.CONFIG && window.CONFIG.MAPBOX_TOKEN) || '';
-      if (results.length < 3 && mapboxToken && !mapboxToken.startsWith('YOUR_')) {
-        try {
-          const proximity = (State.userLat && State.userLng)
-            ? `&proximity=${State.userLng},${State.userLat}` : '';
-          const mbxUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json`
-            + `?access_token=${mapboxToken}&autocomplete=true&limit=6&types=poi,address,place${proximity}`;
-          const res = await fetch(mbxUrl);
-          if (res.ok) {
-            const data = await res.json();
-            (data.features || []).forEach(f => results.push(this._normalizePlace(f, 'mapbox')));
-          }
-        } catch (e) { console.warn('[Autocomplete] Mapbox failed', e); }
-      }
+      const mapboxEnabled = mapboxToken && !mapboxToken.startsWith('YOUR_');
+      const proximity = (State.userLat && State.userLng)
+        ? `&proximity=${State.userLng},${State.userLat}` : '';
+      const mbxUrl = mapboxEnabled
+        ? `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json`
+          + `?access_token=${mapboxToken}&autocomplete=true&limit=6&types=poi,address,place${proximity}`
+        : null;
+      const nomUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=jsonv2&limit=5&addressdetails=1`;
+
+      // Fire all providers in parallel — each is independent and we merge below.
+      const [photonRes, mapboxRes, nomRes] = await Promise.all([
+        fetch(photonUrl).then(r => r.ok ? r.json() : null).catch(e => { console.warn('[Autocomplete] Photon failed', e); return null; }),
+        mbxUrl ? fetch(mbxUrl).then(r => r.ok ? r.json() : null).catch(e => { console.warn('[Autocomplete] Mapbox failed', e); return null; }) : Promise.resolve(null),
+        fetch(nomUrl, { headers: { 'Accept-Language': 'en' } }).then(r => r.ok ? r.json() : null).catch(e => { console.warn('[Autocomplete] Nominatim failed', e); return null; })
+      ]);
+
+      const results = [];
+      if (photonRes) (photonRes.features || []).forEach(f => results.push(this._normalizePlace(f, 'photon')));
+      if (mapboxRes) (mapboxRes.features || []).forEach(f => results.push(this._normalizePlace(f, 'mapbox')));
+      if (Array.isArray(nomRes)) nomRes.forEach(r => results.push(this._normalizePlace(r, 'nominatim')));
 
       // Dedupe by rounded coords + name
       const seen = new Set();
