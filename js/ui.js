@@ -249,15 +249,11 @@ const UI = {
   openAddModal() {
     this.openModal('modal-add-location');
     document.body.classList.add('add-location-drawer-open');
-    // Don't lock body scroll — map must stay interactive on both mobile and desktop
     document.body.style.overflow = '';
-    if (!window.matchMedia('(min-width: 768px)').matches) {
-      // Mobile: bind resize snap
-      const modal = document.getElementById('modal-add-location');
-      if (modal) {
-        modal.removeAttribute('data-snap');
-        this._bindAddModalSnap(modal);
-      }
+    if (window.matchMedia('(max-width: 767px)').matches) {
+      // Mobile: ensure this modal has a grabber + drag bound, and snap to full
+      this.initMobileDrawers();
+      this._applySnap('full');
     }
 
     // Reset form
@@ -271,56 +267,14 @@ const UI = {
     }
   },
 
-  _bindAddModalSnap(modal) {
-    const handle = modal.querySelector('.modal-handle');
-    if (!handle || handle.dataset.snapInit) return;
-    handle.dataset.snapInit = '1';
-    let startY = 0, startTy = 0, dragging = false, currTy = 0;
-    const vh = () => window.innerHeight;
-    const anchor = snap => snap === 'half' ? vh() * 0.9 - vh() * 0.55 : 0;
-    const closest = ty => Math.abs(ty - anchor('full')) < Math.abs(ty - anchor('half')) ? 'full' : 'half';
-
-    const onStart = e => {
-      startY = e.touches ? e.touches[0].clientY : e.clientY;
-      const snap = modal.getAttribute('data-snap') || 'full';
-      startTy = anchor(snap);
-      currTy = startTy;
-      dragging = true;
-      modal.style.transition = 'none';
-    };
-    const onMove = e => {
-      if (!dragging) return;
-      const y = e.touches ? e.touches[0].clientY : e.clientY;
-      const dy = y - startY;
-      currTy = Math.max(0, Math.min(vh() * 0.9 - 100, startTy + dy));
-      modal.style.transform = `translateY(${currTy}px)`;
-      if (e.cancelable && e.type === 'touchmove') e.preventDefault();
-    };
-    const onEnd = () => {
-      if (!dragging) return;
-      dragging = false;
-      modal.style.transition = '';
-      modal.style.transform = '';
-      modal.setAttribute('data-snap', closest(currTy));
-    };
-
-    handle.addEventListener('touchstart', onStart, { passive: true });
-    handle.addEventListener('touchmove', onMove, { passive: false });
-    handle.addEventListener('touchend', onEnd);
-    handle.addEventListener('touchcancel', onEnd);
-    handle.addEventListener('mousedown', e => {
-      onStart(e);
-      const mm = ev => onMove(ev);
-      const mu = () => { onEnd(); document.removeEventListener('mousemove', mm); document.removeEventListener('mouseup', mu); };
-      document.addEventListener('mousemove', mm);
-      document.addEventListener('mouseup', mu);
-    });
-  },
-  
   closeAddModal() {
     this.closeModal('modal-add-location');
     document.body.classList.remove('add-location-drawer-open');
     MapModule.hideDragPin();
+    // Restore default drawer snap
+    if (window.matchMedia('(max-width: 767px)').matches) {
+      this._applySnap('half');
+    }
   },
   
   openDeleteConfirm(id, name) {
@@ -433,7 +387,7 @@ const UI = {
   // between three positions: peek, half, full.
   // ═══════════════════════════════════════════════════════════════════════════
 
-  _drawerIds: ['locations-panel', 'trips-list-panel', 'location-detail-panel', 'explore-backup-panel', 'explore-left-drawer'],
+  _drawerIds: ['locations-panel', 'trips-list-panel', 'location-detail-panel', 'explore-backup-panel', 'explore-left-drawer', 'modal-add-location'],
 
   _applySnap(snap) {
     document.body.setAttribute('data-drawer-snap', snap);
@@ -456,7 +410,10 @@ const UI = {
         this._bindDrawerDrag(panel, grabber);
       }
     });
-    this._applySnap('half');
+    // Only apply default snap if not already set (e.g. edit modal is closed)
+    if (!document.body.getAttribute('data-drawer-snap')) {
+      this._applySnap('half');
+    }
   },
 
   // Drawer is positioned fixed at bottom with height 92vh. We use translateY on
