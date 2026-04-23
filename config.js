@@ -15,7 +15,7 @@ const CONFIG = {
   // Used as a 3rd-tier fallback when Photon + Nominatim (OSM) return sparse results.
   // Get yours at: https://account.mapbox.com/access-tokens/ (free, 100k requests/month)
   // Public tokens start with "pk."
-  MAPBOX_TOKEN: 'YOUR_MAPBOX_PUBLIC_TOKEN',
+  MAPBOX_TOKEN: 'pk.eyJ1IjoiamxkdWdnaW5zIiwiYSI6ImNtb2J1ZXM1aDA1YWwycXE0cmJ0ejdlbmEifQ.do9zKp0590jvkb3tEy7X0g',
 
   // Anthropic API Key - for AI suggestions
   // Get yours at: https://console.anthropic.com/
