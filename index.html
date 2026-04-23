@@ -417,6 +417,26 @@
         <input type="number" id="f-cost" class="input" placeholder="0 for free">
       </div>
       <div class="form-group">
+        <label class="input-label">🏷️ Discount</label>
+        <select id="f-discount-type" class="input" onchange="Entries.toggleDiscountPercent()">
+          <option value="">None</option>
+          <option value="AAA">AAA</option>
+          <option value="Veteran">Veteran</option>
+          <option value="Access Pass">Access Pass</option>
+          <option value="Good Sam">Good Sam</option>
+          <option value="Senior">Senior</option>
+          <option value="Disability">Disability</option>
+          <option value="Other">Other</option>
+        </select>
+      </div>
+      <div class="form-group" id="f-discount-percent-wrap" style="display:none">
+        <label class="input-label">Discount %</label>
+        <div style="display:flex;align-items:center;gap:0">
+          <input type="number" min="0" max="100" step="1" id="f-discount-percent" class="input" placeholder="10" style="border-radius:var(--radius-md) 0 0 var(--radius-md);flex:1">
+          <span style="background:var(--color-surface-alt);padding:10px 14px;border-radius:0 var(--radius-md) var(--radius-md) 0;font-size:14px;color:var(--color-text);border:1px solid var(--color-border);border-left:none">%</span>
+        </div>
+      </div>
+      <div class="form-group">
         <label class="input-label">Rating</label>
         <div class="star-rating">
           <span class="star" data-value="1">★</span><span class="star" data-value="2">★</span>
@@ -425,8 +445,12 @@
         </div>
       </div>
       <div class="form-group">
-        <label class="input-label">Amenities & Tags</label>
-        <div class="toggle-chips" id="f-amenities"></div>
+        <label class="input-label">Amenities</label>
+        <div class="toggle-chips" id="f-amenities-group"></div>
+      </div>
+      <div class="form-group">
+        <label class="input-label">Tags</label>
+        <div class="toggle-chips" id="f-tags-group"></div>
       </div>
       <div class="form-group">
         <label class="input-label">Notes</label>
@@ -448,8 +472,8 @@
     </div>
   </div>
 
-  <!-- Delete confirm -->
-<div id="modal-delete-confirm" class="modal modal-center">
+  <!-- Delete Confirm -->
+  <div id="modal-delete-confirm" class="modal modal-center">
     <div class="modal-header"><h2 class="modal-title">Delete Location?</h2></div>
     <div class="modal-body"><p>Are you sure you want to delete <strong id="delete-location-name"></strong>? This cannot be undone.</p></div>
     <div class="modal-footer">
