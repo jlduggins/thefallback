@@ -1945,46 +1945,28 @@ body.add-location-drawer-open .map-popup-edit-btn,
 body.add-location-drawer-open .leaflet-popup,
 body.add-location-drawer-open .leaflet-popup-pane { display: none !important; }
 
-/* Mobile: Edit Location modal is resizable between two snap heights so user
-   can see the map underneath to drag the pin */
+/* Mobile: Edit Location uses unified drawer system (see layout.css).
+   Hide other drawers while Edit Location is open so they don't stack. */
 @media (max-width: 767px) {
+  body.add-location-drawer-open #locations-panel,
+  body.add-location-drawer-open #location-detail-panel,
+  body.add-location-drawer-open #trips-list-panel,
+  body.add-location-drawer-open #explore-backup-panel,
+  body.add-location-drawer-open .explore-left {
+    display: none !important;
+  }
+  /* Strip old modal-sheet sizing for the edit modal — layout.css unified
+     drawer rules drive positioning and height. */
   #modal-add-location.modal-sheet {
-    height: 90vh;
-    max-height: 90vh;
-    transform: translateY(100%);
-    transition: transform 300ms ease-out;
-    pointer-events: auto;
-    z-index: var(--z-modal);
+    max-height: none;
+    background: var(--color-surface);
   }
-  #modal-add-location.modal-sheet.visible {
-    transform: translateY(0);
-  }
-  #modal-add-location.modal-sheet.visible[data-snap="half"] {
-    transform: translateY(calc(90vh - 55vh));
-  }
-  /* The handle is the drag target — must be tall/wide enough and override base .modal-handle rule */
-  #modal-add-location .modal-handle {
-    width: 100% !important;
-    height: auto !important;
-    padding: 14px 0 !important;
-    margin: 0 !important;
-    background: transparent !important;
-    border-radius: 0 !important;
-    cursor: grab;
-    touch-action: none;
-    display: flex !important;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    position: relative;
-    z-index: 5;
-  }
-  #modal-add-location .modal-handle::before {
-    content: '';
-    width: 40px;
-    height: 4px;
-    background: var(--color-border);
-    border-radius: 2px;
-    display: block;
+  /* Hide the default 4px pill div — the drawer-grabber inserted by JS is the
+     real control. */
+  #modal-add-location > .modal-handle:not(.drawer-grabber) { display: none; }
+  #modal-add-location .modal-body {
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
 }
