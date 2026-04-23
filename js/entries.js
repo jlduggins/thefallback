@@ -245,16 +245,35 @@ const Entries = {
   },
   
   initForm() {
-    // Render amenity chips from AMENITY_META (uses v1 SVG icons for custom ones)
-    const ac = document.getElementById('f-amenities');
-    if (ac) {
-      ac.innerHTML = State.AMENITY_META.map(a => `
+    // Render amenity & tag chips into two separate groups (v1 layout)
+    const buildChip = (a) => `
         <label class="toggle-chip" data-amenity="${a.id}">
           <input type="checkbox" name="${a.id}">
           <span class="tc-icon">${a.icon}</span>
           <span class="tc-label">${a.label}</span>
         </label>
-      `).join('');
+      `;
+    const amGroup = document.getElementById('f-amenities-group');
+    if (amGroup) {
+      amGroup.innerHTML = State.AMENITY_META.filter(a => a.group === 'amenity').map(buildChip).join('');
+    }
+    const tagGroup = document.getElementById('f-tags-group');
+    if (tagGroup) {
+      tagGroup.innerHTML = State.AMENITY_META.filter(a => a.group === 'tag').map(buildChip).join('');
+    }
+
+    // Bind chip click -> toggle active class (input is display:none so label click is the signal)
+    const modal = document.getElementById('modal-add-location');
+    if (modal && !modal._chipHandlerBound) {
+      modal.addEventListener('click', (e) => {
+        const chip = e.target.closest('.toggle-chip');
+        if (!chip || !modal.contains(chip)) return;
+        e.preventDefault();
+        const active = chip.classList.toggle('active');
+        const cb = chip.querySelector('input[type="checkbox"]');
+        if (cb) cb.checked = active;
+      });
+      modal._chipHandlerBound = true;
     }
 
     // Star rating
@@ -264,6 +283,17 @@ const Entries = {
         this.updateStars();
       });
     });
+  },
+
+  toggleDiscountPercent() {
+    const type = document.getElementById('f-discount-type');
+    const wrap = document.getElementById('f-discount-percent-wrap');
+    if (!type || !wrap) return;
+    wrap.style.display = type.value ? '' : 'none';
+    if (!type.value) {
+      const pct = document.getElementById('f-discount-percent');
+      if (pct) pct.value = '';
+    }
   },
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -743,7 +773,17 @@ const Entries = {
           <span class="detail-value">${entry.lat?.toFixed(5)}, ${entry.lng?.toFixed(5)}</span>
         </div>
       </div>
-      
+
+      ${entry.discountType && entry.discountPercent ? `
+        <div style="background:rgba(184,85,211,0.08);border-radius:var(--radius-md);padding:12px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-size:10px;color:#8B3BA8">Discount</div>
+            <div style="font-size:14px;font-weight:600;color:#8B3BA8">${this.escapeHtml(entry.discountType)}</div>
+          </div>
+          <div style="font-size:18px;font-weight:700;color:#8B3BA8">${entry.discountPercent}% off</div>
+        </div>
+      ` : ''}
+
       ${amenities ? `
         <div class="detail-section">
           <div class="detail-label">Amenities & Tags</div>
@@ -795,7 +835,12 @@ const Entries = {
     form.querySelector('#f-cost').value = '';
     form.querySelector('#f-notes').value = '';
     form.querySelector('#f-link').value = '';
-    
+    const dt = form.querySelector('#f-discount-type');
+    const dp = form.querySelector('#f-discount-percent');
+    if (dt) dt.value = '';
+    if (dp) dp.value = '';
+    this.toggleDiscountPercent();
+
     // Reset amenities
     form.querySelectorAll('.toggle-chip').forEach(chip => {
       chip.classList.remove('active');
@@ -835,7 +880,12 @@ const Entries = {
     form.querySelector('#f-cost').value = entry.cost || '';
     form.querySelector('#f-notes').value = entry.notes || '';
     form.querySelector('#f-link').value = entry.link || '';
-    
+    const dtEl = form.querySelector('#f-discount-type');
+    const dpEl = form.querySelector('#f-discount-percent');
+    if (dtEl) dtEl.value = entry.discountType || '';
+    if (dpEl) dpEl.value = entry.discountPercent != null ? entry.discountPercent : '';
+    this.toggleDiscountPercent();
+
     // Set amenities
     State.AMENITY_META.forEach(am => {
       const chip = form.querySelector(`[data-amenity="${am.id}"]`);
@@ -929,6 +979,8 @@ const Entries = {
     }
     
     // Build entry object
+    const dtVal = form.querySelector('#f-discount-type')?.value || '';
+    const dpRaw = form.querySelector('#f-discount-percent')?.value;
     const entry = {
       id: State.editingEntryId || undefined,
       name,
@@ -941,6 +993,8 @@ const Entries = {
       rating: State.currentRating,
       notes: form.querySelector('#f-notes').value.trim(),
       link: form.querySelector('#f-link').value.trim(),
+      discountType: dtVal || null,
+      discountPercent: (dpRaw === '' || dpRaw == null) ? null : parseInt(dpRaw, 10),
       photos: this.pendingPhotos.map(p => p.data || p)
     };
     
