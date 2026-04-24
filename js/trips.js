@@ -502,7 +502,7 @@ const Trips = {
           <div class="detail-cost-card accent"><div class="detail-cost-label">Est. Total</div><div class="detail-cost-value">$${Math.round(totalFuel+totalLodging)}</div></div>
         </div>
       </div>
-      <div style="flex:1;overflow-y:auto">
+      <div style="flex:1;overflow-y:auto;min-height:0;-webkit-overflow-scrolling:touch">
         <div class="itin-section-title">Itinerary</div>
         ${legs.length>0&&legs[0].fromName?`
           <div class="leg-stop">
@@ -548,6 +548,8 @@ const Trips = {
             </div>
           </div>`;
         }).join('')}
+      </div>
+      <div class="detail-panel-footer">
         <button class="add-stop-btn" onclick="Trips.openAddLegModal('${journey.id}')">+ Add next destination</button>
       </div>`;
 
