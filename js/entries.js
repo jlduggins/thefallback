@@ -676,28 +676,30 @@ const Entries = {
     const radius = (State.fuelSettings && State.fuelSettings.backupRadius) || 30;
     const radiusLabel = document.getElementById('nearby-radius-label');
 
-    // Determine the anchor point for "nearby":
-    //  - If the user is on a current journey, anchor to the next destination
-    //    (or current destination if they've arrived at the final stop)
-    //  - Otherwise, anchor to the user's GPS location
+    // Determine the anchor point for "nearby" — align with the
+    // "Currently at / En route to" display:
+    //   - Currently at a stop (dest or start) → anchor to that stop
+    //   - En route                             → anchor to the next destination
+    //   - No journey                           → anchor to the user's GPS location
+    //
+    // Reads directly from State.getJourneyContext() — the SAME helper that
+    // powers Trips.renderTripStatus(). This guarantees the "Nearby Spots"
+    // anchor label matches the "Currently at" / "En route to" label shown
+    // in the trip status card above.
     let anchorLat = null, anchorLng = null, anchorLabel = null;
-    const ctx = this.computeReplacementContext ? this.computeReplacementContext() : null;
-    if (ctx && ctx.journey && ctx.legs.length > 0) {
-      // Prefer the next leg's destination (upcoming stop)
-      if (ctx.nextLegIndex >= 0 && ctx.nextLegIndex < ctx.legs.length) {
-        const nl = ctx.legs[ctx.nextLegIndex];
-        const ne = State.getEntry(nl.destId);
-        anchorLat = nl.destLat || ne?.lat;
-        anchorLng = nl.destLng || ne?.lng;
-        anchorLabel = nl.destName || ne?.name;
-      }
-      // If there's no next leg (final destination) but user is currently at a stop, anchor there
-      else if (ctx.currentLegIndex >= 0 && ctx.currentLegRole === 'dest') {
-        const cl = ctx.legs[ctx.currentLegIndex];
-        const ce = State.getEntry(cl.destId);
-        anchorLat = cl.destLat || ce?.lat;
-        anchorLng = cl.destLng || ce?.lng;
-        anchorLabel = cl.destName || ce?.name;
+    const journey = State.currentJourneyId ? State.getJourney(State.currentJourneyId) : null;
+    const jctx = State.getJourneyContext(journey);
+    if (jctx.journey && jctx.legs.length > 0) {
+      if (jctx.currentLocationId != null || jctx.currentLocationLat != null) {
+        // Physically at a stop (either a destination or the journey's starting point)
+        anchorLat = jctx.currentLocationLat;
+        anchorLng = jctx.currentLocationLng;
+        anchorLabel = jctx.currentLocationName;
+      } else if (jctx.nextLegIndex >= 0 && jctx.nextLocationLat != null) {
+        // En route — anchor to the upcoming stop
+        anchorLat = jctx.nextLocationLat;
+        anchorLng = jctx.nextLocationLng;
+        anchorLabel = jctx.nextLocationName;
       }
     }
     // Fallback to GPS
@@ -716,13 +718,10 @@ const Entries = {
     let entries = [];
     if (anchorLat != null && anchorLng != null) {
       entries = State.getNearbyEntries(anchorLat, anchorLng, radius);
-      // Exclude the anchor entry itself from the list (it's the destination, not a backup)
-      const ctxDestId = ctx?.journey && ctx.nextLegIndex >= 0 && ctx.nextLegIndex < ctx.legs.length
-        ? ctx.legs[ctx.nextLegIndex].destId
-        : (ctx?.journey && ctx.currentLegIndex >= 0 && ctx.currentLegRole === 'dest'
-            ? ctx.legs[ctx.currentLegIndex].destId
-            : null);
-      if (ctxDestId) entries = entries.filter(e => e.id !== ctxDestId);
+      // Exclude the anchor entry itself (the stop we're at OR heading to) —
+      // it's not a "backup", it's the actual destination.
+      const anchorEntryId = jctx.currentLocationId || jctx.nextLocationId || null;
+      if (anchorEntryId) entries = entries.filter(e => e.id !== anchorEntryId);
     }
     entries = entries.slice(0, 20);
 
@@ -1373,79 +1372,21 @@ const Entries = {
    * Returns { journey, legs, currentLegIndex, currentLegRole, nextLegIndex }
    * where currentLegRole is 'dest' (at a leg's destination) or 'start' (at the
    * starting point of the journey), and -1 means "not applicable".
+   *
+   * Thin wrapper over State.getJourneyContext() — the shared helper used by
+   * Trips.renderTripStatus() as well, so the "Currently at" display and the
+   * "Nearby Spots" anchor always agree.
    */
   computeReplacementContext() {
     const journey = State.currentJourneyId ? State.getJourney(State.currentJourneyId) : null;
-    if (!journey || !Array.isArray(journey.legs) || journey.legs.length === 0) {
-      return { journey: null, legs: [], currentLegIndex: -1, currentLegRole: null, nextLegIndex: -1 };
-    }
-    const legs = journey.legs;
-    const uLat = State.userLat, uLng = State.userLng;
-    const PROX = 2;
-
-    let currentLegIndex = -1;
-    let currentLegRole = null; // 'start' | 'dest' | null
-    let nextLegIndex = -1;
-
-    if (uLat) {
-      let closestDist = Infinity;
-      // Starting point (leg[0].from*)
-      const firstLeg = legs[0];
-      const fromE = firstLeg.fromId ? State.getEntry(firstLeg.fromId) : null;
-      const fromLat = firstLeg.fromLat || fromE?.lat;
-      const fromLng = firstLeg.fromLng || fromE?.lng;
-      if (fromLat) {
-        const d = State.getDistanceMiles(uLat, uLng, fromLat, fromLng);
-        if (d <= PROX) {
-          closestDist = d;
-          currentLegIndex = 0;
-          currentLegRole = 'start';
-          nextLegIndex = 0;
-        }
-      }
-      // Each destination
-      for (let i = 0; i < legs.length; i++) {
-        const l = legs[i];
-        const destE = State.getEntry(l.destId);
-        const destLat = l.destLat || destE?.lat;
-        const destLng = l.destLng || destE?.lng;
-        if (destLat) {
-          const d = State.getDistanceMiles(uLat, uLng, destLat, destLng);
-          if (d <= PROX && d < closestDist) {
-            closestDist = d;
-            currentLegIndex = i;
-            currentLegRole = 'dest';
-            nextLegIndex = i + 1;
-          }
-        }
-      }
-    }
-
-    // If not at any stop, "next" = the first upcoming destination (legs[0] if no GPS)
-    if (currentLegIndex === -1 && legs.length > 0) {
-      if (uLat) {
-        // Walk legs to find the one the user is still traveling toward
-        for (let i = 0; i < legs.length; i++) {
-          const l = legs[i];
-          if (!l.destLat) continue;
-          let originLat, originLng;
-          if (i === 0) { originLat = l.fromLat; originLng = l.fromLng; }
-          else { originLat = legs[i - 1].destLat; originLng = legs[i - 1].destLng; }
-          const distToDest = State.getDistanceMiles(uLat, uLng, l.destLat, l.destLng);
-          if (!originLat) { nextLegIndex = i; break; }
-          const distToOrigin = State.getDistanceMiles(uLat, uLng, originLat, originLng);
-          if (distToDest < distToOrigin || distToOrigin > PROX) { nextLegIndex = i; break; }
-        }
-        if (nextLegIndex === -1) nextLegIndex = legs.length - 1;
-      } else {
-        nextLegIndex = 0;
-      }
-    }
-
-    // Clamp next to valid range
-    if (nextLegIndex >= legs.length) nextLegIndex = -1;
-
-    return { journey, legs, currentLegIndex, currentLegRole, nextLegIndex };
+    const jctx = State.getJourneyContext(journey);
+    return {
+      journey: jctx.journey,
+      legs: jctx.legs,
+      currentLegIndex: jctx.currentLegIndex,
+      currentLegRole: jctx.currentLegRole,
+      nextLegIndex: jctx.nextLegIndex
+    };
   },
 
   renderBackupDetailContent(entry, ctx) {

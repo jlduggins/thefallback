@@ -145,6 +145,150 @@ const State = {
       .filter(e => e.distance <= radiusMiles)
       .sort((a, b) => a.distance - b.distance);
   },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // JOURNEY CONTEXT
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SINGLE SOURCE OF TRUTH for "where is the user relative to the current
+  // journey?". Both the trip-status card ("Currently at / En route to") and
+  // the Explore "Nearby Spots" anchor derive from this function so the two
+  // views can never disagree.
+  //
+  // Returns:
+  //   {
+  //     journey, legs,
+  //     currentLegIndex,    // index of leg whose stop the user is at, or -1
+  //     currentLegRole,     // 'dest' | 'start' | null
+  //     atStartingPoint,    // true iff user is at journey's starting point
+  //     currentLocationId,  // entry id of current stop (or null)
+  //     currentLocationName,
+  //     currentLocationLat, currentLocationLng,
+  //     nextLegIndex,       // index of the upcoming leg, or -1 if none
+  //     nextLocationId, nextLocationName,
+  //     nextLocationLat, nextLocationLng
+  //   }
+  //
+  // Prefers CURRENT entry coords over leg snapshots — if the user later edits
+  // a pin, the leg's snapshot coords go stale and would report a phantom
+  // distance. PROX=3mi is the "currently at" radius (tight enough that two
+  // adjacent stops rarely both qualify; the closest-stop tie-breaker handles
+  // the overlap case).
+  getJourneyContext(journey) {
+    const empty = {
+      journey: null, legs: [],
+      currentLegIndex: -1, currentLegRole: null, atStartingPoint: false,
+      currentLocationId: null, currentLocationName: null,
+      currentLocationLat: null, currentLocationLng: null,
+      nextLegIndex: -1,
+      nextLocationId: null, nextLocationName: null,
+      nextLocationLat: null, nextLocationLng: null
+    };
+    if (!journey || !Array.isArray(journey.legs) || !journey.legs.length) return empty;
+
+    const legs = journey.legs;
+    const uLat = this.userLat, uLng = this.userLng;
+    const PROX = 3;
+
+    let currentLegIndex = -1;
+    let currentLegRole = null;
+    let atStartingPoint = false;
+    let currentLocationId = null;
+    let currentLocationName = null;
+    let currentLocationLat = null;
+    let currentLocationLng = null;
+    let nextLegIndex = -1;
+
+    if (uLat != null && uLng != null) {
+      let closestDist = Infinity;
+
+      // Starting point of leg 0
+      const firstLeg = legs[0];
+      const fromE = firstLeg.fromId ? this.getEntry(firstLeg.fromId) : null;
+      const fromLat = fromE?.lat ?? firstLeg.fromLat;
+      const fromLng = fromE?.lng ?? firstLeg.fromLng;
+      if (fromLat != null && fromLng != null) {
+        const d = this.getDistanceMiles(uLat, uLng, fromLat, fromLng);
+        if (d <= PROX) {
+          closestDist = d;
+          atStartingPoint = true;
+          currentLegIndex = 0;
+          currentLegRole = 'start';
+          currentLocationId = firstLeg.fromId || null;
+          currentLocationName = firstLeg.fromName || fromE?.name || null;
+          currentLocationLat = fromLat;
+          currentLocationLng = fromLng;
+          nextLegIndex = 0;
+        }
+      }
+
+      // Each destination — tie-breaker picks the CLOSER stop
+      for (let i = 0; i < legs.length; i++) {
+        const l = legs[i];
+        const destE = this.getEntry(l.destId);
+        const destLat = destE?.lat ?? l.destLat;
+        const destLng = destE?.lng ?? l.destLng;
+        if (destLat == null || destLng == null) continue;
+        const d = this.getDistanceMiles(uLat, uLng, destLat, destLng);
+        if (d <= PROX && d < closestDist) {
+          closestDist = d;
+          atStartingPoint = false;
+          currentLegIndex = i;
+          currentLegRole = 'dest';
+          currentLocationId = l.destId;
+          currentLocationName = l.destName || destE?.name || null;
+          currentLocationLat = destLat;
+          currentLocationLng = destLng;
+          nextLegIndex = i + 1;
+        }
+      }
+    }
+
+    // Fallback: if not at any stop, "next" = destination whose coords are
+    // closest to the user. If we have no GPS, default to leg 0.
+    if (currentLegIndex === -1) {
+      if (uLat != null && uLng != null) {
+        let closestDist = Infinity;
+        let closestIdx = -1;
+        for (let i = 0; i < legs.length; i++) {
+          const l = legs[i];
+          const destE = this.getEntry(l.destId);
+          const destLat = destE?.lat ?? l.destLat;
+          const destLng = destE?.lng ?? l.destLng;
+          if (destLat == null) continue;
+          const d = this.getDistanceMiles(uLat, uLng, destLat, destLng);
+          if (d < closestDist) { closestDist = d; closestIdx = i; }
+        }
+        nextLegIndex = closestIdx >= 0 ? closestIdx : 0;
+      } else {
+        nextLegIndex = 0;
+      }
+    }
+
+    // Clamp next to valid range
+    if (nextLegIndex >= legs.length) nextLegIndex = -1;
+
+    // Resolve next-destination fields
+    let nextLocationId = null, nextLocationName = null;
+    let nextLocationLat = null, nextLocationLng = null;
+    if (nextLegIndex >= 0 && nextLegIndex < legs.length) {
+      const nl = legs[nextLegIndex];
+      const ne = this.getEntry(nl.destId);
+      nextLocationId = nl.destId;
+      nextLocationName = nl.destName || ne?.name || null;
+      nextLocationLat = ne?.lat ?? nl.destLat;
+      nextLocationLng = ne?.lng ?? nl.destLng;
+    }
+
+    return {
+      journey, legs,
+      currentLegIndex, currentLegRole, atStartingPoint,
+      currentLocationId, currentLocationName,
+      currentLocationLat, currentLocationLng,
+      nextLegIndex,
+      nextLocationId, nextLocationName,
+      nextLocationLat, nextLocationLng
+    };
+  },
   
   // ═══════════════════════════════════════════════════════════════════════════
   // JOURNEYS

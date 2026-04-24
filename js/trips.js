@@ -125,58 +125,15 @@ const Trips = {
       return;
     }
 
-    // PROX = miles radius that counts as "currently at" a stop. 3 miles
-    // accommodates typical GPS jitter and small pin-vs-campsite offsets
-    // while staying tight enough to not conflate adjacent stops. The
-    // closest-stop tie-breaker below prevents two stops from both qualifying.
-    const uLat = State.userLat, uLng = State.userLng, PROX = 3;
-
-    // Determine "currently at" and next leg index (v1 logic)
-    let currentLocationName = null;
-    let currentLocationId = null;
-    let nextLegIndex = -1;
-    let atStartingPoint = false;
-
-    if (uLat && legs.length > 0) {
-      let closestDist = Infinity;
-      // Starting point
-      const firstLeg = legs[0];
-      const fromE = firstLeg.fromId ? State.getEntry(firstLeg.fromId) : null;
-      // Prefer current entry coords over leg snapshot.
-      const fromLat = fromE?.lat ?? firstLeg.fromLat;
-      const fromLng = fromE?.lng ?? firstLeg.fromLng;
-      if (fromLat) {
-        const d = this.haversine(uLat, uLng, fromLat, fromLng);
-        if (d <= PROX) {
-          closestDist = d;
-          atStartingPoint = true;
-          currentLocationName = firstLeg.fromName;
-          currentLocationId = firstLeg.fromId;
-          nextLegIndex = 0;
-        }
-      }
-      // Each destination — prefer CURRENT entry coords over the leg's
-      // snapshot. Leg coords are captured when the journey is planned; if a
-      // user later edits the entry's pin, the leg snapshot goes stale and the
-      // haversine reports a phantom distance (e.g. "7 mi remaining" while
-      // physically on-site).
-      for (let i = 0; i < legs.length; i++) {
-        const l = legs[i];
-        const destE = State.getEntry(l.destId);
-        const destLat = destE?.lat ?? l.destLat;
-        const destLng = destE?.lng ?? l.destLng;
-        if (destLat != null) {
-          const d = this.haversine(uLat, uLng, destLat, destLng);
-          if (d <= PROX && d < closestDist) {
-            closestDist = d;
-            atStartingPoint = false;
-            currentLocationName = l.destName;
-            currentLocationId = l.destId;
-            nextLegIndex = i + 1;
-          }
-        }
-      }
-    }
+    // Single source of truth for "currently at / en route" — shared with
+    // the Explore "Nearby Spots" anchor (Entries.renderExploreNearby) so the
+    // two views never disagree about which stop the user is at.
+    // See State.getJourneyContext() for the detection rules (PROX=3mi, etc).
+    const jctx = State.getJourneyContext(journey);
+    const currentLocationName = jctx.currentLocationName;
+    const currentLocationId = jctx.currentLocationId;
+    const atStartingPoint = jctx.atStartingPoint;
+    let nextLegIndex = jctx.nextLegIndex;
 
     // Determine next destination (either after current location, or first upcoming)
     let nextDest = null, distanceToNext = null, timeToNext = null, nextEntry = null;
@@ -187,40 +144,17 @@ const Trips = {
       distanceToNext = nextLeg.distance;
       timeToNext = nextLeg.duration;
       nextEntry = State.getEntry(nextLeg.destId);
-    } else if (!currentLocationName && legs.length > 0) {
-      // User is en route, not at any location — pick the destination whose
-      // saved coords are CLOSEST to the user's current location. This handles
-      // the "parked at a stop but 2–10 mi from its saved coords" case where
-      // the primary proximity check (PROX=2) misses it, and avoids the old
-      // bug where the loop always picked leg #0 because distToOrigin from
-      // the user to the starting point is always > PROX.
-      let nextIdx = -1;
-      if (uLat) {
-        let closestDist = Infinity;
-        for (let i = 0; i < legs.length; i++) {
-          const l = legs[i];
-          const destE = State.getEntry(l.destId);
-          // Prefer current entry coords over leg snapshot (see note above).
-          const destLat = destE?.lat ?? l.destLat;
-          const destLng = destE?.lng ?? l.destLng;
-          if (destLat == null) continue;
-          const d = this.haversine(uLat, uLng, destLat, destLng);
-          if (d < closestDist) {
-            closestDist = d;
-            nextIdx = i;
-          }
-        }
-        if (nextIdx >= 0) {
-          distanceToNext = Math.round(closestDist);
-          timeToNext = Math.round((closestDist / 45) * 60);
-        }
-      } else {
-        nextIdx = 0;
-      }
-      if (nextIdx >= 0 && nextIdx < legs.length) {
-        nextDest = legs[nextIdx]?.destName;
-        nextEntry = State.getEntry(legs[nextIdx]?.destId);
-        nextLegIndex = nextIdx;
+
+      // If user is NOT at any stop, override the planned leg distance with a
+      // live straight-line estimate from the user's GPS. Leg distances are
+      // planned from the *previous* stop, not from wherever the user is now.
+      if (!currentLocationName && State.userLat != null && jctx.nextLocationLat != null) {
+        const d = State.getDistanceMiles(
+          State.userLat, State.userLng,
+          jctx.nextLocationLat, jctx.nextLocationLng
+        );
+        distanceToNext = Math.round(d);
+        timeToNext = Math.round((d / 45) * 60);
       }
     }
 
