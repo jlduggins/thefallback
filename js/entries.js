@@ -752,6 +752,23 @@ const Entries = {
       return;
     }
 
+    // Drop entries whose CACHED driving distance exceeds the radius, before
+    // rendering. Entries without cached driving data yet still pass through
+    // (they'll be re-checked when the matrix call returns).
+    entries = entries.filter(e => !(e._approx === false && e.distance > radius));
+
+    if (entries.length === 0) {
+      container.innerHTML = `
+        <div class="empty-state" style="padding: 24px; text-align: center;">
+          <div style="font-size: 24px; margin-bottom: 8px;">📍</div>
+          <div style="font-size: 14px; color: var(--color-text-muted);">
+            ${anchorLat != null ? `No spots within ${radius} miles` : 'Enable location to see nearby spots'}
+          </div>
+        </div>
+      `;
+      return;
+    }
+
     container.innerHTML = entries.map(entry => this.renderNearbyCard(entry)).join('');
 
     container.querySelectorAll('.nearby-card').forEach(card => {
@@ -771,15 +788,23 @@ const Entries = {
     });
 
     // Fetch real driving distances for any cards still showing haversine
-    // estimates. Updates cards in place when the matrix call returns.
-    this._refreshNearbyDrivingDistances(entries, anchorLat, anchorLng);
+    // estimates. Updates cards in place when the matrix call returns, and
+    // drops any whose driving distance turns out to exceed the radius
+    // (haversine is always ≤ driving, so the initial list can include
+    // false positives like a campground with windy mountain roads).
+    this._refreshNearbyDrivingDistances(entries, anchorLat, anchorLng, radius);
   },
 
   // Async: fetch driving distances from ORS Matrix for entries that don't yet
   // have a cached result, then update their cards' distance text in place.
   // Keyed by (anchorLat, anchorLng) so switching stops refetches; repeat
   // renders for the same stop hit the cache and skip the network.
-  async _refreshNearbyDrivingDistances(entries, anchorLat, anchorLng) {
+  //
+  // Also enforces the radius using DRIVING distance: any card whose true
+  // driving distance exceeds `radius` is removed from the DOM (haversine
+  // would have let it through). If the list becomes empty after pruning,
+  // shows the empty state.
+  async _refreshNearbyDrivingDistances(entries, anchorLat, anchorLng, radius) {
     if (!window.Trips?.getRouteMatrix) return;
     if (anchorLat == null || anchorLng == null) return;
     const cacheKey = `${anchorLat.toFixed(4)},${anchorLng.toFixed(4)}`;
@@ -788,35 +813,50 @@ const Entries = {
     const need = entries
       .filter(e => !bucket[e.id] && e.lat != null && e.lng != null)
       .map(e => ({ id: e.id, lat: e.lat, lng: e.lng }));
-    if (!need.length) return;
 
     // Guard against concurrent renders for the same anchor — if one fetch
     // is already in-flight, the second call would duplicate work.
     const inflight = (this._drivingDistInflight ||= {});
-    if (inflight[cacheKey]) return;
-    inflight[cacheKey] = true;
-    try {
-      const results = await Trips.getRouteMatrix(anchorLat, anchorLng, need);
-      results.forEach((r, id) => {
-        bucket[id] = { distance: r.distance, duration: r.duration, approx: !!r.approx };
-      });
-    } finally {
-      delete inflight[cacheKey];
+    if (need.length && !inflight[cacheKey]) {
+      inflight[cacheKey] = true;
+      try {
+        const results = await Trips.getRouteMatrix(anchorLat, anchorLng, need);
+        results.forEach((r, id) => {
+          bucket[id] = { distance: r.distance, duration: r.duration, approx: !!r.approx };
+        });
+      } finally {
+        delete inflight[cacheKey];
+      }
     }
 
-    // Update the cards in place (don't full-rerender — scroll position / any
-    // open details panel would jump).
+    // Reconcile DOM: update text for in-radius cards, remove out-of-radius.
     const container = document.getElementById('nearby-list');
     if (!container) return;
-    need.forEach(d => {
-      const cached = bucket[d.id];
-      if (!cached) return;
-      const card = container.querySelector(`.nearby-card[data-id="${d.id}"]`);
+    let kept = 0;
+    entries.forEach(e => {
+      const card = container.querySelector(`.nearby-card[data-id="${e.id}"]`);
       if (!card) return;
+      const cached = bucket[e.id];
+      if (!cached) { kept++; return; }
+      if (cached.distance > radius) {
+        card.remove();
+        return;
+      }
       const meta = card.querySelector('.nearby-card-meta');
-      if (!meta) return;
-      meta.textContent = State.formatDistance(cached.distance) + ' away';
+      if (meta) meta.textContent = State.formatDistance(cached.distance) + ' away';
+      kept++;
     });
+
+    if (kept === 0) {
+      container.innerHTML = `
+        <div class="empty-state" style="padding: 24px; text-align: center;">
+          <div style="font-size: 24px; margin-bottom: 8px;">📍</div>
+          <div style="font-size: 14px; color: var(--color-text-muted);">
+            No spots within ${radius} miles
+          </div>
+        </div>
+      `;
+    }
   },
 
   renderNearbyCard(entry) {
