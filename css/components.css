@@ -1955,6 +1955,9 @@ body.add-location-drawer-open .leaflet-popup-pane { display: none !important; }
   body.add-location-drawer-open .explore-left {
     display: none !important;
   }
+  /* Hide the bottom nav while editing so it doesn't cover the Save Location
+     footer (nav z-index 300 > drawer z-index 40). User exits via the modal X. */
+  body.add-location-drawer-open #bottom-nav { display: none !important; }
   /* Strip old modal-sheet sizing for the edit modal — layout.css unified
      drawer rules drive positioning and height. */
   #modal-add-location.modal-sheet {
@@ -1968,5 +1971,14 @@ body.add-location-drawer-open .leaflet-popup-pane { display: none !important; }
     flex: 1;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
+  }
+  /* Pin the footer inside the drawer so Save Location stays visible at
+     every snap and above the safe-area inset. */
+  #modal-add-location .modal-footer {
+    flex-shrink: 0;
+    padding: var(--space-4);
+    padding-bottom: calc(var(--space-4) + var(--safe-bottom));
+    background: var(--color-surface);
+    border-top: 0.5px solid var(--color-border);
   }
 }
