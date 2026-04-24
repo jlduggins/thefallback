@@ -548,6 +548,7 @@
     flex-direction: column !important;
     position: relative;
     background: transparent !important;
+    pointer-events: none; /* Pass touches to the global map below; drawer re-enables */
   }
   /* Convert .explore-left into a mobile drawer over the global map */
   .explore-left {
