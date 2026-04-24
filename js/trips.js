@@ -143,8 +143,9 @@ const Trips = {
       // Starting point
       const firstLeg = legs[0];
       const fromE = firstLeg.fromId ? State.getEntry(firstLeg.fromId) : null;
-      const fromLat = firstLeg.fromLat || fromE?.lat;
-      const fromLng = firstLeg.fromLng || fromE?.lng;
+      // Prefer current entry coords over leg snapshot.
+      const fromLat = fromE?.lat ?? firstLeg.fromLat;
+      const fromLng = fromE?.lng ?? firstLeg.fromLng;
       if (fromLat) {
         const d = this.haversine(uLat, uLng, fromLat, fromLng);
         if (d <= PROX) {
@@ -155,13 +156,17 @@ const Trips = {
           nextLegIndex = 0;
         }
       }
-      // Each destination — fall back to entry coords if leg coords missing
+      // Each destination — prefer CURRENT entry coords over the leg's
+      // snapshot. Leg coords are captured when the journey is planned; if a
+      // user later edits the entry's pin, the leg snapshot goes stale and the
+      // haversine reports a phantom distance (e.g. "7 mi remaining" while
+      // physically on-site).
       for (let i = 0; i < legs.length; i++) {
         const l = legs[i];
         const destE = State.getEntry(l.destId);
-        const destLat = l.destLat || destE?.lat;
-        const destLng = l.destLng || destE?.lng;
-        if (destLat) {
+        const destLat = destE?.lat ?? l.destLat;
+        const destLng = destE?.lng ?? l.destLng;
+        if (destLat != null) {
           const d = this.haversine(uLat, uLng, destLat, destLng);
           if (d <= PROX && d < closestDist) {
             closestDist = d;
@@ -196,9 +201,10 @@ const Trips = {
         for (let i = 0; i < legs.length; i++) {
           const l = legs[i];
           const destE = State.getEntry(l.destId);
-          const destLat = l.destLat || destE?.lat;
-          const destLng = l.destLng || destE?.lng;
-          if (!destLat) continue;
+          // Prefer current entry coords over leg snapshot (see note above).
+          const destLat = destE?.lat ?? l.destLat;
+          const destLng = destE?.lng ?? l.destLng;
+          if (destLat == null) continue;
           const d = this.haversine(uLat, uLng, destLat, destLng);
           if (d < closestDist) {
             closestDist = d;
