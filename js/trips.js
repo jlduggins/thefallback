@@ -125,12 +125,11 @@ const Trips = {
       return;
     }
 
-    // PROX = miles radius that counts as "currently at" a stop. Bumped from 2
-    // to 5 so GPS jitter and pin-vs-campsite offsets (common for resorts/parks
-    // whose saved coords are the office, not where the user is parked) don't
-    // miss the match. The closest-stop tie-breaker below prevents adjacent
-    // stops from both qualifying.
-    const uLat = State.userLat, uLng = State.userLng, PROX = 5;
+    // PROX = miles radius that counts as "currently at" a stop. 3 miles
+    // accommodates typical GPS jitter and small pin-vs-campsite offsets
+    // while staying tight enough to not conflate adjacent stops. The
+    // closest-stop tie-breaker below prevents two stops from both qualifying.
+    const uLat = State.userLat, uLng = State.userLng, PROX = 3;
 
     // Determine "currently at" and next leg index (v1 logic)
     let currentLocationName = null;
