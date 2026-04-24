@@ -1791,5 +1791,16 @@ body[data-view="login"] .map-layers-panel { display: none !important; }
   body[data-view="login"] .map-controls-global {
     display: none !important;
   }
+
+  /* Drawer pinned footers (Location Detail "Edit destination / Edit location
+     details", Journey Detail "+ Add next destination") sit at bottom: 0 of
+     the drawer, but #bottom-nav is fixed at viewport bottom with z-index 300
+     and covers ~72px. Push footer content up by the nav height so the
+     buttons are visible above the nav. */
+  #location-detail-panel .side-panel-footer,
+  #explore-backup-panel .side-panel-footer,
+  #trips-panel-content .detail-panel-footer {
+    padding-bottom: calc(var(--space-3) + var(--nav-height-mobile));
+  }
 }
 }
