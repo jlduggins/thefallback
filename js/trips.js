@@ -179,39 +179,30 @@ const Trips = {
       timeToNext = nextLeg.duration;
       nextEntry = State.getEntry(nextLeg.destId);
     } else if (!currentLocationName && legs.length > 0) {
-      // User is en route, not at any location — find first leg that's still upcoming
+      // User is en route, not at any location — pick the destination whose
+      // saved coords are CLOSEST to the user's current location. This handles
+      // the "parked at a stop but 2–10 mi from its saved coords" case where
+      // the primary proximity check (PROX=2) misses it, and avoids the old
+      // bug where the loop always picked leg #0 because distToOrigin from
+      // the user to the starting point is always > PROX.
       let nextIdx = -1;
       if (uLat) {
+        let closestDist = Infinity;
         for (let i = 0; i < legs.length; i++) {
           const l = legs[i];
-          if (!l.destLat) continue;
-          let originLat, originLng;
-          if (i === 0) { originLat = l.fromLat; originLng = l.fromLng; }
-          else { originLat = legs[i - 1].destLat; originLng = legs[i - 1].destLng; }
-
-          const distToDest = this.haversine(uLat, uLng, l.destLat, l.destLng);
-          if (!originLat) {
+          const destE = State.getEntry(l.destId);
+          const destLat = l.destLat || destE?.lat;
+          const destLng = l.destLng || destE?.lng;
+          if (!destLat) continue;
+          const d = this.haversine(uLat, uLng, destLat, destLng);
+          if (d < closestDist) {
+            closestDist = d;
             nextIdx = i;
-            distanceToNext = Math.round(distToDest);
-            timeToNext = Math.round((distToDest / 45) * 60);
-            break;
-          }
-          const distToOrigin = this.haversine(uLat, uLng, originLat, originLng);
-          if (distToDest < distToOrigin || distToOrigin > PROX) {
-            nextIdx = i;
-            distanceToNext = Math.round(distToDest);
-            timeToNext = Math.round((distToDest / 45) * 60);
-            break;
           }
         }
-        // Fallback to last leg
-        if (nextIdx === -1) {
-          nextIdx = legs.length - 1;
-          const lastLeg = legs[nextIdx];
-          if (lastLeg.destLat) {
-            distanceToNext = Math.round(this.haversine(uLat, uLng, lastLeg.destLat, lastLeg.destLng));
-            timeToNext = Math.round((distanceToNext / 45) * 60);
-          }
+        if (nextIdx >= 0) {
+          distanceToNext = Math.round(closestDist);
+          timeToNext = Math.round((closestDist / 45) * 60);
         }
       } else {
         nextIdx = 0;
