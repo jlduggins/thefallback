@@ -1007,6 +1007,70 @@ const Trips = {
     return { distance: m*1.3, duration: m*1.3/45*60, geometry: null };
   },
 
+  // Driving distances from ONE source to MANY destinations in a single ORS
+  // Matrix API call — avoids N separate /directions requests when we only
+  // need distance/duration (not route geometry). Used by the Explore "Nearby
+  // Spots" list so displayed mileage matches what a driver actually covers,
+  // not the crow-flies haversine distance.
+  //
+  // Input:  fromLat, fromLng, dests = [{id, lat, lng}, ...]
+  // Returns: Map<id, { distance: miles, duration: minutes }>
+  //   Falls back to haversine*1.3 if no API key or the request fails, so
+  //   callers always get a value per destination.
+  async getRouteMatrix(fromLat, fromLng, dests) {
+    const out = new Map();
+    const fallback = () => {
+      for (const d of dests) {
+        const m = this.haversine(fromLat, fromLng, d.lat, d.lng) * 1.3;
+        out.set(d.id, { distance: m, duration: m / 45 * 60, approx: true });
+      }
+      return out;
+    };
+    if (!dests?.length) return out;
+    const KEY = (typeof CONFIG !== 'undefined' && CONFIG.ORS_API_KEY) || (window.CONFIG && window.CONFIG.ORS_API_KEY) || window.ORS_API_KEY || '';
+    if (!KEY) return fallback();
+
+    // ORS matrix cap ≈ 50 locations total. Source + destinations. Slice to be safe.
+    const slice = dests.slice(0, 48);
+    const locations = [[fromLng, fromLat], ...slice.map(d => [d.lng, d.lat])];
+    try {
+      const r = await fetch('https://api.openrouteservice.org/v2/matrix/driving-car', {
+        method: 'POST',
+        headers: { 'Authorization': KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          locations,
+          sources: [0],
+          destinations: slice.map((_, i) => i + 1),
+          metrics: ['distance', 'duration'],
+          units: 'mi'
+        })
+      });
+      const data = await r.json();
+      if (data?.distances?.[0] && data?.durations?.[0]) {
+        slice.forEach((d, i) => {
+          const dist = data.distances[0][i];
+          const dur = data.durations[0][i];
+          if (dist != null && dur != null) {
+            out.set(d.id, { distance: dist, duration: dur / 60 });
+          } else {
+            const m = this.haversine(fromLat, fromLng, d.lat, d.lng) * 1.3;
+            out.set(d.id, { distance: m, duration: m / 45 * 60, approx: true });
+          }
+        });
+        // Any extras beyond the 48 cap: haversine fallback
+        dests.slice(48).forEach(d => {
+          const m = this.haversine(fromLat, fromLng, d.lat, d.lng) * 1.3;
+          out.set(d.id, { distance: m, duration: m / 45 * 60, approx: true });
+        });
+        return out;
+      }
+      if (data?.error) console.error('[Matrix] ORS error:', data.error);
+    } catch (e) {
+      console.error('[Matrix] fetch failed:', e);
+    }
+    return fallback();
+  },
+
   haversine(lat1,lon1,lat2,lon2){const R=3959,dl=(lat2-lat1)*Math.PI/180,dn=(lon2-lon1)*Math.PI/180,a=Math.sin(dl/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dn/2)**2;return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));},
   isInSeason(d){if(!d)return true;const m=new Date(d+'T12:00').getMonth();return m>=4&&m<=8;},
 

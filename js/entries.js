@@ -725,6 +725,21 @@ const Entries = {
     }
     entries = entries.slice(0, 20);
 
+    // Prefer driving distance (from ORS Matrix) over straight-line haversine.
+    // Cached per-anchor so re-renders are instant; only the first render for a
+    // given anchor makes a network call. entry.distance gets replaced with
+    // real driving miles; entry.duration (minutes) is added.
+    if (entries.length && anchorLat != null && anchorLng != null) {
+      const cacheKey = `${anchorLat.toFixed(4)},${anchorLng.toFixed(4)}`;
+      const cache = (this._drivingDistCache ||= {});
+      const bucket = (cache[cacheKey] ||= {});
+      entries = entries.map(e => {
+        const cached = bucket[e.id];
+        if (cached) return { ...e, distance: cached.distance, duration: cached.duration, _approx: cached.approx };
+        return { ...e, _approx: true }; // haversine stays, flagged as approx
+      });
+    }
+
     if (entries.length === 0) {
       container.innerHTML = `
         <div class="empty-state" style="padding: 24px; text-align: center;">
@@ -754,11 +769,63 @@ const Entries = {
         }
       });
     });
+
+    // Fetch real driving distances for any cards still showing haversine
+    // estimates. Updates cards in place when the matrix call returns.
+    this._refreshNearbyDrivingDistances(entries, anchorLat, anchorLng);
+  },
+
+  // Async: fetch driving distances from ORS Matrix for entries that don't yet
+  // have a cached result, then update their cards' distance text in place.
+  // Keyed by (anchorLat, anchorLng) so switching stops refetches; repeat
+  // renders for the same stop hit the cache and skip the network.
+  async _refreshNearbyDrivingDistances(entries, anchorLat, anchorLng) {
+    if (!window.Trips?.getRouteMatrix) return;
+    if (anchorLat == null || anchorLng == null) return;
+    const cacheKey = `${anchorLat.toFixed(4)},${anchorLng.toFixed(4)}`;
+    const cache = (this._drivingDistCache ||= {});
+    const bucket = (cache[cacheKey] ||= {});
+    const need = entries
+      .filter(e => !bucket[e.id] && e.lat != null && e.lng != null)
+      .map(e => ({ id: e.id, lat: e.lat, lng: e.lng }));
+    if (!need.length) return;
+
+    // Guard against concurrent renders for the same anchor — if one fetch
+    // is already in-flight, the second call would duplicate work.
+    const inflight = (this._drivingDistInflight ||= {});
+    if (inflight[cacheKey]) return;
+    inflight[cacheKey] = true;
+    try {
+      const results = await Trips.getRouteMatrix(anchorLat, anchorLng, need);
+      results.forEach((r, id) => {
+        bucket[id] = { distance: r.distance, duration: r.duration, approx: !!r.approx };
+      });
+    } finally {
+      delete inflight[cacheKey];
+    }
+
+    // Update the cards in place (don't full-rerender — scroll position / any
+    // open details panel would jump).
+    const container = document.getElementById('nearby-list');
+    if (!container) return;
+    need.forEach(d => {
+      const cached = bucket[d.id];
+      if (!cached) return;
+      const card = container.querySelector(`.nearby-card[data-id="${d.id}"]`);
+      if (!card) return;
+      const meta = card.querySelector('.nearby-card-meta');
+      if (!meta) return;
+      meta.textContent = State.formatDistance(cached.distance) + ' away';
+    });
   },
 
   renderNearbyCard(entry) {
+    // Prefix haversine estimates with "~" so the user knows it's an
+    // approximation until real driving distance arrives from ORS Matrix.
+    // Roads in mountainous/remote areas can easily be 2–3× crow-flies, so
+    // the unprefixed number would actively mislead.
     const distance = entry.distance != null
-      ? State.formatDistance(entry.distance) + ' away'
+      ? (entry._approx ? '~' : '') + State.formatDistance(entry.distance) + ' away'
       : '';
     const costTag = entry.cost === 0
       ? '<span class="nearby-tag free">Free</span>'
