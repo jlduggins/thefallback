@@ -85,15 +85,16 @@ const Discover = {
       ['amenity','drinking_water']
     ],
     hiking: [
-      // Named long trails (relations) and trailhead nodes. Intentionally NOT
-      // including highway=path/footway: those return huge way-element payloads
-      // (slow Overpass response) AND each named trail comes back as a relation
-      // PLUS many way segments with the same name, which the by-name dedupe
-      // then has to fight. Trailheads cover what users actually want to find.
       ['route','hiking'],
       ['route','foot'],
       ['information','trailhead'],
-      ['highway','trailhead']
+      ['highway','trailhead'],
+      // Named footpaths — needed because most short local trails (Toketee
+      // Falls, Watson Falls, etc.) are tagged highway=path with a name, NOT
+      // as route relations. Without this selector the list misses everything
+      // close to the user. The by-name dedupe below collapses the resulting
+      // relation/way overlap.
+      '["highway"="path"]["name"]'
     ]
   },
 
@@ -301,7 +302,7 @@ const Discover = {
     const tagSelectors = this.CATEGORY_TAGS[this.category] || this.CATEGORY_TAGS.all;
     const samples = anchor.samples;
 
-    let body = '[out:json][timeout:30];(\n';
+    let body = '[out:json][timeout:60];(\n';
     for (const s of samples) {
       for (const sel of tagSelectors) {
         // sel can be: raw Overpass string (e.g. '["highway"="path"]["name"]'),
