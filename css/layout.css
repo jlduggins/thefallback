@@ -1944,6 +1944,10 @@ body[data-view="login"] .map-layers-panel { display: none !important; }
     overflow-y: auto !important;
     overflow-x: hidden !important;
     -webkit-overflow-scrolling: touch;
+    /* Bottom nav (z 300) overlays the drawer (z 40) and covers ~72px+safe-area
+       at the bottom. Pad scrollable content so trailing buttons (Show more,
+       discover-more) can scroll above the nav and remain tappable. */
+    padding-bottom: calc(var(--nav-height-mobile) + var(--space-4)) !important;
   }
 
   /* Snap anchors via translateY. JS inline-transform overrides during drag. */
