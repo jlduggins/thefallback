@@ -104,8 +104,11 @@ const Discover = {
   ROUTE_RADIUS_M: 8000,    // ~5 mi window around each sample point
   NEAR_RADIUS_M: 48000,    // ~30 mi around user GPS in "near" mode
   MAX_SAMPLES: 12,         // cap for the union to keep query body sane
-  MAX_RESULTS: 24,
-  COLLAPSED_COUNT: 3,
+  MAX_RESULTS: 30,         // hard cap from Overpass-side dedupe
+  INITIAL_COUNT: 10,       // visible on first render
+  PAGE_INCREMENT: 10,      // added per "Show more" click
+  _visibleCount: 10,       // current display window; reset on category/mode change
+  _wikiCache: {},          // wiki tag → { extract, thumbnail, url } | null
 
   // ── Init ───────────────────────────────────────────────────────────────
   init() {
@@ -113,7 +116,10 @@ const Discover = {
     State.on('journeys:changed', () => this.refresh());
     State.on('journey:current-changed', () => this.refresh());
     State.on('location:updated', () => this.refresh());
-    State.on('view:changed', view => { if (view === 'explore') this.refresh(); });
+    State.on('view:changed', ({ from, to }) => {
+      if (to === 'explore') this.refresh();
+      if (from === 'explore' && to !== 'explore') this.closeDetail();
+    });
     this.render();
   },
 
@@ -121,6 +127,7 @@ const Discover = {
     if (this.category === cat) return;
     this.category = cat;
     this.expanded = false;
+    this._visibleCount = this.INITIAL_COUNT;
     this.refresh();
   },
 
@@ -133,6 +140,7 @@ const Discover = {
     if (this.modeChoice === choice) return;
     this.modeChoice = choice;
     this.expanded = false;
+    this._visibleCount = this.INITIAL_COUNT;
     this.refresh();
   },
 
@@ -674,12 +682,17 @@ const Discover = {
       return;
     }
 
-    const visible = this.expanded
-      ? this.results
-      : this.results.slice(0, this.COLLAPSED_COUNT);
+    if (this._visibleCount == null) this._visibleCount = this.INITIAL_COUNT;
+    const visible = this.results.slice(0, this._visibleCount);
 
-    list.classList.toggle('expanded', !!this.expanded);
+    list.classList.toggle('expanded', this._visibleCount > this.INITIAL_COUNT);
     list.innerHTML = visible.map(p => this._renderCard(p)).join('');
+
+    // Whole-card click → open the detail panel. Save and Maps buttons inside
+    // stop propagation so they don't double-trigger.
+    list.querySelectorAll('.discover-card').forEach(card => {
+      card.onclick = () => Discover.openDetail(card.dataset.xid);
+    });
 
     list.querySelectorAll('.discover-card .discover-save').forEach(btn => {
       btn.onclick = (ev) => {
@@ -697,16 +710,265 @@ const Discover = {
     });
 
     if (moreBtn) {
-      if (this.results.length > this.COLLAPSED_COUNT) {
+      const total = this.results.length;
+      const showing = Math.min(this._visibleCount, total);
+      const hiddenCount = total - showing;
+      if (total > this.INITIAL_COUNT) {
         moreBtn.style.display = '';
-        moreBtn.textContent = this.expanded
-          ? 'Show less'
-          : `Show more (${this.results.length - this.COLLAPSED_COUNT})`;
-        moreBtn.onclick = () => Discover.toggleExpanded();
+        if (hiddenCount > 0) {
+          // Add up to PAGE_INCREMENT more per click — keeps DOM size bounded
+          // and lets the user pace expansion without dumping all results.
+          const next = Math.min(hiddenCount, this.PAGE_INCREMENT);
+          moreBtn.textContent = `Show ${next} more (${hiddenCount} left)`;
+          moreBtn.onclick = () => {
+            Discover._visibleCount = Math.min(total, Discover._visibleCount + Discover.PAGE_INCREMENT);
+            Discover.render();
+          };
+        } else {
+          moreBtn.textContent = 'Show less';
+          moreBtn.onclick = () => {
+            Discover._visibleCount = Discover.INITIAL_COUNT;
+            Discover.render();
+          };
+        }
       } else {
         moreBtn.style.display = 'none';
       }
     }
+  },
+
+  // ── Detail panel ───────────────────────────────────────────────────────
+  // Opens the third-column panel (desktop) / bottom drawer (mobile) showing
+  // full info for one POI. Most fields render conditionally — sparse OSM data
+  // shows an honest empty-state rather than fake content.
+
+  _detailXid: null,
+
+  openDetail(xid) {
+    const poi = this.results.find(p => p.xid === xid);
+    if (!poi) return;
+    this._detailXid = xid;
+
+    // Close the saved-Entry backup panel if it happens to be open — they share
+    // the third-column slot on desktop.
+    if (window.Entries?.closeBackupPanel) Entries.closeBackupPanel();
+
+    const panel = document.getElementById('discover-detail-panel');
+    const content = document.getElementById('discover-detail-content');
+    const footer = document.getElementById('discover-detail-footer');
+    if (!panel || !content || !footer) return;
+
+    // Fly map to the POI for spatial context (desktop only — mobile map is
+    // hidden behind the drawer anyway).
+    if (poi.lat && poi.lng && window.MapModule?.map) {
+      MapModule.flyTo(poi.lat, poi.lng, 13);
+    }
+
+    content.innerHTML = this._renderDetailContent(poi, /*wiki*/ null, /*loading*/ true);
+    footer.innerHTML = this._renderDetailFooter(poi);
+    panel.style.display = 'flex';
+
+    // Mobile: open at full snap so the user sees the description without dragging.
+    if (window.matchMedia('(max-width: 767px)').matches && window.UI) {
+      UI.initMobileDrawers();
+      UI._applySnap('full');
+    }
+
+    // Desktop: map narrowed; tell Leaflet to recompute size.
+    setTimeout(() => { if (MapModule?.map) MapModule.map.invalidateSize(); }, 50);
+
+    // Async: fetch Wikipedia summary if the POI has a wiki tag, then re-render
+    // content (footer doesn't change). Cached per wiki tag so repeat opens skip
+    // the network hop.
+    const wikiTag = poi.tags?.wikipedia || poi.tags?.['wikipedia:en'];
+    if (wikiTag) {
+      this._loadWikipedia(wikiTag).then(wiki => {
+        // Guard: user may have closed or opened a different POI by the time
+        // this resolves.
+        if (this._detailXid !== xid) return;
+        const c = document.getElementById('discover-detail-content');
+        if (c) c.innerHTML = this._renderDetailContent(poi, wiki, /*loading*/ false);
+      });
+    }
+  },
+
+  closeDetail() {
+    this._detailXid = null;
+    const panel = document.getElementById('discover-detail-panel');
+    if (panel) panel.style.display = 'none';
+    setTimeout(() => { if (MapModule?.map) MapModule.map.invalidateSize(); }, 50);
+  },
+
+  // Wikipedia REST summary endpoint — free, no API key, no CORS issues.
+  // Returns { extract, thumbnail: {source}, content_urls: {desktop: {page}} }
+  // or null on miss/failure. Cached per tag for the session.
+  async _loadWikipedia(wikiTag) {
+    if (this._wikiCache[wikiTag] !== undefined) return this._wikiCache[wikiTag];
+    const m = wikiTag.match(/^([a-z-]+):(.+)$/i);
+    if (!m) { this._wikiCache[wikiTag] = null; return null; }
+    const [, lang, title] = m;
+    try {
+      const url = `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`;
+      const r = await fetch(url);
+      if (!r.ok) { this._wikiCache[wikiTag] = null; return null; }
+      const data = await r.json();
+      const out = {
+        extract: data.extract || '',
+        thumbnail: data.thumbnail?.source || null,
+        url: data.content_urls?.desktop?.page || `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(title)}`
+      };
+      this._wikiCache[wikiTag] = out;
+      return out;
+    } catch (e) {
+      console.warn('[Discover] wiki fetch failed:', e);
+      this._wikiCache[wikiTag] = null;
+      return null;
+    }
+  },
+
+  _renderDetailContent(poi, wiki, loading) {
+    const esc = s => this._esc(s);
+    const tags = poi.tags || {};
+
+    // Hero: wiki thumb → OSM image tag → category gradient placeholder
+    const heroSrc = wiki?.thumbnail || tags.image || null;
+    const heroIcon = this._categoryIcon(poi.category);
+    const hero = heroSrc
+      ? `<div class="dd-hero" style="background-image:url('${esc(heroSrc)}')"><span class="dd-hero-pill">${esc(poi.category)}</span></div>`
+      : `<div class="dd-hero fallback"><span class="dd-hero-pill">${esc(poi.category)}</span><span>${heroIcon}</span></div>`;
+
+    // Subline: distance + operator/region if available
+    const distLabel = (poi._approx ? '~' : '') + State.formatDistance(poi.distance) + ' away';
+    const region = tags.operator || tags['addr:state'] || '';
+    const subline = region ? `${distLabel} · ${esc(region)}` : distLabel;
+
+    // Description: wiki extract preferred, then OSM description, then empty-state
+    const osmDesc = tags.description || tags['description:en'];
+    let descBlock = '';
+    if (loading && (tags.wikipedia || tags['wikipedia:en'])) {
+      descBlock = `<div class="dd-loading">Loading description…</div>`;
+    } else if (wiki?.extract) {
+      descBlock = `
+        <div class="dd-description">${esc(wiki.extract)}</div>
+        <a href="${esc(wiki.url)}" target="_blank" rel="noopener" class="dd-wiki-link">Read more on Wikipedia →</a>
+        <div class="dd-wiki-attribution">Summary from Wikipedia, CC BY-SA 4.0</div>`;
+    } else if (osmDesc) {
+      descBlock = `<div class="dd-description" style="margin-bottom:18px">${esc(osmDesc)}</div>`;
+    } else if (!tags.website && !tags['contact:website'] && !tags.phone) {
+      descBlock = `
+        <div class="dd-empty-blurb">
+          <strong>No description available</strong>
+          This place is in OpenStreetMap but doesn't have a description, Wikipedia article, or website yet. The map pin is its only listed info.
+        </div>`;
+    }
+
+    // Quick facts grid — render only fields that exist
+    const facts = [];
+    if (tags.distance) {
+      const km = parseFloat(tags.distance);
+      if (!isNaN(km)) facts.push(['Length', (km * 0.621371).toFixed(1) + ' mi']);
+    }
+    if (tags.sac_scale) {
+      const diffMap = {
+        hiking: 'Easy',
+        mountain_hiking: 'Moderate',
+        demanding_mountain_hiking: 'Hard',
+        alpine_hiking: 'Alpine',
+        demanding_alpine_hiking: 'Demanding alpine',
+        difficult_alpine_hiking: 'Difficult alpine'
+      };
+      facts.push(['Difficulty', diffMap[tags.sac_scale] || tags.sac_scale.replace(/_/g, ' ')]);
+    }
+    if (tags.ele) {
+      const m = parseFloat(tags.ele);
+      if (!isNaN(m)) facts.push(['Elevation', Math.round(m * 3.28084).toLocaleString() + ' ft']);
+    }
+    if (tags.operator && !facts.length) {
+      // Skip — already shown in subline. But include if facts grid would otherwise be near-empty.
+    }
+    if (tags.ref) facts.push(['Trail #', tags.ref]);
+    if (tags.surface) facts.push(['Surface', tags.surface.replace(/_/g, ' ')]);
+    const factsHtml = facts.length
+      ? `<div class="dd-facts">${facts.map(([l, v]) => `<div class="dd-fact"><div class="dd-fact-label">${esc(l)}</div><div class="dd-fact-value">${esc(v)}</div></div>`).join('')}</div>`
+      : '';
+
+    // Amenity badges
+    const badges = [];
+    if (tags.fee === 'no') badges.push(['Free', 'good']);
+    else if (tags.fee === 'yes' && !tags['fee:amount']) badges.push(['Fee required', 'warn']);
+    if (tags['fee:amount']) badges.push(['$' + tags['fee:amount'], 'warn']);
+    if (tags.toilets === 'yes') badges.push(['Restrooms', 'good']);
+    if (tags.shower === 'yes') badges.push(['Showers', 'good']);
+    if (tags.drinking_water === 'yes' || tags.amenity === 'drinking_water') badges.push(['Water', 'good']);
+    if (tags.dog === 'yes') badges.push(['Dogs OK', 'good']);
+    if (tags.wheelchair === 'yes') badges.push(['Wheelchair accessible', 'good']);
+    if (tags.access === 'permit' || tags.permit === 'yes') badges.push(['Permit required', 'warn']);
+    if (tags.reservation === 'required') badges.push(['Reservation', 'warn']);
+    const badgesHtml = badges.length
+      ? `<div class="dd-section-label">Amenities</div><div class="dd-badges">${badges.map(([l, k]) => `<span class="dd-badge${k === 'warn' ? ' warn' : ''}">${esc(l)}</span>`).join('')}</div>`
+      : '';
+
+    // Address (compose from addr:* tags)
+    const addrParts = [tags['addr:street'], tags['addr:city'], tags['addr:state']].filter(Boolean);
+    const addressLine = addrParts.join(', ');
+
+    // Info rows: hours / address / website / phone / coords (always last)
+    const rows = [];
+    if (tags.opening_hours) rows.push(['🕒', esc(tags.opening_hours), 'Hours']);
+    if (addressLine) rows.push(['📍', esc(addressLine), 'Address']);
+    const website = tags.website || tags['contact:website'] || tags.url;
+    if (website) {
+      const display = website.replace(/^https?:\/\//, '').replace(/\/$/, '');
+      rows.push(['🌐', `<a href="${esc(website)}" target="_blank" rel="noopener">${esc(display)}</a>`, 'Website']);
+    }
+    const phone = tags.phone || tags['contact:phone'];
+    if (phone) rows.push(['📞', `<a href="tel:${esc(phone)}">${esc(phone)}</a>`, 'Phone']);
+    rows.push(['📌', `${poi.lat.toFixed(5)}, ${poi.lng.toFixed(5)}`, 'Coordinates']);
+    const rowsHtml = rows.map(([ico, val, label]) =>
+      `<div class="dd-info-row"><span class="dd-ico">${ico}</span><div><div>${val}</div><div class="dd-info-label">${esc(label)}</div></div></div>`
+    ).join('');
+
+    return `
+      ${hero}
+      <div class="dd-name">${esc(poi.name)}</div>
+      <div class="dd-subline">${subline}</div>
+      ${descBlock}
+      ${factsHtml}
+      ${badgesHtml}
+      ${rowsHtml}
+    `;
+  },
+
+  _renderDetailFooter(poi) {
+    const saved = this._alreadySaved(poi);
+    const saving = this._savingXids.has(poi.xid);
+    const saveBtn = saved
+      ? `<button class="btn btn-outline" disabled style="flex:1">✓ Saved</button>`
+      : `<button class="btn btn-primary" style="flex:1" ${saving ? 'disabled' : ''}
+                 onclick="Discover.savePOI('${poi.xid}')">${saving ? 'Saving…' : '+ Save'}</button>`;
+    return `
+      <button class="btn btn-outline" style="flex:1"
+              onclick="Discover.openInMaps('${this._esc(poi.name)}', ${poi.lat}, ${poi.lng})">
+        📍 Open in Maps
+      </button>
+      ${saveBtn}
+    `;
+  },
+
+  // Coarse emoji fallback for the gradient hero placeholder (no Wikipedia
+  // image available). Picks a single representative glyph by category.
+  _categoryIcon(category) {
+    const map = {
+      'Hiking Trail': '🥾', 'Trail': '🥾', 'Footpath': '🥾', 'Trailhead': '🚩',
+      'Peak': '⛰', 'Waterfall': '💧', 'Cave': '🕳', 'Spring': '♨',
+      'Nature Reserve': '🌲', 'National Park': '🏞', 'Viewpoint': '🌄',
+      'Campground': '⛺', 'Dump Station': '🚮', 'Water Fill': '💧',
+      'Museum': '🏛', 'Gallery': '🖼', 'Theatre': '🎭', 'Arts Centre': '🎨',
+      'Planetarium': '🪐', 'Fountain': '⛲', 'Lighthouse': '🗼', 'Tower': '🗼',
+      'Memorial': '🗿', 'Monument': '🗿', 'Ruins': '🏛', 'Archaeological': '🏺',
+      'Historic': '🏛', 'Attraction': '✨', 'Artwork': '🎨', 'Place': '📍'
+    };
+    return map[category] || '📍';
   },
 
   _renderCard(p) {

@@ -605,6 +605,165 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   DISCOVER DETAIL PANEL
+   Sub-elements rendered inside #discover-detail-content. Wraps Wikipedia
+   summary + OSM tag fields for a single Discover POI.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.dd-hero {
+  width: calc(100% + var(--space-4) * 2);
+  margin: calc(var(--space-4) * -1) calc(var(--space-4) * -1) var(--space-4);
+  height: 180px;
+  background-size: cover;
+  background-position: center;
+  background-color: var(--color-surface-alt);
+  position: relative;
+}
+.dd-hero.fallback {
+  background: linear-gradient(135deg, #5a8c75 0%, var(--color-primary) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 56px;
+  opacity: 0.9;
+  color: rgba(255,255,255,0.7);
+}
+.dd-hero-pill {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  background: rgba(255,255,255,0.95);
+  color: var(--color-primary);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.dd-name {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--color-text);
+  line-height: 1.2;
+  margin-bottom: 4px;
+}
+.dd-subline {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  margin-bottom: 16px;
+}
+.dd-description {
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--color-text);
+  margin-bottom: 6px;
+}
+.dd-wiki-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--color-primary);
+  text-decoration: none;
+  font-weight: 500;
+}
+.dd-wiki-attribution {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  margin-top: 4px;
+  margin-bottom: 16px;
+}
+.dd-empty-blurb {
+  background: var(--color-surface-alt);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  margin-bottom: 18px;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+.dd-empty-blurb strong {
+  color: var(--color-text);
+  display: block;
+  margin-bottom: 4px;
+}
+.dd-facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+.dd-fact {
+  background: var(--color-surface-alt);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+}
+.dd-fact-label {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.dd-fact-value {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--color-text);
+  margin-top: 2px;
+}
+.dd-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+}
+.dd-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 18px;
+}
+.dd-badge {
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--color-primary-muted);
+  color: var(--color-primary);
+  padding: 4px 9px;
+  border-radius: var(--radius-sm);
+}
+.dd-badge.warn { background: rgba(245,158,11,0.15); color: #92400e; }
+.dd-info-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 0;
+  border-top: 0.5px solid var(--color-border);
+  font-size: 13px;
+  color: var(--color-text);
+}
+.dd-info-row:last-of-type { border-bottom: 0.5px solid var(--color-border); }
+.dd-info-row .dd-ico {
+  flex-shrink: 0;
+  width: 16px;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+.dd-info-row a { color: var(--color-primary); text-decoration: none; word-break: break-all; }
+.dd-info-row .dd-info-label {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  margin-top: 2px;
+}
+.dd-loading {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  font-style: italic;
+  padding: 8px 0 16px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    DROPDOWN SELECT
    ═══════════════════════════════════════════════════════════════════════════ */
 

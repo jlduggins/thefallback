@@ -387,7 +387,7 @@ const UI = {
   // between three positions: peek, half, full.
   // ═══════════════════════════════════════════════════════════════════════════
 
-  _drawerIds: ['locations-panel', 'trips-list-panel', 'location-detail-panel', 'explore-backup-panel', 'explore-left-drawer', 'modal-add-location'],
+  _drawerIds: ['locations-panel', 'trips-list-panel', 'location-detail-panel', 'explore-backup-panel', 'discover-detail-panel', 'explore-left-drawer', 'modal-add-location'],
 
   _applySnap(snap) {
     document.body.setAttribute('data-drawer-snap', snap);

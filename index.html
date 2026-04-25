@@ -186,6 +186,20 @@
           </div>
         </div>
 
+        <!-- Discover POI detail panel — third flex column when a Discover card is tapped -->
+        <aside id="discover-detail-panel" class="explore-backup-panel" style="display:none">
+          <div class="side-panel-hd">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <div style="font-size:13px;font-weight:500;color:var(--color-text)">Discovery details</div>
+              <button onclick="Discover.closeDetail()" class="btn btn-ghost btn-icon" style="width:28px;height:28px" aria-label="Close">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
+          </div>
+          <div id="discover-detail-content" class="side-panel-body"></div>
+          <div id="discover-detail-footer" class="side-panel-footer"></div>
+        </aside>
+
         <!-- Backup detail panel — third flex column, between .explore-left and map -->
         <aside id="explore-backup-panel" class="explore-backup-panel" style="display:none">
           <div class="side-panel-hd">
