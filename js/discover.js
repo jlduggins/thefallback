@@ -530,6 +530,19 @@ const Discover = {
         }
       });
       if (updated) {
+        // Nearby mode: now that we have real driving miles, drop any POI that
+        // exceeds the user's chosen radius. Haversine let them through (a 25mi
+        // crow-flies trail can be 41mi by road in mountain terrain), but the
+        // user explicitly asked for "within X mi". Route mode uses a per-sample
+        // window, not a from-user radius, so we leave those untouched.
+        if (anchor.mode === 'near') {
+          const radiusMi = anchor.radiusM / 1609;
+          for (let i = results.length - 1; i >= 0; i--) {
+            if (!results[i]._approx && results[i].distance > radiusMi) {
+              results.splice(i, 1);
+            }
+          }
+        }
         // Resort by true driving distance — straight-line order rarely matches
         // road-network order in mountain/forest terrain.
         results.sort((a, b) => a.distance - b.distance);
