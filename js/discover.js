@@ -85,14 +85,15 @@ const Discover = {
       ['amenity','drinking_water']
     ],
     hiking: [
+      // Named long trails (relations) and trailhead nodes. Intentionally NOT
+      // including highway=path/footway: those return huge way-element payloads
+      // (slow Overpass response) AND each named trail comes back as a relation
+      // PLUS many way segments with the same name, which the by-name dedupe
+      // then has to fight. Trailheads cover what users actually want to find.
       ['route','hiking'],
       ['route','foot'],
       ['information','trailhead'],
-      ['highway','trailhead'],
-      // Compound filters (raw Overpass syntax) — only NAMED paths/footways so
-      // we don't flood with every anonymous trail segment in the area.
-      '["highway"="path"]["name"]',
-      '["highway"="footway"]["name"]'
+      ['highway','trailhead']
     ]
   },
 
