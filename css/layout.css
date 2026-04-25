@@ -438,7 +438,7 @@
 .section-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 8px;
   padding: var(--space-4);
 }
 
@@ -493,6 +493,17 @@
   flex-shrink: 0;
   cursor: pointer;
   user-select: none;
+  gap: 8px;
+  padding: 0 var(--space-1);
+  align-items: baseline;
+}
+.explore-nearby-wrap .section-header .section-subtitle,
+.explore-discover-wrap .section-header .section-subtitle {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .explore-nearby-wrap #nearby-list,
 .explore-nearby-wrap .nearby-list,
@@ -545,6 +556,28 @@
 /* Discover-specific styling */
 .explore-discover-wrap {
   gap: var(--space-2);
+}
+.discover-mode {
+  flex-shrink: 0;
+  display: flex;
+  gap: 4px;
+  padding: 0 var(--space-1) 2px;
+}
+.discover-mode-btn {
+  flex: 1 1 0;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border, rgba(0,0,0,0.12));
+  background: var(--color-surface, #fff);
+  font-size: 12px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-weight: 500;
+}
+.discover-mode-btn.active {
+  background: var(--color-text);
+  color: var(--color-surface, #fff);
+  border-color: var(--color-text);
 }
 .discover-chips {
   flex-shrink: 0;
@@ -705,7 +738,7 @@
 .explore-nearby-wrap .section-header {
   padding: 0 var(--space-1);
   display: flex;
-  justify-content: space-between;
+  gap: 8px;
   align-items: baseline;
 }
 
@@ -750,7 +783,9 @@
     border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
     box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.12);
     transition: height 180ms ease;
-    overflow: hidden;
+    overflow-y: auto;          /* mobile drawer body scrolls */
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
   }
   .explore-right {
     display: none;
@@ -1902,6 +1937,13 @@ body[data-view="login"] .map-layers-panel { display: none !important; }
     transform: translateY(calc(100vh - 48px - 55vh)); /* default: half */
     transition: transform 300ms ease-out;
     pointer-events: auto;
+  }
+
+  /* Override: explore drawer body needs to scroll vertically */
+  .explore-left {
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    -webkit-overflow-scrolling: touch;
   }
 
   /* Snap anchors via translateY. JS inline-transform overrides during drag. */
