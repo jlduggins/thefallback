@@ -86,7 +86,13 @@ const Discover = {
     ],
     hiking: [
       ['route','hiking'],
-      ['route','foot']
+      ['route','foot'],
+      ['information','trailhead'],
+      ['highway','trailhead'],
+      // Compound filters (raw Overpass syntax) — only NAMED paths/footways so
+      // we don't flood with every anonymous trail segment in the area.
+      '["highway"="path"]["name"]',
+      '["highway"="footway"]["name"]'
     ]
   },
 
@@ -257,6 +263,8 @@ const Discover = {
       this.loading = false;
       this.error = null;
       this.render();
+      // If any cached POIs are still on haversine, try to upgrade them.
+      if (this.results.some(p => p._approx)) this._refreshDrivingDistances(a, this.results);
       return;
     }
 
@@ -271,6 +279,10 @@ const Discover = {
       this._cache[key] = pois;
       this.results = pois;
       this.error = null;
+      // Async: replace haversine distances with real ORS driving miles. Updates
+      // the same POI objects so cached results keep the corrected values, and
+      // calls render() again once the matrix returns.
+      this._refreshDrivingDistances(a, pois);
     } catch (e) {
       console.error('[Discover] fetch failed:', e);
       this.error = 'Discoveries are temporarily unavailable. Try again in a moment.';
@@ -291,8 +303,10 @@ const Discover = {
     let body = '[out:json][timeout:30];(\n';
     for (const s of samples) {
       for (const sel of tagSelectors) {
-        const filter = sel.length === 1
-          ? `["${sel[0]}"]`
+        // sel can be: raw Overpass string (e.g. '["highway"="path"]["name"]'),
+        // 1-tuple ['key'] (presence), or 2-tuple ['key','value'] (exact).
+        const filter = typeof sel === 'string' ? sel
+          : sel.length === 1 ? `["${sel[0]}"]`
           : `["${sel[0]}"="${sel[1]}"]`;
         // `nwr` = node + way + relation in one go.
         body += `nwr${filter}(around:${anchor.radiusM},${s.lat},${s.lng});\n`;
@@ -336,7 +350,10 @@ const Discover = {
         badges: this._badges(tags),
         lat,
         lng,
-        distance: this._haversine(refLat, refLng, lat, lng)
+        distance: this._haversine(refLat, refLng, lat, lng),
+        // Distance starts as straight-line; _refreshDrivingDistances replaces
+        // with real driving miles from ORS Matrix and flips _approx → false.
+        _approx: true
       });
     }
     return [...seen.values()]
@@ -348,6 +365,8 @@ const Discover = {
   _classify(tags) {
     if (tags.route === 'hiking') return 'Hiking Trail';
     if (tags.route === 'foot') return 'Footpath';
+    if (tags.information === 'trailhead' || tags.highway === 'trailhead') return 'Trailhead';
+    if (tags.highway === 'path' || tags.highway === 'footway') return 'Trail';
     if (tags.tourism === 'camp_site' || tags.tourism === 'caravan_site') return 'Campground';
     if (tags.amenity === 'sanitary_dump_station') return 'Dump Station';
     if (tags.amenity === 'drinking_water') return 'Water Fill';
@@ -458,6 +477,55 @@ const Discover = {
               && Math.abs(e.lng - poi.lng) < tol
               && (e.name || '').toLowerCase() === (poi.name || '').toLowerCase()))
     ) || null;
+  },
+
+  // ── Async upgrade haversine → ORS driving distance ─────────────────────
+  // Initial POIs carry straight-line distance flagged `_approx: true`. This
+  // calls Trips.getRouteMatrix (one ORS request, up to 48 dests) to replace
+  // them with real driving miles, then re-sorts the list and re-renders. The
+  // POI objects are mutated in place so cached results keep the upgrade.
+  // Concurrent calls for the same anchor signature dedupe.
+  async _refreshDrivingDistances(anchor, results) {
+    if (!window.Trips?.getRouteMatrix) return;
+    if (!results?.length) return;
+    const refLat = State.userLat ?? anchor.samples[0]?.lat;
+    const refLng = State.userLng ?? anchor.samples[0]?.lng;
+    if (refLat == null || refLng == null) return;
+
+    const need = results.filter(p => p._approx && p.lat != null && p.lng != null);
+    if (!need.length) return;
+
+    const inflightKey = `${anchor.signature}:${refLat.toFixed(3)},${refLng.toFixed(3)}`;
+    this._matrixInflight ||= {};
+    if (this._matrixInflight[inflightKey]) return;
+    this._matrixInflight[inflightKey] = true;
+
+    try {
+      const dests = need.map(p => ({ id: p.xid, lat: p.lat, lng: p.lng }));
+      const matrix = await Trips.getRouteMatrix(refLat, refLng, dests);
+      let updated = false;
+      need.forEach(p => {
+        const r = matrix.get(p.xid);
+        // Skip the haversine*1.3 fallback that getRouteMatrix returns when ORS
+        // is unavailable — it would be misleading to flip _approx → false.
+        if (r && !r.approx) {
+          p.distance = r.distance;
+          p.duration = r.duration;
+          p._approx = false;
+          updated = true;
+        }
+      });
+      if (updated) {
+        // Resort by true driving distance — straight-line order rarely matches
+        // road-network order in mountain/forest terrain.
+        results.sort((a, b) => a.distance - b.distance);
+        this.render();
+      }
+    } catch (e) {
+      console.warn('[Discover] driving distance refresh failed:', e);
+    } finally {
+      delete this._matrixInflight[inflightKey];
+    }
   },
 
   // ── Open POI in user's chosen maps app ─────────────────────────────────
@@ -615,9 +683,12 @@ const Discover = {
   },
 
   _renderCard(p) {
+    // Prefix '~' while distance is still straight-line — driving miles can be
+    // 5–10× crow-flies in mountain terrain, so the unprefixed number would
+    // actively mislead until ORS Matrix replaces it.
     const distLabel = State.formatDistance
-      ? State.formatDistance(p.distance) + ' away'
-      : Math.round(p.distance) + ' mi away';
+      ? (p._approx ? '~' : '') + State.formatDistance(p.distance) + ' away'
+      : (p._approx ? '~' : '') + Math.round(p.distance) + ' mi away';
     const saved = this._alreadySaved(p);
     const saving = this._savingXids.has(p.xid);
     const saveButton = saved
