@@ -83,6 +83,10 @@ const Discover = {
       ['tourism','caravan_site'],
       ['amenity','sanitary_dump_station'],
       ['amenity','drinking_water']
+    ],
+    hiking: [
+      ['route','hiking'],
+      ['route','foot']
     ]
   },
 
@@ -342,6 +346,8 @@ const Discover = {
 
   // OSM tag → human-readable type label
   _classify(tags) {
+    if (tags.route === 'hiking') return 'Hiking Trail';
+    if (tags.route === 'foot') return 'Footpath';
     if (tags.tourism === 'camp_site' || tags.tourism === 'caravan_site') return 'Campground';
     if (tags.amenity === 'sanitary_dump_station') return 'Dump Station';
     if (tags.amenity === 'drinking_water') return 'Water Fill';
@@ -454,6 +460,18 @@ const Discover = {
     ) || null;
   },
 
+  // ── Open POI in user's chosen maps app ─────────────────────────────────
+  // Reuses Trips' Apple/Google picker modal. Sends the POI's NAME alongside
+  // coords so Apple Maps shows a labeled pin at the exact spot instead of
+  // reverse-geocoding the coords to the nearest containing area (e.g. dropping
+  // you at "Umpqua National Forest" instead of "Camel Hump Mountain").
+  openInMaps(name, lat, lng) {
+    if (!window.Trips || !window.UI) return;
+    Trips.pendingMapsAction = { type: 'poi', name, lat, lng };
+    Trips.mapsModalJourneyId = null;
+    UI.openModal('modal-maps-picker');
+  },
+
   // ── Render ─────────────────────────────────────────────────────────────
   render() {
     const wrap = document.getElementById('discover-wrap');
@@ -496,6 +514,7 @@ const Discover = {
       const chips = [
         ['all',      'All'],
         ['camping',  'Camping'],
+        ['hiking',   'Hiking'],
         ['quirky',   'Quirky'],
         ['historic', 'Historic'],
         ['natural',  'Natural'],
@@ -577,12 +596,8 @@ const Discover = {
       btn.onclick = (ev) => {
         ev.stopPropagation();
         const lat = +btn.dataset.lat, lng = +btn.dataset.lng;
-        const c = `${lat},${lng}`;
-        if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
-          window.location.href = `maps://maps.apple.com/?daddr=${c}`;
-        } else {
-          window.open(`https://www.google.com/maps/dir/?api=1&destination=${c}`, '_blank');
-        }
+        const name = btn.dataset.name || '';
+        Discover.openInMaps(name, lat, lng);
       };
     });
 
@@ -628,6 +643,7 @@ const Discover = {
           ${saveButton}
           <button type="button" class="discover-mapsbtn"
                   data-lat="${p.lat}" data-lng="${p.lng}"
+                  data-name="${this._esc(p.name)}"
                   aria-label="Open in maps">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
                  stroke="currentColor" stroke-width="2">

@@ -212,7 +212,7 @@ const Trips = {
       totalCost += legTotal;
       if (l.departDate) {
         const dep = new Date(l.departDate + 'T00:00');
-        if (!isNaN(dep) && dep < today) spentCost += legTotal;
+        if (!isNaN(dep) && dep <= today) spentCost += legTotal;
       }
     }
     const remainingCost = Math.max(0, totalCost - spentCost);
@@ -1051,8 +1051,38 @@ const Trips = {
   selectMapsDestination(destId){this.pendingMapsAction={type:'navigate',destId};this.closeMapsModal();UI.openModal('modal-maps-picker');},
   shareFullRoute(){this.pendingMapsAction={type:'share'};this.closeMapsModal();UI.openModal('modal-maps-picker');},
   closeMapsPickerModal(){UI.closeModal('modal-maps-picker');this.pendingMapsAction=null;},
-  openInAppleMaps(){if(!this.pendingMapsAction)return;if(this.pendingMapsAction.type==='navigate'){const e=State.getEntry(this.pendingMapsAction.destId);if(e?.lat)window.open(`https://maps.apple.com/?daddr=${e.lat},${e.lng}&dirflg=d`,'_blank');}else{const j=State.getJourney(this.mapsModalJourneyId);if(j?.legs){const c=j.legs.map(l=>{const e=State.getEntry(l.destId);return e?.lat?`${e.lat},${e.lng}`:null;}).filter(Boolean);if(c.length)window.open(`https://maps.apple.com/?daddr=${c.join('+to:')}`,`_blank`);}}this.closeMapsPickerModal();},
-  openInGoogleMaps(){if(!this.pendingMapsAction)return;if(this.pendingMapsAction.type==='navigate'){const e=State.getEntry(this.pendingMapsAction.destId);if(e?.lat)window.open(`https://www.google.com/maps/dir/?api=1&destination=${e.lat},${e.lng}&travelmode=driving`,'_blank');}else{const j=State.getJourney(this.mapsModalJourneyId);if(j?.legs){const c=j.legs.map(l=>{const e=State.getEntry(l.destId);return e?.lat?`${e.lat},${e.lng}`:null;}).filter(Boolean);if(c.length){const dest=c[c.length-1],wp=c.slice(0,-1).join('|');window.open(c.length===1?`https://www.google.com/maps/dir/?api=1&destination=${dest}&travelmode=driving`:`https://www.google.com/maps/dir/?api=1&destination=${dest}&waypoints=${wp}&travelmode=driving`,'_blank');}}}this.closeMapsPickerModal();},
+  openInAppleMaps(){
+    if(!this.pendingMapsAction)return;
+    const a=this.pendingMapsAction;
+    if(a.type==='poi'){
+      const q=a.name?`&q=${encodeURIComponent(a.name)}`:'';
+      window.open(`https://maps.apple.com/?daddr=${a.lat},${a.lng}${q}&dirflg=d`,'_blank');
+    } else if(a.type==='navigate'){
+      const e=State.getEntry(a.destId);
+      if(e?.lat){
+        const q=e.name?`&q=${encodeURIComponent(e.name)}`:'';
+        window.open(`https://maps.apple.com/?daddr=${e.lat},${e.lng}${q}&dirflg=d`,'_blank');
+      }
+    } else {
+      const j=State.getJourney(this.mapsModalJourneyId);
+      if(j?.legs){const c=j.legs.map(l=>{const e=State.getEntry(l.destId);return e?.lat?`${e.lat},${e.lng}`:null;}).filter(Boolean);if(c.length)window.open(`https://maps.apple.com/?daddr=${c.join('+to:')}`,'_blank');}
+    }
+    this.closeMapsPickerModal();
+  },
+  openInGoogleMaps(){
+    if(!this.pendingMapsAction)return;
+    const a=this.pendingMapsAction;
+    if(a.type==='poi'){
+      window.open(`https://www.google.com/maps/dir/?api=1&destination=${a.lat},${a.lng}&travelmode=driving`,'_blank');
+    } else if(a.type==='navigate'){
+      const e=State.getEntry(a.destId);
+      if(e?.lat)window.open(`https://www.google.com/maps/dir/?api=1&destination=${e.lat},${e.lng}&travelmode=driving`,'_blank');
+    } else {
+      const j=State.getJourney(this.mapsModalJourneyId);
+      if(j?.legs){const c=j.legs.map(l=>{const e=State.getEntry(l.destId);return e?.lat?`${e.lat},${e.lng}`:null;}).filter(Boolean);if(c.length){const dest=c[c.length-1],wp=c.slice(0,-1).join('|');window.open(c.length===1?`https://www.google.com/maps/dir/?api=1&destination=${dest}&travelmode=driving`:`https://www.google.com/maps/dir/?api=1&destination=${dest}&waypoints=${wp}&travelmode=driving`,'_blank');}}
+    }
+    this.closeMapsPickerModal();
+  },
 
   // ─── Journey menu ─────────────────────────────────────────────────────────
 
