@@ -152,21 +152,33 @@
             </div>
           </div>
 
-          <div class="explore-nearby-wrap">
-            <div class="section-header">
+          <div id="nearby-wrap" class="explore-nearby-wrap">
+            <div class="section-header" onclick="Entries.toggleNearbyCollapsed()">
               <span class="section-title">Nearby Spots</span>
               <span class="section-subtitle" id="nearby-radius-label"></span>
+              <span class="section-toggle-icon" aria-hidden="true">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" stroke-width="2.5">
+                  <polyline points="6 9 12 15 18 9"/>
+                </svg>
+              </span>
             </div>
             <div id="nearby-list" class="nearby-list"></div>
             <button type="button" id="nearby-more-btn" class="show-more-btn" style="display:none">Show more</button>
           </div>
 
-          <!-- Phase 1: Discover (OpenTripMap) — along route OR near user GPS -->
+          <!-- Phase 1: Discover (Overpass / OSM) — along route OR near user GPS -->
           <div id="discover-wrap" class="explore-discover-wrap">
             <div class="section-divider"></div>
-            <div class="section-header">
+            <div class="section-header" onclick="Discover.toggleCollapsed()">
               <span class="section-title">Discover</span>
               <span class="section-subtitle" id="discover-subtitle"></span>
+              <span class="section-toggle-icon" aria-hidden="true">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                     stroke="currentColor" stroke-width="2.5">
+                  <polyline points="6 9 12 15 18 9"/>
+                </svg>
+              </span>
             </div>
             <div id="discover-chips" class="discover-chips"></div>
             <div id="discover-list" class="discover-list"></div>
