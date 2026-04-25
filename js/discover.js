@@ -356,7 +356,19 @@ const Discover = {
         _approx: true
       });
     }
-    return [...seen.values()]
+    // Second-pass dedupe by normalized name. A single trail like "Watson Falls
+    // Trail #1496" can come back as a relation (route=hiking) AND multiple way
+    // segments (highway=path with the same name) — different xids, so the
+    // first-pass dedupe keeps them all. Collapse those, keeping the entry
+    // closest to the user.
+    const byName = new Map();
+    for (const p of seen.values()) {
+      const key = (p.name || '').toLowerCase().trim();
+      if (!key) continue;
+      const existing = byName.get(key);
+      if (!existing || p.distance < existing.distance) byName.set(key, p);
+    }
+    return [...byName.values()]
       .sort((a, b) => a.distance - b.distance)
       .slice(0, this.MAX_RESULTS);
   },
