@@ -472,31 +472,54 @@
   background: var(--color-base);
   display: flex;
   flex-direction: column;
-  overflow: hidden; /* children scroll internally */
+  overflow-y: auto;          /* whole column scrolls */
+  -webkit-overflow-scrolling: touch;
   padding: var(--space-5) var(--space-4);
   gap: var(--space-4);
 }
 
+/* Sections size to their own content (no forced 50/50 split). When the
+ * total exceeds the column height, the column itself scrolls. Each
+ * section can be collapsed to header-only via the chevron toggle, giving
+ * the other section the full column. */
 .explore-nearby-wrap,
 .explore-discover-wrap {
   display: flex;
   flex-direction: column;
-  flex: 1 1 0;
-  min-height: 0; /* allow children to shrink & scroll */
-  overflow: hidden;
+  flex: 0 0 auto;
 }
 .explore-nearby-wrap .section-header,
 .explore-discover-wrap .section-header {
   flex-shrink: 0;
+  cursor: pointer;
+  user-select: none;
 }
 .explore-nearby-wrap #nearby-list,
 .explore-nearby-wrap .nearby-list,
 .explore-discover-wrap #discover-list,
 .explore-discover-wrap .discover-list {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+}
+/* When a section is collapsed, hide everything below the header. The
+ * section shrinks to header height, freeing the column for the other
+ * section's content. */
+.explore-nearby-wrap.collapsed > :not(.section-header):not(.section-divider),
+.explore-discover-wrap.collapsed > :not(.section-header):not(.section-divider) {
+  display: none !important;
+}
+/* Chevron in section header — points down when expanded, right when collapsed */
+.section-toggle-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-left: auto;
+  transition: transform 0.15s ease;
+  color: var(--color-text-muted);
+}
+.collapsed .section-toggle-icon {
+  transform: rotate(-90deg);
 }
 /* Thin divider between Nearby and Discover sections */
 .section-divider {
