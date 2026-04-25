@@ -188,28 +188,29 @@ const Trips = {
       }
     }
 
-    // Calculate spent / remaining
-    let spentCost = 0, remainingCost = 0;
-    for (let i = 0; i < legs.length; i++) {
-      const l = legs[i];
-      const legCost = l.fuelCost || 0;
+    // Cost calculation: Total uses the EXACT same formula as the Trips
+    // tab's journey card (calculateJourneyStats) so the two views agree.
+    // Spent = legs whose departDate is strictly before today. Remaining =
+    // Total − Spent (so the in-progress leg counts as remaining).
+    const stats = this.calculateJourneyStats(journey);
+    const totalCost = stats.totalFuel + stats.totalLodging;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const { mpg, pricePerGal } = State.fuelSettings;
+    let spentCost = 0;
+    for (const l of legs) {
+      if (!l.departDate) continue;
+      const dep = new Date(l.departDate + 'T00:00');
+      if (isNaN(dep) || dep >= today) continue;
+      if (l.distance) spentCost += (l.distance / mpg) * (l.fuelPrice || pricePerGal);
       const entry = State.getEntry(l.destId);
-      let lodgingCost = 0;
-      if (entry && l.arriveDate && l.departDate) {
-        const nights = Math.round((new Date(l.departDate) - new Date(l.arriveDate)) / 86400000);
-        if (nights > 0) {
-          lodgingCost = (entry.cost || 0) * nights;
-          if (entry.discountPercent) lodgingCost *= (1 - entry.discountPercent / 100);
-        }
-      }
-      const total = legCost + lodgingCost;
-      if (i < nextLegIndex || (nextLegIndex === -1 && currentLocationName)) {
-        spentCost += total;
-      } else {
-        remainingCost += total;
+      if (entry?.cost) {
+        const nights = this.calcNights(l.arriveDate, l.departDate) || 1;
+        spentCost += entry.cost * nights;
       }
     }
-    const totalCost = spentCost + remainingCost;
+    const remainingCost = Math.max(0, totalCost - spentCost);
 
     // Date range
     const firstArrive = legs[0]?.arriveDate;
