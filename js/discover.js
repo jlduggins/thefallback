@@ -26,7 +26,8 @@ const Discover = {
   expanded: false,
   loading: false,
   error: null,
-  mode: null,             // 'route' | 'near' | null
+  mode: null,             // 'route' | 'near' | null  (resolved mode actually used)
+  modeChoice: 'auto',     // 'auto' | 'route' | 'near'  (user preference)
   anchorLabel: null,
   _cache: {},             // keyed by `${mode}:${signature}:${category}`
   _inflight: {},
@@ -111,6 +112,18 @@ const Discover = {
     this.refresh();
   },
 
+  // User-controlled mode toggle: 'auto' | 'route' | 'near'.
+  // 'auto'  → route if a future leg with geometry exists, else nearby
+  // 'route' → force along-route (future legs only); falls back to nearby if none
+  // 'near'  → force user GPS within backupRadius
+  setModeChoice(choice) {
+    if (!['auto', 'route', 'near'].includes(choice)) return;
+    if (this.modeChoice === choice) return;
+    this.modeChoice = choice;
+    this.expanded = false;
+    this.refresh();
+  },
+
   toggleExpanded() {
     this.expanded = !this.expanded;
     this.render();
@@ -124,15 +137,30 @@ const Discover = {
   },
 
   // ── Anchor selection: route vs near vs none ────────────────────────────
+  // Honors `modeChoice`. Route mode samples ONLY future legs (using
+  // jctx.nextLegIndex) so finishing your last stop doesn't drag in POIs
+  // 100+ mi behind you. If forced 'route' but no future geometry exists,
+  // we fall back to nearby so the section never goes blank.
   _resolveAnchor() {
     const journey = State.currentJourneyId ? State.getJourney(State.currentJourneyId) : null;
     const legs = journey?.legs || [];
-    const withGeom = legs.filter(l => !!l.routeGeometry);
+    const jctx = (journey && State.getJourneyContext)
+      ? State.getJourneyContext(journey)
+      : { nextLegIndex: -1 };
 
-    if (journey && withGeom.length) {
+    // Future legs only — past route is irrelevant for discovery.
+    const futureLegs = (jctx.nextLegIndex >= 0)
+      ? legs.slice(jctx.nextLegIndex)
+      : [];
+    const futureWithGeom = futureLegs.filter(l => !!l.routeGeometry);
+
+    const wantRoute = this.modeChoice === 'route'
+      || (this.modeChoice === 'auto' && futureWithGeom.length > 0);
+
+    if (wantRoute && futureWithGeom.length) {
       let samples = [];
       let routeSig = '';
-      for (const l of withGeom) {
+      for (const l of futureWithGeom) {
         let coords = null;
         try { coords = JSON.parse(l.routeGeometry); } catch { coords = null; }
         if (!Array.isArray(coords) || coords.length < 2) continue;
@@ -152,14 +180,18 @@ const Discover = {
       }
     }
 
+    // Nearby mode: anchor at user GPS, use backupRadius (same setting as
+    // Nearby Spots) so the two sections cover the same search range.
+    const radiusMi = (State.fuelSettings && State.fuelSettings.backupRadius) || 30;
+    const radiusM = Math.round(radiusMi * 1609);
     if (State.userLat != null && State.userLng != null) {
-      const sig = `${State.userLat.toFixed(2)},${State.userLng.toFixed(2)}`;
+      const sig = `${State.userLat.toFixed(2)},${State.userLng.toFixed(2)}:${radiusMi}`;
       return {
         mode: 'near',
         samples: [{ lat: State.userLat, lng: State.userLng }],
-        radiusM: this.NEAR_RADIUS_M,
+        radiusM,
         signature: sig,
-        label: 'near your location',
+        label: `nearby (${radiusMi} mi)`,
         journey: null
       };
     }
@@ -215,7 +247,7 @@ const Discover = {
       return;
     }
 
-    const key = `${a.mode}:${a.signature}:${this.category}`;
+    const key = `${this.modeChoice}:${a.mode}:${a.signature}:${this.category}`;
     if (this._cache[key]) {
       this.results = this._cache[key];
       this.loading = false;
@@ -432,12 +464,32 @@ const Discover = {
 
     const sub = wrap.querySelector('#discover-subtitle');
     if (sub) {
-      sub.textContent = this.mode === 'route'
-        ? 'along your route'
-        : this.mode === 'near'
-          ? 'near your location'
-          : '';
+      sub.textContent = this.anchorLabel || '';
     }
+
+    // Mode toggle pill row — Route vs Nearby. Lets the user explicitly
+    // pick instead of relying on auto-detection. Inserted before chips.
+    let modeBar = wrap.querySelector('#discover-mode');
+    if (!modeBar) {
+      modeBar = document.createElement('div');
+      modeBar.id = 'discover-mode';
+      modeBar.className = 'discover-mode';
+      const chipBarEl = wrap.querySelector('#discover-chips');
+      if (chipBarEl) wrap.insertBefore(modeBar, chipBarEl);
+      else wrap.appendChild(modeBar);
+    }
+    const modes = [
+      ['auto',  'Auto'],
+      ['route', 'Along route'],
+      ['near',  'Nearby']
+    ];
+    modeBar.innerHTML = modes.map(([k, label]) =>
+      `<button type="button" class="discover-mode-btn${this.modeChoice === k ? ' active' : ''}"
+                data-mode="${k}">${label}</button>`
+    ).join('');
+    modeBar.querySelectorAll('.discover-mode-btn').forEach(b => {
+      b.onclick = () => Discover.setModeChoice(b.dataset.mode);
+    });
 
     const chipBar = wrap.querySelector('#discover-chips');
     if (chipBar) {
