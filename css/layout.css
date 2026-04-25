@@ -477,23 +477,183 @@
   gap: var(--space-4);
 }
 
-.explore-nearby-wrap {
+.explore-nearby-wrap,
+.explore-discover-wrap {
   display: flex;
   flex-direction: column;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-height: 0; /* allow children to shrink & scroll */
   overflow: hidden;
 }
-.explore-nearby-wrap .section-header {
+.explore-nearby-wrap .section-header,
+.explore-discover-wrap .section-header {
   flex-shrink: 0;
 }
 .explore-nearby-wrap #nearby-list,
-.explore-nearby-wrap .nearby-list {
+.explore-nearby-wrap .nearby-list,
+.explore-discover-wrap #discover-list,
+.explore-discover-wrap .discover-list {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
 }
+/* Thin divider between Nearby and Discover sections */
+.section-divider {
+  height: 1px;
+  background: var(--color-border, rgba(0,0,0,0.08));
+  margin: 6px 4px 0;
+}
+/* Show more / less button shared by both sections */
+.show-more-btn {
+  flex-shrink: 0;
+  margin: 4px var(--space-1) 0;
+  padding: 8px 12px;
+  background: transparent;
+  border: 1px solid var(--color-border, rgba(0,0,0,0.12));
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--color-primary);
+  font-weight: 500;
+  cursor: pointer;
+}
+.show-more-btn:hover { background: var(--color-surface-alt); }
+
+/* Discover-specific styling */
+.explore-discover-wrap {
+  gap: var(--space-2);
+}
+.discover-chips {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 var(--space-1) 4px;
+}
+.discover-chip {
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border, rgba(0,0,0,0.12));
+  background: var(--color-surface, #fff);
+  font-size: 12px;
+  color: var(--color-text);
+  cursor: pointer;
+}
+.discover-chip.active {
+  background: var(--color-primary);
+  color: #fff;
+  border-color: var(--color-primary);
+}
+.discover-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 var(--space-1);
+}
+.discover-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--color-surface, #fff);
+  border: 1px solid var(--color-border, rgba(0,0,0,0.08));
+  border-radius: 10px;
+}
+.discover-card-content {
+  flex: 1;
+  min-width: 0;
+}
+.discover-card-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.discover-card-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+.discover-tag {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--color-surface-alt, rgba(0,0,0,0.04));
+  font-size: 11px;
+  color: var(--color-text);
+}
+.discover-card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 5px;
+}
+.discover-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--color-surface-alt, rgba(0,0,0,0.05));
+  color: var(--color-text);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.discover-badge.good {
+  background: rgba(34,197,94,0.15);
+  color: #15803d;
+}
+.discover-badge.warn {
+  background: rgba(234,179,8,0.18);
+  color: #a16207;
+}
+.discover-badge.cost {
+  background: rgba(59,130,246,0.15);
+  color: #1d4ed8;
+}
+.discover-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.discover-save {
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--color-primary);
+  background: var(--color-primary);
+  color: #fff;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.discover-save.loading,
+.discover-save:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.discover-saved-badge {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  padding: 4px 8px;
+}
+.discover-mapsbtn {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-border, rgba(0,0,0,0.12));
+  background: var(--color-surface, #fff);
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--color-text-muted);
+}
+.discover-mapsbtn:hover { color: var(--color-primary); }
 
 .explore-brand {
   display: flex;
