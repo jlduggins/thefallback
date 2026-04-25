@@ -158,6 +158,19 @@
               <span class="section-subtitle" id="nearby-radius-label"></span>
             </div>
             <div id="nearby-list" class="nearby-list"></div>
+            <button type="button" id="nearby-more-btn" class="show-more-btn" style="display:none">Show more</button>
+          </div>
+
+          <!-- Phase 1: Discover (OpenTripMap) — along route OR near user GPS -->
+          <div id="discover-wrap" class="explore-discover-wrap">
+            <div class="section-divider"></div>
+            <div class="section-header">
+              <span class="section-title">Discover</span>
+              <span class="section-subtitle" id="discover-subtitle"></span>
+            </div>
+            <div id="discover-chips" class="discover-chips"></div>
+            <div id="discover-list" class="discover-list"></div>
+            <button type="button" id="discover-more-btn" class="show-more-btn" style="display:none">Show more</button>
           </div>
         </div>
 
@@ -655,6 +668,7 @@
   <script src="./js/ui.js"></script>
   <script src="./js/entries.js"></script>
   <script src="./js/trips.js"></script>
+  <script src="./js/discover.js"></script>
   <script type="module" src="./js/app.js"></script>
 </body>
 </html>

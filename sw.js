@@ -3,7 +3,7 @@
  * Handles caching for offline support
  */
 
-const CACHE_NAME = 'fallback-v2-cache-v14';
+const CACHE_NAME = 'fallback-v2-cache-v17';
 
 const STATIC_ASSETS = [
   './',
@@ -21,6 +21,7 @@ const STATIC_ASSETS = [
   './js/ui.js',
   './js/entries.js',
   './js/trips.js',
+  './js/discover.js',
   './js/app.js',
   './icons/logo.png'
 ];
