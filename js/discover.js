@@ -116,6 +116,13 @@ const Discover = {
     this.render();
   },
 
+  // Fold/unfold the entire Discover section to give Nearby the full column.
+  toggleCollapsed() {
+    this.collapsed = !this.collapsed;
+    const wrap = document.getElementById('discover-wrap');
+    if (wrap) wrap.classList.toggle('collapsed', !!this.collapsed);
+  },
+
   // ── Anchor selection: route vs near vs none ────────────────────────────
   _resolveAnchor() {
     const journey = State.currentJourneyId ? State.getJourney(State.currentJourneyId) : null;
@@ -419,6 +426,9 @@ const Discover = {
   render() {
     const wrap = document.getElementById('discover-wrap');
     if (!wrap) return;
+
+    // Preserve section collapsed state across re-renders.
+    wrap.classList.toggle('collapsed', !!this.collapsed);
 
     const sub = wrap.querySelector('#discover-subtitle');
     if (sub) {

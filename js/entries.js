@@ -668,6 +668,13 @@ const Entries = {
     this.updateEntriesCount();
   },
   
+  // Fold/unfold the entire Nearby section to give Discover the full column.
+  toggleNearbyCollapsed() {
+    this._nearbyCollapsed = !this._nearbyCollapsed;
+    const wrap = document.getElementById('nearby-wrap');
+    if (wrap) wrap.classList.toggle('collapsed', !!this._nearbyCollapsed);
+  },
+
   renderExploreNearby() {
     const container = document.getElementById('nearby-list');
     if (!container) return;
@@ -768,6 +775,11 @@ const Entries = {
       `;
       return;
     }
+
+    // Section collapsed state — when true, the entire Nearby section is
+    // folded to its header line. Persists across re-renders.
+    const wrap = document.getElementById('nearby-wrap');
+    if (wrap) wrap.classList.toggle('collapsed', !!this._nearbyCollapsed);
 
     // Show-more state: collapsed → 3 cards, expanded → all with internal scroll
     if (this._nearbyExpanded == null) this._nearbyExpanded = false;
