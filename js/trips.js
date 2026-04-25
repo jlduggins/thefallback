@@ -145,16 +145,46 @@ const Trips = {
       timeToNext = nextLeg.duration;
       nextEntry = State.getEntry(nextLeg.destId);
 
-      // If user is NOT at any stop, override the planned leg distance with a
-      // live straight-line estimate from the user's GPS. Leg distances are
-      // planned from the *previous* stop, not from wherever the user is now.
-      if (!currentLocationName && State.userLat != null && jctx.nextLocationLat != null) {
-        const d = State.getDistanceMiles(
-          State.userLat, State.userLng,
-          jctx.nextLocationLat, jctx.nextLocationLng
-        );
-        distanceToNext = Math.round(d);
-        timeToNext = Math.round((d / 45) * 60);
+      // Prefer FRESH ORS routing keyed by current → next entry IDs. Leg
+      // snapshots can be stale if either entry's pin was moved after the
+      // leg was created, so we recompute on render and cache the result.
+      // While the fetch is in-flight we display the leg's stored value;
+      // when it resolves, renderTripStatus() runs again and picks up the
+      // cached fresh number.
+      const toId = nextEntry?.id || nextLeg.destId;
+      const toLat = nextEntry?.lat ?? jctx.nextLocationLat ?? nextLeg.destLat;
+      const toLng = nextEntry?.lng ?? jctx.nextLocationLng ?? nextLeg.destLng;
+
+      if (currentLocationName && currentLocationId && toLat != null && toLng != null) {
+        // User is AT a stop — recompute fresh driving distance from
+        // current stop entry to next stop entry.
+        const fromLat = jctx.currentLocationLat;
+        const fromLng = jctx.currentLocationLng;
+        const cacheKey = `${currentLocationId}->${toId}`;
+        const cached = (this._tripStatusDistCache ||= {})[cacheKey];
+        if (cached) {
+          distanceToNext = cached.distance;
+          timeToNext = cached.duration;
+        } else if (fromLat != null && fromLng != null) {
+          this._refreshTripStatusDistance(journey.id, cacheKey, fromLat, fromLng, toLat, toLng);
+        }
+      } else if (!currentLocationName && State.userLat != null && toLat != null) {
+        // User is en route — recompute fresh driving distance from the
+        // user's GPS to the next entry. Cache key includes a coarse GPS
+        // bucket so we don't refetch every time the GPS jitters.
+        const gpsKey = `${State.userLat.toFixed(3)},${State.userLng.toFixed(3)}`;
+        const cacheKey = `gps:${gpsKey}->${toId}`;
+        const cached = (this._tripStatusDistCache ||= {})[cacheKey];
+        if (cached) {
+          distanceToNext = cached.distance;
+          timeToNext = cached.duration;
+        } else {
+          // Show a haversine estimate immediately; async fetch will replace it.
+          const d = State.getDistanceMiles(State.userLat, State.userLng, toLat, toLng);
+          distanceToNext = Math.round(d);
+          timeToNext = Math.round((d / 45) * 60);
+          this._refreshTripStatusDistance(journey.id, cacheKey, State.userLat, State.userLng, toLat, toLng);
+        }
       }
     }
 
@@ -951,7 +981,64 @@ const Trips = {
 
   // ─── Send to Maps ─────────────────────────────────────────────────────────
 
-  openSendToMapsModal(journeyId){const j=State.getJourney(journeyId);if(!j?.legs?.length){alert('No stops in this journey');return;}this.mapsModalJourneyId=journeyId;const legs=j.legs;let ni=0,nd=null;if(State.userLat){for(let i=0;i<legs.length;i++){const e=State.getEntry(legs[i].destId);if(e?.lat&&this.haversine(State.userLat,State.userLng,e.lat,e.lng)<10){ni=Math.min(i+1,legs.length-1);break;}}const ne=State.getEntry(legs[ni].destId);if(ne?.lat)nd=Math.round(this.haversine(State.userLat,State.userLng,ne.lat,ne.lng));}const ns=legs[ni];document.getElementById('maps-modal-content').innerHTML=`<div style="margin-bottom:14px"><div style="font-size:11px;font-weight:500;color:var(--color-text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Navigate to</div><button onclick="Trips.selectMapsDestination('${ns.destId}')" style="width:100%;padding:11px;border-radius:var(--radius-md);border:1.5px solid var(--color-primary);background:white;text-align:left;cursor:pointer;margin-bottom:8px"><div style="font-size:13px;font-weight:500;color:var(--color-text)">Next stop: ${this.esc(ns.destName)}</div>${nd?`<div style="font-size:11px;color:var(--color-text-muted)">${nd} mi away</div>`:''}</button>${legs.length>1?`<button onclick="Trips.showStopPicker()" id="stop-picker-btn" style="width:100%;padding:11px;border-radius:var(--radius-md);border:0.5px solid var(--color-border);background:white;text-align:left;cursor:pointer"><div style="font-size:13px;color:var(--color-text-muted)">Choose a different stop…</div></button><div id="stop-picker-list" style="display:none;margin-top:6px;border:0.5px solid var(--color-border);border-radius:var(--radius-md);max-height:180px;overflow-y:auto">${legs.map(l=>`<div onclick="Trips.selectMapsDestination('${l.destId}')" style="padding:9px 12px;cursor:pointer;border-bottom:0.5px solid var(--color-border);font-size:13px;color:var(--color-text)" onmouseover="this.style.background='var(--color-surface-alt)'" onmouseout="this.style.background='white'">${this.esc(l.destName)}</div>`).join('')}</div>`:''}</div><div style="border-top:0.5px solid var(--color-border);padding-top:14px"><div style="font-size:11px;font-weight:500;color:var(--color-text-muted);margin-bottom:8px;text-transform:uppercase">Full route</div><button onclick="Trips.shareFullRoute()" style="width:100%;padding:11px;border-radius:var(--radius-md);border:0.5px solid var(--color-border);background:white;text-align:left;cursor:pointer"><div style="font-size:13px;color:var(--color-text)">Open full route</div><div style="font-size:11px;color:var(--color-text-muted)">Navigate all stops in order</div></button></div>`;UI.openModal('modal-maps');},
+  // Find the next-stop leg using the SAME journey context as the trip-status
+  // card and Explore Nearby Spots, so all three views agree on "where are you,
+  // what's next?" Then asynchronously refresh the displayed driving distance
+  // via ORS and update the modal in-place once it resolves.
+  openSendToMapsModal(journeyId){
+    const j=State.getJourney(journeyId);
+    if(!j?.legs?.length){alert('No stops in this journey');return;}
+    this.mapsModalJourneyId=journeyId;
+    const legs=j.legs;
+    const jctx=State.getJourneyContext(j);
+    // Pick the leg whose dest matches jctx.nextLocationId. Fall back to the
+    // first upcoming leg, then leg 0.
+    let nextLeg=null;
+    if(jctx.nextLocationId){nextLeg=legs.find(l=>l.destId===jctx.nextLocationId)||null;}
+    if(!nextLeg&&jctx.nextLegIndex>=0&&jctx.nextLegIndex<legs.length){nextLeg=legs[jctx.nextLegIndex];}
+    if(!nextLeg)nextLeg=legs[0];
+    const ns=nextLeg;
+    // Anchor for distance display: prefer the user's current stop entry,
+    // else their GPS.
+    const fromLat=jctx.currentLocationLat??State.userLat;
+    const fromLng=jctx.currentLocationLng??State.userLng;
+    const ne=State.getEntry(ns.destId);
+    const toLat=ne?.lat??ns.destLat;
+    const toLng=ne?.lng??ns.destLng;
+    let ndText='';
+    if(fromLat!=null&&toLat!=null){
+      const havMi=Math.round(this.haversine(fromLat,fromLng,toLat,toLng));
+      ndText=`~${havMi} mi away`;
+      // Fire async ORS for accurate driving miles; updates the modal text.
+      this._refreshSendToMapsDistance(fromLat,fromLng,toLat,toLng);
+    }
+    document.getElementById('maps-modal-content').innerHTML=`<div style="margin-bottom:14px"><div style="font-size:11px;font-weight:500;color:var(--color-text-muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">Navigate to</div><button onclick="Trips.selectMapsDestination('${ns.destId}')" style="width:100%;padding:11px;border-radius:var(--radius-md);border:1.5px solid var(--color-primary);background:white;text-align:left;cursor:pointer;margin-bottom:8px"><div style="font-size:13px;font-weight:500;color:var(--color-text)">Next stop: ${this.esc(ns.destName)}</div>${ndText?`<div id="maps-next-dist" style="font-size:11px;color:var(--color-text-muted)">${ndText}</div>`:''}</button>${legs.length>1?`<button onclick="Trips.showStopPicker()" id="stop-picker-btn" style="width:100%;padding:11px;border-radius:var(--radius-md);border:0.5px solid var(--color-border);background:white;text-align:left;cursor:pointer"><div style="font-size:13px;color:var(--color-text-muted)">Choose a different stop…</div></button><div id="stop-picker-list" style="display:none;margin-top:6px;border:0.5px solid var(--color-border);border-radius:var(--radius-md);max-height:180px;overflow-y:auto">${legs.map(l=>`<div onclick="Trips.selectMapsDestination('${l.destId}')" style="padding:9px 12px;cursor:pointer;border-bottom:0.5px solid var(--color-border);font-size:13px;color:var(--color-text)" onmouseover="this.style.background='var(--color-surface-alt)'" onmouseout="this.style.background='white'">${this.esc(l.destName)}</div>`).join('')}</div>`:''}</div><div style="border-top:0.5px solid var(--color-border);padding-top:14px"><div style="font-size:11px;font-weight:500;color:var(--color-text-muted);margin-bottom:8px;text-transform:uppercase">Full route</div><button onclick="Trips.shareFullRoute()" style="width:100%;padding:11px;border-radius:var(--radius-md);border:0.5px solid var(--color-border);background:white;text-align:left;cursor:pointer"><div style="font-size:13px;color:var(--color-text)">Open full route</div><div style="font-size:11px;color:var(--color-text-muted)">Navigate all stops in order</div></button></div>`;UI.openModal('modal-maps');
+  },
+
+  async _refreshSendToMapsDistance(fromLat,fromLng,toLat,toLng){
+    try{
+      const r=await this.getRoute(fromLat,fromLng,toLat,toLng);
+      const el=document.getElementById('maps-next-dist');
+      if(el&&r&&r.distance!=null){el.textContent=`${Math.round(r.distance)} mi away`;}
+    }catch(e){}
+  },
+
+  // Async refresh of the trip-status "Next destination" card distance.
+  // Caches by `${fromId|gpsBucket}->${toId}` and re-renders the trip status
+  // when fresh ORS data arrives. Concurrent calls for the same key dedupe.
+  async _refreshTripStatusDistance(journeyId,cacheKey,fromLat,fromLng,toLat,toLng){
+    const inflight=(this._tripStatusDistInflight||={});
+    if(inflight[cacheKey])return;
+    inflight[cacheKey]=true;
+    try{
+      const r=await this.getRoute(fromLat,fromLng,toLat,toLng);
+      if(r&&r.distance!=null){
+        (this._tripStatusDistCache||={})[cacheKey]={distance:Math.round(r.distance),duration:Math.round(r.duration)};
+        if(State.currentJourneyId===journeyId)this.renderTripStatus();
+      }
+    }catch(e){}
+    finally{delete inflight[cacheKey];}
+  },
 
   closeMapsModal(){UI.closeModal('modal-maps');},
   showStopPicker(){const l=document.getElementById('stop-picker-list'),b=document.getElementById('stop-picker-btn'),op=l.style.display==='none';l.style.display=op?'block':'none';if(b)b.style.display=op?'none':'block';},
