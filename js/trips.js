@@ -188,26 +188,31 @@ const Trips = {
       }
     }
 
-    // Cost calculation: Total uses the EXACT same formula as the Trips
-    // tab's journey card (calculateJourneyStats) so the two views agree.
-    // Spent = legs whose departDate is strictly before today. Remaining =
-    // Total − Spent (so the in-progress leg counts as remaining).
-    const stats = this.calculateJourneyStats(journey);
-    const totalCost = stats.totalFuel + stats.totalLodging;
-
+    // Cost calculation: mirror the Trips journey card / detail formula
+    // (renderJourneyCard) exactly so Est. Total here matches Total there.
+    // Per-leg = _legFuel(l) + lodging, where lodging needs both arrive
+    // and depart dates and applies discountPercent×discountType. Spent =
+    // sum of legs whose departDate is strictly before today; Remaining =
+    // Total − Spent (so the in-progress leg shows as remaining).
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const { mpg, pricePerGal } = State.fuelSettings;
-    let spentCost = 0;
+    let totalCost = 0, spentCost = 0;
     for (const l of legs) {
-      if (!l.departDate) continue;
-      const dep = new Date(l.departDate + 'T00:00');
-      if (isNaN(dep) || dep >= today) continue;
-      if (l.distance) spentCost += (l.distance / mpg) * (l.fuelPrice || pricePerGal);
-      const entry = State.getEntry(l.destId);
-      if (entry?.cost) {
-        const nights = this.calcNights(l.arriveDate, l.departDate) || 1;
-        spentCost += entry.cost * nights;
+      const fuel = this._legFuel(l);
+      let lodging = 0;
+      const e = State.getEntry(l.destId);
+      if (e && l.arriveDate && l.departDate) {
+        const n = Math.round((new Date(l.departDate) - new Date(l.arriveDate)) / 86400000);
+        if (n > 0) {
+          lodging = (e.cost || 0) * n;
+          if (e.discountPercent && e.discountType) lodging *= (1 - e.discountPercent / 100);
+        }
+      }
+      const legTotal = fuel + lodging;
+      totalCost += legTotal;
+      if (l.departDate) {
+        const dep = new Date(l.departDate + 'T00:00');
+        if (!isNaN(dep) && dep < today) spentCost += legTotal;
       }
     }
     const remainingCost = Math.max(0, totalCost - spentCost);
