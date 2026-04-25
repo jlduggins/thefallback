@@ -16,6 +16,7 @@ const App = {
     UI.init();
     Entries.init();
     Trips.init();
+    if (window.Discover && Discover.init) Discover.init();
     
     // Register service worker
     this.registerServiceWorker();

@@ -769,7 +769,28 @@ const Entries = {
       return;
     }
 
-    container.innerHTML = entries.map(entry => this.renderNearbyCard(entry)).join('');
+    // Show-more state: collapsed → 3 cards, expanded → all with internal scroll
+    if (this._nearbyExpanded == null) this._nearbyExpanded = false;
+    const COLLAPSED_COUNT = 3;
+    const visible = this._nearbyExpanded ? entries : entries.slice(0, COLLAPSED_COUNT);
+    container.innerHTML = visible.map(entry => this.renderNearbyCard(entry)).join('');
+
+    // Show-more button toggle
+    const moreBtn = document.getElementById('nearby-more-btn');
+    if (moreBtn) {
+      if (entries.length > COLLAPSED_COUNT) {
+        moreBtn.style.display = '';
+        moreBtn.textContent = this._nearbyExpanded
+          ? 'Show less'
+          : `Show more (${entries.length - COLLAPSED_COUNT})`;
+        moreBtn.onclick = () => {
+          this._nearbyExpanded = !this._nearbyExpanded;
+          this.renderExploreNearby();
+        };
+      } else {
+        moreBtn.style.display = 'none';
+      }
+    }
 
     container.querySelectorAll('.nearby-card').forEach(card => {
       card.addEventListener('click', () => {
