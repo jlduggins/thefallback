@@ -378,12 +378,23 @@ const Discover = {
       const lng = el.lon ?? el.center?.lon;
       if (lat == null || lng == null) continue;
       const tags = el.tags || {};
-      // Synthesize a name for unnamed utility POIs (dump/water) so they
-      // still show up — vanlifers want these even unnamed.
-      const name = tags.name
-        || tags.operator
-        || (tags.amenity === 'sanitary_dump_station' ? 'Dump Station' : null)
-        || (tags.amenity === 'drinking_water' ? 'Water Fill-up' : null);
+      // Names: prefer the OSM name, then operator. For unnamed utility POIs
+      // (dump/water), only synthesize a generic label when there's an explicit
+      // public-access signal — otherwise we surface random outdoor spigots on
+      // private residences (the "Water Fill-up" junk problem).
+      let name = tags.name || tags.operator;
+      if (!name) {
+        const looksPublic = tags.access === 'yes'
+          || tags.access === 'public'
+          || tags.access === 'permissive'
+          || tags.fee === 'no'
+          || tags.tourism === 'camp_site'
+          || tags.tourism === 'caravan_site';
+        if (looksPublic) {
+          if (tags.amenity === 'sanitary_dump_station') name = 'Dump Station';
+          else if (tags.amenity === 'drinking_water') name = 'Water Fill-up';
+        }
+      }
       if (!name) continue;
       const xid = `${el.type}/${el.id}`;
       if (seen.has(xid)) continue;
@@ -542,6 +553,34 @@ const Discover = {
     } catch (e) {
       console.warn('[Discover] wikidata fetch failed:', e);
       this._wikidataCache[qid] = null;
+      return null;
+    }
+  },
+
+  // ── Reverse geocode (lazy, on detail open) ─────────────────────────────
+  // Many OSM POIs only carry coords — no addr:city / addr:state tags. To make
+  // the Google "Look up" query useful (and the detail subline informative),
+  // ask Nominatim for the closest containing city/state. Cached on the POI
+  // object so repeat opens skip the network. Nominatim usage policy: 1 req/s
+  // and a real User-Agent — fine for personal-app traffic.
+  async _reverseGeocode(poi) {
+    if (poi._reverseAddr !== undefined) return poi._reverseAddr;
+    if (poi.lat == null || poi.lng == null) { poi._reverseAddr = null; return null; }
+    try {
+      const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${poi.lat}&lon=${poi.lng}&zoom=10&addressdetails=1`;
+      const r = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+      if (!r.ok) { poi._reverseAddr = null; return null; }
+      const data = await r.json();
+      const a = data.address || {};
+      poi._reverseAddr = {
+        city: a.city || a.town || a.village || a.hamlet || a.municipality || null,
+        state: a.state || null,
+        country: a.country || null
+      };
+      return poi._reverseAddr;
+    } catch (e) {
+      console.warn('[Discover] reverse geocode failed:', e);
+      poi._reverseAddr = null;
       return null;
     }
   },
@@ -939,6 +978,13 @@ const Discover = {
     const wikiTag = poi.tags?.wikipedia || poi.tags?.['wikipedia:en'];
     const qid = poi.tags?.wikidata;
     const enriching = !!(wikiTag || qid);
+    // Need a reverse-geocode if the POI carries no city/state tags — the
+    // Google search query is much weaker without those, and the subline is
+    // less informative.
+    const t = poi.tags || {};
+    const hasCity = !!(t['addr:city'] || t['addr:town'] || t['addr:village']);
+    const hasState = !!t['addr:state'];
+    const needReverse = (!hasCity || !hasState) && poi._reverseAddr === undefined;
 
     content.innerHTML = this._renderDetailContent(poi, /*wiki*/ null, /*wd*/ null, /*loading*/ enriching);
     footer.innerHTML = this._renderDetailFooter(poi);
@@ -953,18 +999,22 @@ const Discover = {
     // Desktop: map narrowed; tell Leaflet to recompute size.
     setTimeout(() => { if (MapModule?.map) MapModule.map.invalidateSize(); }, 50);
 
-    // Async: fetch Wikipedia + Wikidata in parallel when the POI has the
-    // tags. Both are cached per id/tag so repeat opens skip the network.
-    if (enriching) {
+    // Async: fetch Wikipedia + Wikidata + reverse-geocode in parallel.
+    // All cached on the POI / per id-or-tag so repeat opens skip the network.
+    if (enriching || needReverse) {
       Promise.all([
         wikiTag ? this._loadWikipedia(wikiTag) : Promise.resolve(null),
-        qid ? this._loadWikidata(qid) : Promise.resolve(null)
-      ]).then(([wiki, wd]) => {
-        // Guard: user may have closed or opened a different POI by the time
-        // these resolve.
+        qid ? this._loadWikidata(qid) : Promise.resolve(null),
+        needReverse ? this._reverseGeocode(poi) : Promise.resolve(null)
+      ]).then(([wiki, wd, _addr]) => {
+        // Guard: user may have closed or opened a different POI by then.
         if (this._detailXid !== xid) return;
         const c = document.getElementById('discover-detail-content');
+        const f = document.getElementById('discover-detail-footer');
         if (c) c.innerHTML = this._renderDetailContent(poi, wiki, wd, false);
+        // Footer re-render is needed when reverse-geocode returned, since
+        // poi._reverseAddr changes the Google query and the address row.
+        if (f && needReverse) f.innerHTML = this._renderDetailFooter(poi);
       });
     }
   },
@@ -1014,9 +1064,14 @@ const Discover = {
       ? `<div class="dd-hero" style="background-image:url('${esc(heroSrc)}')"><span class="dd-hero-pill">${esc(poi.category)}</span></div>`
       : `<div class="dd-hero fallback"><span class="dd-hero-pill">${esc(poi.category)}</span><span>${heroIcon}</span></div>`;
 
-    // Subline: distance + operator/region if available
+    // Subline: distance + operator/region if available. Region falls back to
+    // the reverse-geocoded city/state when no addr:* tag is present.
     const distLabel = (poi._approx ? '~' : '') + State.formatDistance(poi.distance) + ' away';
-    const region = tags.operator || tags['addr:state'] || '';
+    const revCity = poi._reverseAddr?.city;
+    const revState = poi._reverseAddr?.state;
+    const region = tags.operator
+      || [tags['addr:city'] || revCity, tags['addr:state'] || revState].filter(Boolean).join(', ')
+      || '';
     const subline = region ? `${distLabel} · ${esc(region)}` : distLabel;
 
     // Description priority: Wikipedia extract > OSM description > Wikidata description > empty
@@ -1090,8 +1145,13 @@ const Discover = {
       ? `<div class="dd-section-label">Amenities</div><div class="dd-badges">${badges.map(([l, k]) => `<span class="dd-badge${k === 'warn' ? ' warn' : ''}">${esc(l)}</span>`).join('')}</div>`
       : '';
 
-    // Address (compose from addr:* tags)
-    const addrParts = [tags['addr:street'], tags['addr:city'], tags['addr:state']].filter(Boolean);
+    // Address (compose from addr:* tags, fall back to reverse-geocoded
+    // city/state when only coords are tagged on the POI).
+    const addrParts = [
+      tags['addr:street'],
+      tags['addr:city'] || revCity,
+      tags['addr:state'] || revState
+    ].filter(Boolean);
     const addressLine = addrParts.join(', ');
 
     // Info rows: hours / address / website / phone / coords (always last)
@@ -1130,13 +1190,17 @@ const Discover = {
       : `<button class="btn btn-primary" style="flex:1" ${saving ? 'disabled' : ''}
                  onclick="Discover.savePOI('${poi.xid}')">${saving ? 'Saving…' : '+ Save'}</button>`;
 
-    // Search-the-web row. State-suffixed Google query disambiguates generic
-    // POI names ("Bidwell Mansion" vs the dozens of others). Offline state is
-    // checked at click time via Discover._lookupClick — disabled-class is just
-    // visual styling, the click guard does the real work so this stays correct
-    // even if connectivity changes after render.
-    const state = poi.tags?.['addr:state'] || '';
-    const gQuery = encodeURIComponent(`${poi.name}${state ? ' ' + state : ''}`);
+    // Search-the-web row. Suffix the Google query with city + state to
+    // disambiguate generic POI names ("Bidwell Mansion" vs the dozens of
+    // others). Pulls from OSM addr:* tags first, then a Nominatim reverse-
+    // geocode (cached on the POI as poi._reverseAddr) when those tags are
+    // missing. Offline state checked at click time via _lookupClick.
+    const tags = poi.tags || {};
+    const city = tags['addr:city'] || tags['addr:town'] || tags['addr:village'] || poi._reverseAddr?.city;
+    const stateName = tags['addr:state'] || poi._reverseAddr?.state;
+    const locParts = [city, stateName].filter(Boolean);
+    const locSuffix = locParts.length ? ' ' + locParts.join(' ') : '';
+    const gQuery = encodeURIComponent(poi.name + locSuffix);
     const wQuery = encodeURIComponent(poi.name);
     return `
       <div class="dd-lookup-row">

@@ -75,6 +75,7 @@ const Firebase = {
     } else {
       this.user = null;
       this.unsubscribeFromData();
+      State.entriesLoaded = false;
       State.setEntries([]);
       State.setJourneys([]);
       State.emit('auth:signed-out');
@@ -134,6 +135,10 @@ const Firebase = {
         id: d.id,
         ...d.data()
       }));
+      // Mark loaded BEFORE setEntries so any 'entries:changed' listeners that
+      // re-render see the correct flag and don't briefly flash a stale empty
+      // state on first paint.
+      State.entriesLoaded = true;
       State.setEntries(entries);
       // Add a sample entry for brand-new users
       if (firstSnapshot) {

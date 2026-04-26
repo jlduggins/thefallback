@@ -679,6 +679,18 @@ const Entries = {
     const container = document.getElementById('nearby-list');
     if (!container) return;
 
+    // Show a loading shim until Firebase delivers its first entries snapshot —
+    // otherwise the user sees "No spots within 30 miles" on app open before
+    // the data arrives, then it pops in. Especially jarring on mobile.
+    if (!State.entriesLoaded) {
+      container.innerHTML = `
+        <div class="empty-state" style="padding:24px;text-align:center">
+          <div class="spinner" style="margin:0 auto 8px"></div>
+          <div style="font-size:14px;color:var(--color-text-muted)">Loading your spots…</div>
+        </div>`;
+      return;
+    }
+
     // Radius from fuel settings (backupRadius) — these are "backup" nearby spots
     const radius = (State.fuelSettings && State.fuelSettings.backupRadius) || 30;
     const radiusLabel = document.getElementById('nearby-radius-label');
@@ -924,6 +936,16 @@ const Entries = {
   renderSavedList() {
     const container = document.getElementById('locations-list');
     if (!container) return;
+
+    // Loading shim — see renderExploreNearby for rationale.
+    if (!State.entriesLoaded) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <div class="spinner" style="margin-bottom:12px"></div>
+          <div class="empty-state-text">Loading your locations…</div>
+        </div>`;
+      return;
+    }
 
     let entries = State.entries.slice();
     const f = this.filters;

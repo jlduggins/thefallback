@@ -10,6 +10,10 @@ const State = {
   
   entries: [],
   journeys: [],
+  // True once Firebase has delivered its first entries snapshot. Lets the
+  // Explore/Saved views distinguish "no spots yet" (legit empty) from "still
+  // loading from Firestore" (don't render the empty state).
+  entriesLoaded: false,
   
   // ═══════════════════════════════════════════════════════════════════════════
   // UI STATE
