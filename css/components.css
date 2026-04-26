@@ -763,6 +763,66 @@
   padding: 8px 0 16px;
 }
 
+/* Footer "Look up" row — Google + Wikipedia search launchers. Sits above
+   the action buttons. Each pill is 1 tap → external browser. */
+.dd-lookup-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-bottom: 10px;
+  margin-bottom: 10px;
+  border-bottom: 0.5px solid var(--color-border);
+}
+.dd-lookup-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-right: 2px;
+}
+.dd-lookup-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  text-decoration: none;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+.dd-lookup-btn:hover {
+  background: var(--color-surface-alt);
+  border-color: var(--color-text-muted);
+}
+.dd-lookup-btn svg { display: block; }
+.dd-wiki-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--color-text);
+  line-height: 1;
+}
+.dd-footer-actions {
+  display: flex;
+  gap: 8px;
+}
+/* Footer holds two stacked rows (lookup + actions). Override the side-panel
+   default which lays children out flat. */
+#discover-detail-footer.side-panel-footer {
+  display: block;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    DROPDOWN SELECT
    ═══════════════════════════════════════════════════════════════════════════ */

@@ -109,6 +109,22 @@ const Discover = {
   PAGE_INCREMENT: 10,      // added per "Show more" click
   _visibleCount: 10,       // current display window; reset on category/mode change
   _wikiCache: {},          // wiki tag → { extract, thumbnail, url } | null
+  _wikidataCache: {},      // qid → { image, officialWebsite, description, inception } | null
+
+  // Overpass mirrors tried in order — each has independent rate limits, so
+  // when the main endpoint returns 429/504 we silently fall through to the
+  // next. All three accept the same Overpass-QL syntax.
+  OVERPASS_MIRRORS: [
+    'https://overpass-api.de/api/interpreter',
+    'https://overpass.kumi.systems/api/interpreter',
+    'https://overpass.private.coffee/api/interpreter'
+  ],
+
+  // localStorage TTL for cached Overpass results. POIs barely change, so a
+  // week is comfortable. Keyed by `${modeChoice}:${mode}:${signature}:${cat}`,
+  // same as the in-memory cache below.
+  CACHE_TTL_MS: 7 * 86400 * 1000,
+  CACHE_PREFIX: 'fb-disc-',
 
   // ── Init ───────────────────────────────────────────────────────────────
   init() {
@@ -141,6 +157,17 @@ const Discover = {
     this.modeChoice = choice;
     this.expanded = false;
     this._visibleCount = this.INITIAL_COUNT;
+    this.refresh();
+  },
+
+  retry() {
+    // Wipe the error so render() doesn't bounce into the error state again,
+    // and clear any in-memory cache for the failed key (the persistent cache
+    // wasn't written on failure). Then re-trigger the fetch.
+    if (this._lastFailedKey) delete this._cache[this._lastFailedKey];
+    this.error = null;
+    this.errorType = null;
+    this._lastFailedKey = null;
     this.refresh();
   },
 
@@ -268,12 +295,23 @@ const Discover = {
     }
 
     const key = `${this.modeChoice}:${a.mode}:${a.signature}:${this.category}`;
+
+    // In-memory cache (fastest) → localStorage cache (survives reload).
     if (this._cache[key]) {
       this.results = this._cache[key];
       this.loading = false;
       this.error = null;
       this.render();
-      // If any cached POIs are still on haversine, try to upgrade them.
+      if (this.results.some(p => p._approx)) this._refreshDrivingDistances(a, this.results);
+      return;
+    }
+    const persisted = this._persistRead(key);
+    if (persisted) {
+      this._cache[key] = persisted;
+      this.results = persisted;
+      this.loading = false;
+      this.error = null;
+      this.render();
       if (this.results.some(p => p._approx)) this._refreshDrivingDistances(a, this.results);
       return;
     }
@@ -282,20 +320,24 @@ const Discover = {
     this._inflight[key] = true;
     this.loading = true;
     this.error = null;
+    this.errorType = null;
+    this._lastFailedKey = null;
     this.render();
 
     try {
       const pois = await this._fetchPOIs(a);
       this._cache[key] = pois;
+      this._persistWrite(key, pois);
       this.results = pois;
       this.error = null;
-      // Async: replace haversine distances with real ORS driving miles. Updates
-      // the same POI objects so cached results keep the corrected values, and
-      // calls render() again once the matrix returns.
+      this.errorType = null;
       this._refreshDrivingDistances(a, pois);
     } catch (e) {
       console.error('[Discover] fetch failed:', e);
-      this.error = 'Discoveries are temporarily unavailable. Try again in a moment.';
+      // Typed errors from _overpassQuery — render() shows different UI per type.
+      this.errorType = e.type || 'network';
+      this.error = e.message || 'Fetch failed';
+      this._lastFailedKey = key;
       this.results = [];
     } finally {
       this.loading = false;
@@ -324,14 +366,7 @@ const Discover = {
     }
     body += ');\nout center tags 250;';
 
-    const r = await fetch('https://overpass-api.de/api/interpreter', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: 'data=' + encodeURIComponent(body)
-    });
-    if (!r.ok) throw new Error('Overpass HTTP ' + r.status);
-    const data = await r.json();
-    if (!Array.isArray(data.elements)) throw new Error('Overpass: unexpected response');
+    const data = await this._overpassQuery(body);
 
     const seen = new Map();
     const refLat = State.userLat ?? anchor.samples[0].lat;
@@ -381,6 +416,134 @@ const Discover = {
     return [...byName.values()]
       .sort((a, b) => a.distance - b.distance)
       .slice(0, this.MAX_RESULTS);
+  },
+
+  // ── Overpass with mirror fallback + typed errors ───────────────────────
+  // Tries each mirror in order. 429/504 → next mirror (rate-limited). Network
+  // errors → next mirror. If all mirrors fail, throws an error tagged with
+  // .type so render() can show appropriate UI ('busy' vs 'network').
+  async _overpassQuery(body) {
+    let lastErr;
+    for (const url of this.OVERPASS_MIRRORS) {
+      try {
+        const r = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: 'data=' + encodeURIComponent(body)
+        });
+        if (r.status === 429 || r.status === 504) {
+          lastErr = Object.assign(new Error('Overpass busy ' + r.status), { type: 'busy' });
+          continue;
+        }
+        if (!r.ok) {
+          lastErr = Object.assign(new Error('Overpass HTTP ' + r.status), { type: 'network' });
+          continue;
+        }
+        const data = await r.json();
+        if (!Array.isArray(data.elements)) {
+          lastErr = Object.assign(new Error('Overpass: unexpected response'), { type: 'network' });
+          continue;
+        }
+        return data;
+      } catch (e) {
+        lastErr = e;
+        if (!lastErr.type) lastErr.type = navigator.onLine ? 'network' : 'offline';
+      }
+    }
+    throw lastErr || Object.assign(new Error('All Overpass mirrors failed'), { type: 'network' });
+  },
+
+  // ── Persistent cache (localStorage with TTL) ──────────────────────────
+  // Survives page reloads. Same key shape as the in-memory _cache. On write,
+  // if the quota is exceeded, prunes expired + oldest half and retries.
+  _persistRead(key) {
+    try {
+      const raw = localStorage.getItem(this.CACHE_PREFIX + key);
+      if (!raw) return null;
+      const obj = JSON.parse(raw);
+      if (!obj.expires || obj.expires < Date.now()) {
+        localStorage.removeItem(this.CACHE_PREFIX + key);
+        return null;
+      }
+      return obj.data;
+    } catch (e) {
+      return null;
+    }
+  },
+  _persistWrite(key, data) {
+    const obj = { expires: Date.now() + this.CACHE_TTL_MS, data };
+    let json;
+    try { json = JSON.stringify(obj); } catch { return; }
+    try {
+      localStorage.setItem(this.CACHE_PREFIX + key, json);
+    } catch (e) {
+      this._prunePersisted();
+      try { localStorage.setItem(this.CACHE_PREFIX + key, json); }
+      catch (e2) { console.warn('[Discover] persist failed after prune:', e2); }
+    }
+  },
+  _prunePersisted() {
+    const now = Date.now();
+    const ours = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(this.CACHE_PREFIX)) ours.push(k);
+    }
+    // Drop expired first.
+    let removed = 0;
+    const survivors = [];
+    ours.forEach(k => {
+      try {
+        const obj = JSON.parse(localStorage.getItem(k) || '{}');
+        if (!obj.expires || obj.expires < now) {
+          localStorage.removeItem(k);
+          removed++;
+        } else {
+          survivors.push({ k, expires: obj.expires });
+        }
+      } catch { localStorage.removeItem(k); removed++; }
+    });
+    // If still tight, evict oldest half of survivors.
+    if (removed < 3 && survivors.length) {
+      survivors.sort((a, b) => a.expires - b.expires);
+      survivors.slice(0, Math.ceil(survivors.length / 2)).forEach(({ k }) => localStorage.removeItem(k));
+    }
+  },
+
+  // ── Wikidata enrichment ───────────────────────────────────────────────
+  // Many OSM POIs carry a `wikidata=Q12345` tag. Wikidata returns structured
+  // facts the OSM tags don't: image (Commons), official website, inception
+  // date, and a short English description. Free, anonymous CORS via origin=*.
+  async _loadWikidata(qid) {
+    if (!qid) return null;
+    if (this._wikidataCache[qid] !== undefined) return this._wikidataCache[qid];
+    try {
+      const url = `https://www.wikidata.org/w/api.php?action=wbgetentities&ids=${encodeURIComponent(qid)}&props=claims%7Cdescriptions&languages=en&format=json&origin=*`;
+      const r = await fetch(url);
+      if (!r.ok) { this._wikidataCache[qid] = null; return null; }
+      const data = await r.json();
+      const ent = data.entities?.[qid];
+      if (!ent) { this._wikidataCache[qid] = null; return null; }
+      const claim = (prop) => ent.claims?.[prop]?.[0]?.mainsnak?.datavalue?.value;
+      const imageFile = claim('P18');
+      const officialSite = claim('P856');
+      const inceptionRaw = claim('P571')?.time;
+      const out = {
+        description: ent.descriptions?.en?.value || null,
+        // Commons file URL — Special:FilePath redirects to the actual image
+        // at the requested width. No filename URL-encoding edge cases.
+        image: imageFile ? `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(imageFile)}?width=600` : null,
+        officialWebsite: officialSite || null,
+        // Inception times look like "+1856-01-01T00:00:00Z" — extract year.
+        inception: inceptionRaw ? inceptionRaw.replace(/^\+/, '').slice(0, 4) : null
+      };
+      this._wikidataCache[qid] = out;
+      return out;
+    } catch (e) {
+      console.warn('[Discover] wikidata fetch failed:', e);
+      this._wikidataCache[qid] = null;
+      return null;
+    }
   },
 
   // OSM tag → human-readable type label
@@ -661,9 +824,18 @@ const Discover = {
 
     if (this.error) {
       list.classList.remove('expanded');
+      // Three error states get distinct UI so the user knows what to do.
+      const t = this.errorType || 'network';
+      const copy = t === 'busy'
+        ? { icon: '⏳', msg: 'OpenStreetMap is busy right now.', retry: 'Try again' }
+        : t === 'offline'
+        ? { icon: '📡', msg: "You're offline. Connect to load discoveries.", retry: null }
+        : { icon: '⚠️', msg: "Couldn't reach OpenStreetMap.", retry: 'Try again' };
       list.innerHTML = `
         <div class="empty-state" style="padding:20px;text-align:center">
-          <div style="font-size:13px;color:var(--color-text-muted)">${this._esc(this.error)}</div>
+          <div style="font-size:24px;margin-bottom:6px">${copy.icon}</div>
+          <div style="font-size:13px;color:var(--color-text-muted);margin-bottom:${copy.retry ? '12px' : '0'}">${this._esc(copy.msg)}</div>
+          ${copy.retry ? `<button class="btn btn-outline btn-sm" onclick="Discover.retry()">${copy.retry}</button>` : ''}
         </div>`;
       if (moreBtn) moreBtn.style.display = 'none';
       return;
@@ -764,7 +936,11 @@ const Discover = {
       MapModule.flyTo(poi.lat, poi.lng, 13);
     }
 
-    content.innerHTML = this._renderDetailContent(poi, /*wiki*/ null, /*loading*/ true);
+    const wikiTag = poi.tags?.wikipedia || poi.tags?.['wikipedia:en'];
+    const qid = poi.tags?.wikidata;
+    const enriching = !!(wikiTag || qid);
+
+    content.innerHTML = this._renderDetailContent(poi, /*wiki*/ null, /*wd*/ null, /*loading*/ enriching);
     footer.innerHTML = this._renderDetailFooter(poi);
     panel.style.display = 'flex';
 
@@ -777,17 +953,18 @@ const Discover = {
     // Desktop: map narrowed; tell Leaflet to recompute size.
     setTimeout(() => { if (MapModule?.map) MapModule.map.invalidateSize(); }, 50);
 
-    // Async: fetch Wikipedia summary if the POI has a wiki tag, then re-render
-    // content (footer doesn't change). Cached per wiki tag so repeat opens skip
-    // the network hop.
-    const wikiTag = poi.tags?.wikipedia || poi.tags?.['wikipedia:en'];
-    if (wikiTag) {
-      this._loadWikipedia(wikiTag).then(wiki => {
+    // Async: fetch Wikipedia + Wikidata in parallel when the POI has the
+    // tags. Both are cached per id/tag so repeat opens skip the network.
+    if (enriching) {
+      Promise.all([
+        wikiTag ? this._loadWikipedia(wikiTag) : Promise.resolve(null),
+        qid ? this._loadWikidata(qid) : Promise.resolve(null)
+      ]).then(([wiki, wd]) => {
         // Guard: user may have closed or opened a different POI by the time
-        // this resolves.
+        // these resolve.
         if (this._detailXid !== xid) return;
         const c = document.getElementById('discover-detail-content');
-        if (c) c.innerHTML = this._renderDetailContent(poi, wiki, /*loading*/ false);
+        if (c) c.innerHTML = this._renderDetailContent(poi, wiki, wd, false);
       });
     }
   },
@@ -826,12 +1003,12 @@ const Discover = {
     }
   },
 
-  _renderDetailContent(poi, wiki, loading) {
+  _renderDetailContent(poi, wiki, wd, loading) {
     const esc = s => this._esc(s);
     const tags = poi.tags || {};
 
-    // Hero: wiki thumb → OSM image tag → category gradient placeholder
-    const heroSrc = wiki?.thumbnail || tags.image || null;
+    // Hero priority: Wikipedia thumb > Wikidata image (Commons) > OSM image tag > gradient
+    const heroSrc = wiki?.thumbnail || wd?.image || tags.image || null;
     const heroIcon = this._categoryIcon(poi.category);
     const hero = heroSrc
       ? `<div class="dd-hero" style="background-image:url('${esc(heroSrc)}')"><span class="dd-hero-pill">${esc(poi.category)}</span></div>`
@@ -842,10 +1019,10 @@ const Discover = {
     const region = tags.operator || tags['addr:state'] || '';
     const subline = region ? `${distLabel} · ${esc(region)}` : distLabel;
 
-    // Description: wiki extract preferred, then OSM description, then empty-state
+    // Description priority: Wikipedia extract > OSM description > Wikidata description > empty
     const osmDesc = tags.description || tags['description:en'];
     let descBlock = '';
-    if (loading && (tags.wikipedia || tags['wikipedia:en'])) {
+    if (loading) {
       descBlock = `<div class="dd-loading">Loading description…</div>`;
     } else if (wiki?.extract) {
       descBlock = `
@@ -854,11 +1031,15 @@ const Discover = {
         <div class="dd-wiki-attribution">Summary from Wikipedia, CC BY-SA 4.0</div>`;
     } else if (osmDesc) {
       descBlock = `<div class="dd-description" style="margin-bottom:18px">${esc(osmDesc)}</div>`;
-    } else if (!tags.website && !tags['contact:website'] && !tags.phone) {
+    } else if (wd?.description) {
+      // Wikidata "descriptions" are a one-line gloss, not a full extract — but
+      // still better than the generic empty-state when available.
+      descBlock = `<div class="dd-description" style="margin-bottom:18px">${esc(wd.description)}</div>`;
+    } else if (!tags.website && !tags['contact:website'] && !tags.phone && !wd?.officialWebsite) {
       descBlock = `
         <div class="dd-empty-blurb">
           <strong>No description available</strong>
-          This place is in OpenStreetMap but doesn't have a description, Wikipedia article, or website yet. The map pin is its only listed info.
+          This place is in OpenStreetMap but doesn't have a description, Wikipedia article, or website yet. Use the search buttons below to look it up.
         </div>`;
     }
 
@@ -888,6 +1069,7 @@ const Discover = {
     }
     if (tags.ref) facts.push(['Trail #', tags.ref]);
     if (tags.surface) facts.push(['Surface', tags.surface.replace(/_/g, ' ')]);
+    if (wd?.inception) facts.push(['Established', wd.inception]);
     const factsHtml = facts.length
       ? `<div class="dd-facts">${facts.map(([l, v]) => `<div class="dd-fact"><div class="dd-fact-label">${esc(l)}</div><div class="dd-fact-value">${esc(v)}</div></div>`).join('')}</div>`
       : '';
@@ -916,7 +1098,7 @@ const Discover = {
     const rows = [];
     if (tags.opening_hours) rows.push(['🕒', esc(tags.opening_hours), 'Hours']);
     if (addressLine) rows.push(['📍', esc(addressLine), 'Address']);
-    const website = tags.website || tags['contact:website'] || tags.url;
+    const website = tags.website || tags['contact:website'] || tags.url || wd?.officialWebsite;
     if (website) {
       const display = website.replace(/^https?:\/\//, '').replace(/\/$/, '');
       rows.push(['🌐', `<a href="${esc(website)}" target="_blank" rel="noopener">${esc(display)}</a>`, 'Website']);
@@ -940,19 +1122,60 @@ const Discover = {
   },
 
   _renderDetailFooter(poi) {
+    const esc = s => this._esc(s);
     const saved = this._alreadySaved(poi);
     const saving = this._savingXids.has(poi.xid);
     const saveBtn = saved
       ? `<button class="btn btn-outline" disabled style="flex:1">✓ Saved</button>`
       : `<button class="btn btn-primary" style="flex:1" ${saving ? 'disabled' : ''}
                  onclick="Discover.savePOI('${poi.xid}')">${saving ? 'Saving…' : '+ Save'}</button>`;
+
+    // Search-the-web row. State-suffixed Google query disambiguates generic
+    // POI names ("Bidwell Mansion" vs the dozens of others). Offline state is
+    // checked at click time via Discover._lookupClick — disabled-class is just
+    // visual styling, the click guard does the real work so this stays correct
+    // even if connectivity changes after render.
+    const state = poi.tags?.['addr:state'] || '';
+    const gQuery = encodeURIComponent(`${poi.name}${state ? ' ' + state : ''}`);
+    const wQuery = encodeURIComponent(poi.name);
     return `
-      <button class="btn btn-outline" style="flex:1"
-              onclick="Discover.openInMaps('${this._esc(poi.name)}', ${poi.lat}, ${poi.lng})">
-        📍 Open in Maps
-      </button>
-      ${saveBtn}
+      <div class="dd-lookup-row">
+        <span class="dd-lookup-label">Look up:</span>
+        <a href="https://www.google.com/search?q=${gQuery}" target="_blank" rel="noopener"
+           class="dd-lookup-btn" title="Search on Google" onclick="return Discover._lookupClick(event)">
+          <svg viewBox="0 0 48 48" width="18" height="18" aria-hidden="true">
+            <path fill="#4285f4" d="M45.12 24.5c0-1.56-.14-3.06-.4-4.5H24v8.51h11.84c-.51 2.75-2.06 5.08-4.39 6.64v5.52h7.11c4.16-3.83 6.56-9.47 6.56-16.17z"/>
+            <path fill="#34a853" d="M24 46c5.94 0 10.92-1.97 14.56-5.33l-7.11-5.52c-1.97 1.32-4.49 2.1-7.45 2.1-5.73 0-10.58-3.87-12.31-9.07H4.34v5.7C7.96 41.07 15.4 46 24 46z"/>
+            <path fill="#fbbc04" d="M11.69 28.18C11.25 26.86 11 25.45 11 24s.25-2.86.69-4.18v-5.7H4.34C2.85 17.09 2 20.45 2 24c0 3.55.85 6.91 2.34 9.88l7.35-5.7z"/>
+            <path fill="#ea4335" d="M24 10.75c3.23 0 6.13 1.11 8.41 3.29l6.31-6.31C34.91 4.18 29.93 2 24 2 15.4 2 7.96 6.93 4.34 14.12l7.35 5.7c1.73-5.2 6.58-9.07 12.31-9.07z"/>
+          </svg>
+          <span>Google</span>
+        </a>
+        <a href="https://en.wikipedia.org/wiki/Special:Search?search=${wQuery}" target="_blank" rel="noopener"
+           class="dd-lookup-btn" title="Search on Wikipedia" onclick="return Discover._lookupClick(event)">
+          <span class="dd-wiki-glyph" aria-hidden="true">W</span>
+          <span>Wikipedia</span>
+        </a>
+      </div>
+      <div class="dd-footer-actions">
+        <button class="btn btn-outline" style="flex:1"
+                onclick="Discover.openInMaps('${esc(poi.name)}', ${poi.lat}, ${poi.lng})">
+          📍 Open in Maps
+        </button>
+        ${saveBtn}
+      </div>
     `;
+  },
+
+  // Click guard: blocks the navigation if offline and shows a toast. Browsers
+  // would otherwise just open a "no internet" page in the background tab.
+  _lookupClick(e) {
+    if (!navigator.onLine) {
+      e.preventDefault();
+      if (window.UI?.showToast) UI.showToast("You're offline — can't open search", 'error');
+      return false;
+    }
+    return true;
   },
 
   // Coarse emoji fallback for the gradient hero placeholder (no Wikipedia
