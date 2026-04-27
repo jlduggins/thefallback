@@ -1054,6 +1054,12 @@ const Discover = {
     const panel = document.getElementById('discover-detail-panel');
     if (panel) panel.style.display = 'none';
     if (window.MapModule?.hideDiscoverMarker) MapModule.hideDiscoverMarker();
+    // Mobile: snap the Discover list back to full so the user lands where
+    // they were browsing — leaving it at peek/half after dismissing the
+    // detail panel is disorienting.
+    if (window.matchMedia('(max-width: 767px)').matches && window.UI) {
+      UI._applySnap('full');
+    }
     setTimeout(() => { if (MapModule?.map) MapModule.map.invalidateSize(); }, 50);
   },
 

@@ -1973,7 +1973,13 @@ body[data-view="login"] .map-layers-panel { display: none !important; }
   body[data-drawer-snap="peek"] .explore-left,
   body[data-drawer-snap="peek"] #modal-add-location { transform: translateY(calc(100vh - 48px - 140px)); }
 
-  /* Grab handle */
+  /* Grab handle. Sticky so it stays reachable when the drawer's content
+     scrolls — without this, on .explore-left (which scrolls as a whole)
+     the grabber rolls off the top and the user has to scroll back up to
+     resize the drawer. Sticky is a no-op on drawers whose grabber sits
+     outside an inner scroll container (locations-panel, trips-list-panel,
+     etc.), so applying universally is safe. Solid background prevents the
+     scrolled content from bleeding through behind the bar. */
   .drawer-grabber {
     display: flex;
     justify-content: center;
@@ -1983,7 +1989,9 @@ body[data-view="login"] .map-layers-panel { display: none !important; }
     flex-shrink: 0;
     user-select: none;
     touch-action: none;
-    position: relative;
+    position: sticky;
+    top: 0;
+    background: var(--color-surface);
     z-index: 10;
   }
   .drawer-grabber::before {
