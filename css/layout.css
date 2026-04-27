@@ -478,6 +478,19 @@
   gap: var(--space-4);
 }
 
+/* Inner scroll wrapper inside .explore-left. Holds trip-status, Nearby,
+   and Discover. On mobile this is the scroll container so the grabber +
+   brand above stay pinned. On desktop it's a regular block — the whole
+   .explore-left column scrolls. The flex+gap reproduces the spacing that
+   was previously coming from .explore-left's `gap` between direct
+   children, since those children now live inside the wrapper. */
+.explore-content-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
 /* Sections size to their own content (no forced 50/50 split). When the
  * total exceeds the column height, the column itself scrolls. Each
  * section can be collapsed to header-only via the chevron toggle, giving
@@ -1940,15 +1953,26 @@ body[data-view="login"] .map-layers-panel { display: none !important; }
     pointer-events: auto;
   }
 
-  /* Override: explore drawer body needs to scroll vertically */
+  /* Mobile: .explore-left stops scrolling itself. Grabber + brand sit at
+     the top as fixed-size flex items; .explore-content-scroll inside is
+     the actual scroll surface. This keeps the grabber visually attached
+     to the brand header (matches the Locations drawer pattern) instead of
+     floating over scrolled content. */
   .explore-left {
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
+    overflow: hidden !important;
+  }
+  .explore-content-scroll {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
     -webkit-overflow-scrolling: touch;
     /* Bottom nav (z 300) overlays the drawer (z 40) and covers ~72px+safe-area
        at the bottom. Pad scrollable content so trailing buttons (Show more,
        discover-more) can scroll above the nav and remain tappable. */
-    padding-bottom: calc(var(--nav-height-mobile) + var(--space-4)) !important;
+    padding-bottom: calc(var(--nav-height-mobile) + var(--space-4));
+    /* Allow this flex item to shrink below its content height so its own
+       overflow scroll actually activates. */
+    min-height: 0;
   }
 
   /* Snap anchors via translateY. JS inline-transform overrides during drag. */
@@ -1973,13 +1997,11 @@ body[data-view="login"] .map-layers-panel { display: none !important; }
   body[data-drawer-snap="peek"] .explore-left,
   body[data-drawer-snap="peek"] #modal-add-location { transform: translateY(calc(100vh - 48px - 140px)); }
 
-  /* Grab handle. Sticky so it stays reachable when the drawer's content
-     scrolls — without this, on .explore-left (which scrolls as a whole)
-     the grabber rolls off the top and the user has to scroll back up to
-     resize the drawer. Sticky is a no-op on drawers whose grabber sits
-     outside an inner scroll container (locations-panel, trips-list-panel,
-     etc.), so applying universally is safe. Solid background prevents the
-     scrolled content from bleeding through behind the bar. */
+  /* Grab handle. Sits as a non-scrolling first child of each drawer panel —
+     drawers either don't scroll themselves (their inner .side-panel-body
+     does) or, in the case of .explore-left, use an inner .explore-content-
+     scroll wrapper so the grabber + header stay pinned together at the top.
+     Either way, no sticky positioning needed. */
   .drawer-grabber {
     display: flex;
     justify-content: center;
@@ -1989,9 +2011,7 @@ body[data-view="login"] .map-layers-panel { display: none !important; }
     flex-shrink: 0;
     user-select: none;
     touch-action: none;
-    position: sticky;
-    top: 0;
-    background: var(--color-surface);
+    position: relative;
     z-index: 10;
   }
   .drawer-grabber::before {

@@ -145,6 +145,13 @@
             <div class="brand-text"><span class="the">The</span> <span class="fallback">Fallback</span></div>
           </header>
 
+          <!-- Inner scrollable region. On mobile, .explore-left becomes a
+               flex column with overflow:hidden so the grabber + brand above
+               stay pinned to the drawer header while only this section
+               scrolls. On desktop this wrapper has no overflow of its own;
+               the whole .explore-left column scrolls as before. -->
+          <div class="explore-content-scroll">
+
           <div id="trip-status-card" class="trip-status-card">
             <div class="ts-empty">
               <div class="ts-empty-title">No active trip</div>
@@ -184,6 +191,8 @@
             <div id="discover-list" class="discover-list"></div>
             <button type="button" id="discover-more-btn" class="show-more-btn" style="display:none">Show more</button>
           </div>
+
+          </div><!-- /.explore-content-scroll -->
         </div>
 
         <!-- Discover POI detail panel — third flex column when a Discover card is tapped -->
