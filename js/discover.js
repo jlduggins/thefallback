@@ -124,10 +124,28 @@ const Discover = {
   // week is comfortable. Keyed by `${modeChoice}:${mode}:${signature}:${cat}`,
   // same as the in-memory cache below.
   CACHE_TTL_MS: 7 * 86400 * 1000,
-  CACHE_PREFIX: 'fb-disc-',
+  // Prefix is versioned — bump it (v2 → v3) any time the POI shape, the dedupe
+  // rules, or the inclusion filters change in a way that would make old cached
+  // results wrong. Init() cleans up keys with older prefixes so they don't sit
+  // in localStorage forever.
+  CACHE_PREFIX: 'fb-disc-v2-',
+  CACHE_OLD_PREFIXES: ['fb-disc-'],
 
   // ── Init ───────────────────────────────────────────────────────────────
   init() {
+    // One-shot cleanup of localStorage keys written by older cache schemas.
+    // Cheap (string scan, no parsing). Runs once on app boot per session.
+    try {
+      const drop = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && this.CACHE_OLD_PREFIXES.some(p => k.startsWith(p) && !k.startsWith(this.CACHE_PREFIX))) {
+          drop.push(k);
+        }
+      }
+      drop.forEach(k => localStorage.removeItem(k));
+    } catch (e) { /* localStorage unavailable; skip silently */ }
+
     State.on('entries:changed',  () => this.render());
     State.on('journeys:changed', () => this.refresh());
     State.on('journey:current-changed', () => this.refresh());
@@ -969,12 +987,6 @@ const Discover = {
     const footer = document.getElementById('discover-detail-footer');
     if (!panel || !content || !footer) return;
 
-    // Fly map to the POI for spatial context (desktop only — mobile map is
-    // hidden behind the drawer anyway).
-    if (poi.lat && poi.lng && window.MapModule?.map) {
-      MapModule.flyTo(poi.lat, poi.lng, 13);
-    }
-
     const wikiTag = poi.tags?.wikipedia || poi.tags?.['wikipedia:en'];
     const qid = poi.tags?.wikidata;
     const enriching = !!(wikiTag || qid);
@@ -996,8 +1008,17 @@ const Discover = {
       UI._applySnap('full');
     }
 
-    // Desktop: map narrowed; tell Leaflet to recompute size.
-    setTimeout(() => { if (MapModule?.map) MapModule.map.invalidateSize(); }, 50);
+    // The detail panel pushes the map container narrower on desktop. Leaflet
+    // needs invalidateSize() to recompute its internal viewport BEFORE flyTo,
+    // otherwise the animation runs against the old dimensions and the camera
+    // lands at the wrong coords. Wait one frame for CSS layout to settle, then
+    // resize, then fly. Zoom 15 = ~1.2 km wide so the user sees the actual
+    // POI spot rather than 5 km of context.
+    setTimeout(() => {
+      if (!MapModule?.map) return;
+      MapModule.map.invalidateSize();
+      if (poi.lat && poi.lng) MapModule.flyTo(poi.lat, poi.lng, 15);
+    }, 60);
 
     // Async: fetch Wikipedia + Wikidata + reverse-geocode in parallel.
     // All cached on the POI / per id-or-tag so repeat opens skip the network.
