@@ -978,6 +978,11 @@ const Discover = {
     if (!poi) return;
     this._detailXid = xid;
 
+    // Body class drives the mobile CSS that hides the other drawers behind
+    // this one — without it, dragging the detail drawer down reveals the
+    // Discover list instead of the map.
+    document.body.classList.add('discover-detail-open');
+
     // Close the saved-Entry backup panel if it happens to be open — they share
     // the third-column slot on desktop.
     if (window.Entries?.closeBackupPanel) Entries.closeBackupPanel();
@@ -1017,7 +1022,10 @@ const Discover = {
     setTimeout(() => {
       if (!MapModule?.map) return;
       MapModule.map.invalidateSize();
-      if (poi.lat && poi.lng) MapModule.flyTo(poi.lat, poi.lng, 15);
+      if (poi.lat && poi.lng) {
+        MapModule.showDiscoverMarker(poi.lat, poi.lng, poi.name);
+        MapModule.flyTo(poi.lat, poi.lng, 15);
+      }
     }, 60);
 
     // Async: fetch Wikipedia + Wikidata + reverse-geocode in parallel.
@@ -1042,8 +1050,10 @@ const Discover = {
 
   closeDetail() {
     this._detailXid = null;
+    document.body.classList.remove('discover-detail-open');
     const panel = document.getElementById('discover-detail-panel');
     if (panel) panel.style.display = 'none';
+    if (window.MapModule?.hideDiscoverMarker) MapModule.hideDiscoverMarker();
     setTimeout(() => { if (MapModule?.map) MapModule.map.invalidateSize(); }, 50);
   },
 

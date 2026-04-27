@@ -3,7 +3,7 @@
  * Handles caching for offline support
  */
 
-const CACHE_NAME = 'fallback-v2-cache-v29';
+const CACHE_NAME = 'fallback-v2-cache-v30';
 
 const STATIC_ASSETS = [
   './',

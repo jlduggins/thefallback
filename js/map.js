@@ -18,6 +18,7 @@ const MapModule = {
   userMarker: null,
   userCircle: null,
   dragPin: null,
+  discoverMarker: null,
   
   // ═══════════════════════════════════════════════════════════════════════════
   // INITIALIZATION
@@ -551,6 +552,31 @@ const MapModule = {
     if (this.dragPin) {
       this.dragPin.remove();
       this.dragPin = null;
+    }
+  },
+
+  // ─── Discover POI marker (transient, while detail panel is open) ────────
+  // Same gold accent + white border as the rest of v2's pin styling. Not
+  // draggable; the user clicks the marker → popup with the POI name. Removed
+  // when the detail panel closes so it doesn't pollute other views.
+  showDiscoverMarker(lat, lng, name) {
+    if (this.discoverMarker) this.discoverMarker.remove();
+    if (!this.map) return;
+
+    const icon = L.divIcon({
+      className: 'custom-marker',
+      html: '<div class="marker-pin discover"></div>',
+      iconSize: [36, 36],
+      iconAnchor: [18, 18]
+    });
+    this.discoverMarker = L.marker([lat, lng], { icon, zIndexOffset: 1500 }).addTo(this.map);
+    if (name) this.discoverMarker.bindPopup(this.escapeHtml(name));
+  },
+
+  hideDiscoverMarker() {
+    if (this.discoverMarker) {
+      this.discoverMarker.remove();
+      this.discoverMarker = null;
     }
   },
   

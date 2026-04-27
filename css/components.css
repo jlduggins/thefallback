@@ -547,6 +547,17 @@
   background: var(--color-marker-backup);
 }
 
+/* Transient marker shown when a Discover POI's detail panel is open. Gold
+   accent matches the FAB / drag-pin family so the user reads it as
+   "currently inspecting" rather than "saved location". Slightly larger
+   than the default entry pin so it stands out on busy map views. */
+.marker-pin.discover {
+  background: var(--color-accent);
+  border-color: white;
+  width: 32px;
+  height: 32px;
+}
+
 /* Custom popup styles */
 .custom-popup .leaflet-popup-content-wrapper {
   border-radius: var(--radius-lg) !important;
@@ -2164,13 +2175,22 @@ body.add-location-drawer-open .map-popup-edit-btn,
 body.add-location-drawer-open .leaflet-popup,
 body.add-location-drawer-open .leaflet-popup-pane { display: none !important; }
 
-/* Mobile: Edit Location uses unified drawer system (see layout.css).
-   Hide other drawers while Edit Location is open so they don't stack. */
+/* Mobile: Discover detail and Edit Location each take over the drawer slot.
+   Hide all peer drawers underneath so the map stays visible behind when the
+   user drags the active drawer down to peek/half. */
 @media (max-width: 767px) {
+  body.discover-detail-open #locations-panel,
+  body.discover-detail-open #location-detail-panel,
+  body.discover-detail-open #trips-list-panel,
+  body.discover-detail-open #explore-backup-panel,
+  body.discover-detail-open .explore-left {
+    display: none !important;
+  }
   body.add-location-drawer-open #locations-panel,
   body.add-location-drawer-open #location-detail-panel,
   body.add-location-drawer-open #trips-list-panel,
   body.add-location-drawer-open #explore-backup-panel,
+  body.add-location-drawer-open #discover-detail-panel,
   body.add-location-drawer-open .explore-left {
     display: none !important;
   }
