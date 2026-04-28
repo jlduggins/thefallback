@@ -39,6 +39,7 @@ const State = {
   // User location
   userLat: null,
   userLng: null,
+  userCountry: null,
   watchId: null,
   
   // ═══════════════════════════════════════════════════════════════════════════
@@ -349,6 +350,24 @@ const State = {
     this.userLat = lat;
     this.userLng = lng;
     this.emit('location:updated', { lat, lng });
+    
+    // Fetch user country if not set
+    if (!this.userCountry) {
+      this._fetchUserCountry(lat, lng);
+    }
+  },
+  
+  async _fetchUserCountry(lat, lng) {
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=jsonv2&zoom=3`);
+      const data = await res.json();
+      if (data && data.address && data.address.country_code) {
+        this.userCountry = data.address.country_code.toLowerCase();
+        this.emit('user:country-updated', this.userCountry);
+      }
+    } catch (err) {
+      console.warn('[State] Could not determine user country:', err);
+    }
   },
   
   // ═══════════════════════════════════════════════════════════════════════════

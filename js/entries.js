@@ -358,7 +358,7 @@ const Entries = {
 
       const bias = (State.userLat && State.userLng)
         ? `&lat=${State.userLat}&lon=${State.userLng}` : '';
-      const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=8${bias}`;
+      const photonUrl = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=12${bias}`;
 
       const mapboxToken = (typeof CONFIG !== 'undefined' && CONFIG.MAPBOX_TOKEN)
         || (window.CONFIG && window.CONFIG.MAPBOX_TOKEN) || '';
@@ -369,11 +369,13 @@ const Entries = {
       }
       const proximity = (State.userLat && State.userLng)
         ? `&proximity=${State.userLng},${State.userLat}` : '';
+      const mbxCountry = State.userCountry ? `&country=${State.userCountry}` : '';
       const mbxUrl = mapboxEnabled
         ? `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json`
-          + `?access_token=${mapboxToken}&autocomplete=true&limit=6&types=poi,address,place${proximity}`
+          + `?access_token=${mapboxToken}&autocomplete=true&limit=10&types=poi,address,place${proximity}${mbxCountry}`
         : null;
-      const nomUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=jsonv2&limit=5&addressdetails=1`;
+      const nomCountry = State.userCountry ? `&countrycodes=${State.userCountry}` : '';
+      const nomUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=jsonv2&limit=10&addressdetails=1${nomCountry}`;
 
       // Fire all providers in parallel — each is independent and we merge below.
       const [photonRes, mapboxRes, nomRes] = await Promise.all([
@@ -397,13 +399,21 @@ const Entries = {
         return true;
       });
 
-      // Rank: Levenshtein distance between query and name (lower = better)
+      // Rank: Levenshtein distance between query and name (lower = better) + physical distance penalty
       const q = query.toLowerCase();
       unique.forEach(p => {
         const n = (p.name || '').toLowerCase();
         const base = this._levenshtein(q, n.slice(0, Math.max(q.length, n.length)));
         const contains = n.includes(q) ? -2 : 0;
-        p._score = base + contains;
+        
+        let distPenalty = 0;
+        if (State.userLat != null && State.userLng != null) {
+          const distMiles = State.getDistanceMiles(State.userLat, State.userLng, p.lat, p.lng);
+          // Add 1 penalty point for every 50 miles away to prioritize closer locations
+          distPenalty = distMiles / 50;
+        }
+        
+        p._score = base + contains + distPenalty;
       });
       unique.sort((a, b) => a._score - b._score);
       const top = unique.slice(0, 8);
