@@ -933,9 +933,12 @@ const Discover = {
       if (window.UI?.showToast) UI.showToast('Sign in to save locations', 'error');
       return;
     }
-    // Close detail panel first (add-location CSS hides it anyway, but clean up
-    // the body class so the panel doesn't reappear if the user cancels)
+    // Close detail + list panels first (add-location CSS hides them on
+    // mobile anyway, but on desktop they share a column slot with the new
+    // Location Detail panel that opens after saveEntry succeeds — leaving
+    // the Discover list visible would compete for that slot).
     this.closeDetail();
+    this.closeModal();
     Entries.openFromDiscover(poi);
   },
 
@@ -1247,10 +1250,13 @@ const Discover = {
     }
   },
 
-  // ── Modal: open / close ────────────────────────────────────────────────
+  // ── Discover side panel: open / close ──────────────────────────────────
   // Triggered by tapping a tile on the Explore page (or via the "View all
-  // nearby" CTA when Top Picks is empty). Sets the active category, marks
-  // the modal as open, and kicks off a fetch.
+  // nearby" CTA when Top Picks is empty). The panel slides in as a third
+  // flex column to the right of .explore-left, leaving the map visible and
+  // interactive — important so the "Drop pin on map" anchor picker works.
+  // When a result is opened, #discover-detail-panel takes the same slot;
+  // closing the detail returns to the list with state preserved.
   _modalOpen: false,
 
   openModal(category) {
@@ -1259,21 +1265,39 @@ const Discover = {
     this.expanded = false;
     this._visibleCount = this.INITIAL_COUNT;
     this._modalOpen = true;
-    if (window.UI?.openModal) UI.openModal('modal-discover');
-    // Render the modal scaffolding once before the fetch so the user sees
-    // the loading state instead of an empty modal.
+    const panel = document.getElementById('modal-discover');
+    if (panel) panel.style.display = 'flex';
+    document.body.classList.add('discover-list-open');
+    // Render the panel scaffolding once before the fetch so the user sees
+    // the loading state instead of an empty list.
     this._renderModalContents();
     this.refresh();
     if (window.matchMedia('(max-width: 767px)').matches && window.UI?.initMobileDrawers) {
       UI.initMobileDrawers();
       UI._applySnap('full');
     }
+    // Map size changes when the side panel takes a column on desktop —
+    // give Leaflet a chance to recompute its viewport so flyTo / drag-pin
+    // hit the right pixels.
+    setTimeout(() => {
+      if (window.MapModule?.map) MapModule.map.invalidateSize();
+    }, 200);
   },
 
   closeModal() {
     this._modalOpen = false;
-    if (window.UI?.closeModal) UI.closeModal('modal-discover');
     this.closeDetail();
+    const panel = document.getElementById('modal-discover');
+    if (panel) panel.style.display = 'none';
+    document.body.classList.remove('discover-list-open');
+    // Mobile: snap back to half so user lands on the Explore tile grid
+    // (matches existing post-detail snap behavior).
+    if (window.matchMedia('(max-width: 767px)').matches && window.UI) {
+      UI._applySnap('half');
+    }
+    setTimeout(() => {
+      if (window.MapModule?.map) MapModule.map.invalidateSize();
+    }, 200);
   },
 
   // ── Anchor picker (sub-panel inside modal) ─────────────────────────────
@@ -1500,6 +1524,11 @@ const Discover = {
     if (!poi) return;
     this._detailXid = xid;
 
+    // The list panel and the detail panel share the same column slot. Hide
+    // the list while showing the detail; closeDetail() restores it.
+    const listPanel = document.getElementById('modal-discover');
+    if (listPanel && this._modalOpen) listPanel.style.display = 'none';
+
     // Body class drives the mobile CSS that hides the other drawers behind
     // this one — without it, dragging the detail drawer down reveals the
     // Discover list instead of the map.
@@ -1590,6 +1619,13 @@ const Discover = {
     const panel = document.getElementById('discover-detail-panel');
     if (panel) panel.style.display = 'none';
     if (window.MapModule?.hideDiscoverMarker) MapModule.hideDiscoverMarker();
+    // Restore the list panel if the user was browsing it before opening this
+    // detail. State (category, scroll, results) is preserved because we only
+    // toggled display, never tore down the DOM.
+    if (this._modalOpen) {
+      const listPanel = document.getElementById('modal-discover');
+      if (listPanel) listPanel.style.display = 'flex';
+    }
     // Mobile: snap the Discover list back to full so the user lands where
     // they were browsing — leaving it at peek/half after dismissing the
     // detail panel is disorienting.
