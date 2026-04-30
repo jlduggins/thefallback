@@ -2183,7 +2183,17 @@ body.add-location-drawer-open .leaflet-popup-pane { display: none !important; }
   body.discover-detail-open #location-detail-panel,
   body.discover-detail-open #trips-list-panel,
   body.discover-detail-open #explore-backup-panel,
+  body.discover-detail-open #modal-discover,
   body.discover-detail-open .explore-left {
+    display: none !important;
+  }
+  /* Discover list panel: hide peer drawers underneath so the map stays
+     visible behind when the user peeks the drawer to drop a pin. */
+  body.discover-list-open #locations-panel,
+  body.discover-list-open #location-detail-panel,
+  body.discover-list-open #trips-list-panel,
+  body.discover-list-open #explore-backup-panel,
+  body.discover-list-open .explore-left {
     display: none !important;
   }
   body.add-location-drawer-open #locations-panel,
@@ -2291,40 +2301,29 @@ body.add-location-drawer-open .leaflet-popup-pane { display: none !important; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
-   DISCOVER — Modal overlay (per-category results, anchor picker, hero list)
+   DISCOVER — List side panel (per-category results, anchor picker, hero list)
+   Slides in from the right edge of .explore-left as a third flex column.
+   Inherits sizing from .explore-backup-panel; only the content needs overrides.
+   The map column to the right stays interactive — important for the
+   "Drop pin on map" anchor picker flow.
    ═══════════════════════════════════════════════════════════════════════ */
 
-#modal-discover.modal {
-  /* Desktop: large centered modal. Mobile rules in the responsive block below. */
-  max-width: 720px;
-  max-height: 85vh;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
+.discover-list-panel {
+  /* Slightly wider than the default backup panel since results lists need
+     room for hero cards on Top Picks. */
+  width: 420px;
+  max-width: 44vw;
+  min-width: 340px;
 }
-.modal-discover-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: var(--space-3) var(--space-4);
-  border-bottom: 0.5px solid var(--color-border);
-}
-.modal-discover-header .modal-title {
-  flex: 1;
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-}
-.modal-discover-header .modal-close {
-  margin-right: 4px;
-}
-.modal-discover-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--space-3) var(--space-4);
+.discover-list-panel .side-panel-body {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
+}
+.discover-list-panel .side-panel-hd .modal-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
 }
 
 /* Anchor pill ("📍 Near you ▾") in the modal header */
@@ -2553,20 +2552,17 @@ body.add-location-drawer-open .leaflet-popup-pane { display: none !important; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
-   DISCOVER — Modal responsive (mobile takeover)
+   DISCOVER — Side panel responsive (mobile takeover)
    ═══════════════════════════════════════════════════════════════════════ */
 
 @media (max-width: 767px) {
-  /* Mobile: full-screen sheet, mirrors #modal-add-location's behavior. */
-  #modal-discover.modal-sheet {
-    max-width: none;
-    max-height: none;
-    background: var(--color-surface);
-  }
+  /* Mobile: side panel becomes a bottom-sheet drawer (handled by
+     .explore-backup-panel mobile rules). Inherits the snap system. */
+  .discover-list-panel { width: 100%; max-width: none; min-width: 0; }
   /* Tile grid: tighter padding so 2 columns fit cleanly. */
   .discover-tile { min-height: 90px; padding: 14px 8px; }
   .discover-tile-icon { width: 40px; height: 40px; }
   /* Anchor pill on mobile shrinks aggressively. */
-  .modal-discover-header .modal-title { font-size: 15px; }
+  .discover-list-panel .side-panel-hd .modal-title { font-size: 13px; }
   .dd-anchor-pill { max-width: 45%; font-size: 11px; padding: 5px 8px; }
 }
