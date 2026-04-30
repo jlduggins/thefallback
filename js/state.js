@@ -30,6 +30,8 @@ const State = {
   pendingLng: null,
   pendingPhotos: [],
   currentRating: 0,
+  _discoverSourceXid: null, // set when opening Add Location from a Discover POI
+  _discoverManualAnchor: null, // user-picked search anchor for Discover (overrides GPS/route)
   
   // Map state
   mapReady: false,

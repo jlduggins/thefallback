@@ -31,53 +31,12 @@ const Discover = {
   anchorLabel: null,
   _cache: {},             // keyed by `${mode}:${signature}:${category}`
   _inflight: {},
-  _savingXids: new Set(),
 
   // OSM tag selectors per chip. Each selector is [key] (presence-only) or
   // [key, value] (exact match). Overpass supports both via the same syntax.
+  // Only Camping and Hiking go to Overpass now — Natural/Cultural/Quirky/
+  // Historical/Top Picks are served by OpenTripMap (see OTM_KIND_MAP).
   CATEGORY_TAGS: {
-    all: [
-      ['tourism','attraction'],
-      ['tourism','viewpoint'],
-      ['tourism','artwork'],
-      ['historic'],
-      ['natural','peak'],
-      ['natural','waterfall'],
-      ['natural','cave_entrance'],
-      ['natural','hot_spring'],
-      ['leisure','nature_reserve']
-    ],
-    quirky: [
-      ['historic','memorial'],
-      ['historic','monument'],
-      ['historic','ruins'],
-      ['historic','wayside_shrine'],
-      ['historic','archaeological_site'],
-      ['tourism','artwork'],
-      ['man_made','tower'],
-      ['man_made','lighthouse'],
-      ['amenity','fountain']
-    ],
-    historic: [
-      ['historic']
-    ],
-    natural: [
-      ['natural','peak'],
-      ['natural','waterfall'],
-      ['natural','cave_entrance'],
-      ['natural','spring'],
-      ['natural','hot_spring'],
-      ['leisure','nature_reserve'],
-      ['boundary','national_park'],
-      ['tourism','viewpoint']
-    ],
-    cultural: [
-      ['tourism','museum'],
-      ['tourism','gallery'],
-      ['amenity','theatre'],
-      ['amenity','arts_centre'],
-      ['amenity','planetarium']
-    ],
     camping: [
       ['tourism','camp_site'],
       ['tourism','caravan_site'],
@@ -88,15 +47,37 @@ const Discover = {
       ['route','hiking'],
       ['route','foot'],
       ['information','trailhead'],
-      ['highway','trailhead'],
-      // Named footpaths — needed because most short local trails (Toketee
-      // Falls, Watson Falls, etc.) are tagged highway=path with a name, NOT
-      // as route relations. Without this selector the list misses everything
-      // close to the user. The by-name dedupe below collapses the resulting
-      // relation/way overlap.
-      '["highway"="path"]["name"]'
+      ['highway','trailhead']
     ]
   },
+
+  // Categories served by OpenTripMap → kinds-string + minimum rate filter.
+  // 'top' (Top Picks) cross-cuts; we curate after fetch with a 4★ floor.
+  OTM_KIND_MAP: {
+    natural:    { kinds: 'natural',                                       rate: 2 },
+    cultural:   { kinds: 'cultural,museums,theatres_and_entertainments',  rate: 2 },
+    quirky:     { kinds: 'amusements,unclassified_objects,interesting_places', rate: 1 },
+    historical: { kinds: 'historic,archaeology',                          rate: 2 },
+    top:        { kinds: 'interesting_places,natural,cultural,historic',  rate: 3 }
+  },
+  OTM_BASE: 'https://api.opentripmap.com/0.1/en',
+
+  // OTM rate string → display 1–5 stars.
+  OTM_RATE_TO_STARS: { '1': 1, '2': 2, '2h': 3, '3': 4, '3h': 5, '7': 5 },
+
+  // Categories that come from OTM (used to branch fetch + render style).
+  OTM_CATEGORIES: ['natural', 'cultural', 'quirky', 'historical', 'top'],
+
+  // Tile grid order on the Explore page.
+  TILE_ORDER: [
+    { key: 'top',        label: 'Top Picks',  icon: 'top-picks' },
+    { key: 'camping',    label: 'Camping',    icon: 'camping' },
+    { key: 'hiking',     label: 'Hiking',     icon: 'hiking' },
+    { key: 'natural',    label: 'Natural',    icon: 'natural' },
+    { key: 'cultural',   label: 'Cultural',   icon: 'cultural' },
+    { key: 'quirky',     label: 'Quirky',     icon: 'quirky' },
+    { key: 'historical', label: 'Historical', icon: 'historical' }
+  ],
 
   // Approx point sampling along a route. Smaller = denser sampling = more
   // POIs found along windy roads, but bigger query payload.
@@ -104,12 +85,18 @@ const Discover = {
   ROUTE_RADIUS_M: 8000,    // ~5 mi window around each sample point
   NEAR_RADIUS_M: 48000,    // ~30 mi around user GPS in "near" mode
   MAX_SAMPLES: 12,         // cap for the union to keep query body sane
+  MAX_SAMPLES_HIKING: 6,   // tighter cap for hiking (was the slowest path)
+  OVERPASS_TIMEOUT_HIKING: 30, // seconds, was 60 — fail fast for trails
+  OTM_RADIUS_M: 80000,     // ~50 mi for OTM searches (radius API)
+  OTM_LIMIT: 30,           // OTM list-endpoint result cap before curation
+  TOP_PICKS_LIMIT: 6,      // hero cards shown on Top Picks
   MAX_RESULTS: 30,         // hard cap from Overpass-side dedupe
   INITIAL_COUNT: 10,       // visible on first render
   PAGE_INCREMENT: 10,      // added per "Show more" click
   _visibleCount: 10,       // current display window; reset on category/mode change
   _wikiCache: {},          // wiki tag → { extract, thumbnail, url } | null
   _wikidataCache: {},      // qid → { image, officialWebsite, description, inception } | null
+  _otmDetailCache: {},     // OTM xid → detail-endpoint payload | null
 
   // Overpass mirrors tried in order — each has independent rate limits, so
   // when the main endpoint returns 429/504 we silently fall through to the
@@ -120,16 +107,18 @@ const Discover = {
     'https://overpass.private.coffee/api/interpreter'
   ],
 
-  // localStorage TTL for cached Overpass results. POIs barely change, so a
-  // week is comfortable. Keyed by `${modeChoice}:${mode}:${signature}:${cat}`,
-  // same as the in-memory cache below.
+  // localStorage TTL for cached results. POIs barely change, so a week is
+  // comfortable. Keyed by `${modeChoice}:${mode}:${signature}:${cat}`.
   CACHE_TTL_MS: 7 * 86400 * 1000,
-  // Prefix is versioned — bump it (v2 → v3) any time the POI shape, the dedupe
-  // rules, or the inclusion filters change in a way that would make old cached
-  // results wrong. Init() cleans up keys with older prefixes so they don't sit
-  // in localStorage forever.
-  CACHE_PREFIX: 'fb-disc-v2-',
-  CACHE_OLD_PREFIXES: ['fb-disc-'],
+  // Prefix is versioned — bump it (v2 → v3) any time the POI shape changes
+  // in a way that would make old cached results wrong. Init() cleans up keys
+  // with older prefixes so they don't sit in localStorage forever.
+  CACHE_PREFIX: 'fb-disc-v3-',
+  CACHE_OLD_PREFIXES: ['fb-disc-', 'fb-disc-v2-'],
+  // Separate prefix for OTM cache — different shape than Overpass results.
+  OTM_CACHE_PREFIX: 'fb-disc-otm-v1-',
+  // localStorage key for the user-picked manual search anchor.
+  MANUAL_ANCHOR_KEY: 'fb-disc-manual-anchor',
 
   // ── Init ───────────────────────────────────────────────────────────────
   init() {
@@ -137,21 +126,29 @@ const Discover = {
     // Cheap (string scan, no parsing). Runs once on app boot per session.
     try {
       const drop = [];
+      const keep = [this.CACHE_PREFIX, this.OTM_CACHE_PREFIX, this.MANUAL_ANCHOR_KEY];
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
-        if (k && this.CACHE_OLD_PREFIXES.some(p => k.startsWith(p) && !k.startsWith(this.CACHE_PREFIX))) {
+        if (k && this.CACHE_OLD_PREFIXES.some(p => k.startsWith(p) && !keep.some(kp => k.startsWith(kp)))) {
           drop.push(k);
         }
       }
       drop.forEach(k => localStorage.removeItem(k));
     } catch (e) { /* localStorage unavailable; skip silently */ }
 
+    // Restore the user-picked manual search anchor (if any) before first render.
+    this._loadManualAnchor();
+
+    // Discover does NOT auto-fire any more. The Explore page just shows the
+    // category tile grid; results are only fetched when the user opens the
+    // modal via Discover.openModal(category). Keep render() listeners so the
+    // saved-badge state on cards stays current, but never call refresh() from
+    // a state event.
     State.on('entries:changed',  () => this.render());
-    State.on('journeys:changed', () => this.refresh());
-    State.on('journey:current-changed', () => this.refresh());
-    State.on('location:updated', () => this.refresh());
+    State.on('journeys:changed', () => this.render());
     State.on('view:changed', ({ from, to }) => {
-      if (to === 'explore') this.refresh();
+      // Close the detail panel when the user navigates away from Explore so it
+      // doesn't sit on top of unrelated views.
       if (from === 'explore' && to !== 'explore') this.closeDetail();
     });
     this.render();
@@ -201,12 +198,30 @@ const Discover = {
     if (wrap) wrap.classList.toggle('collapsed', !!this.collapsed);
   },
 
-  // ── Anchor selection: route vs near vs none ────────────────────────────
-  // Honors `modeChoice`. Route mode samples ONLY future legs (using
-  // jctx.nextLegIndex) so finishing your last stop doesn't drag in POIs
-  // 100+ mi behind you. If forced 'route' but no future geometry exists,
-  // we fall back to nearby so the section never goes blank.
+  // ── Anchor selection: manual > route > near > none ─────────────────────
+  // Honors `modeChoice`, but a manual anchor (user picked a city or dropped
+  // a pin) overrides everything below — that's the "always available" option
+  // for trip planning from elsewhere. Route mode samples ONLY future legs
+  // (using jctx.nextLegIndex) so finishing your last stop doesn't drag in
+  // POIs 100+ mi behind you.
   _resolveAnchor() {
+    // 1. Manual anchor wins.
+    if (this._manualAnchor && this._manualAnchor.lat != null && this._manualAnchor.lng != null) {
+      const radiusMi = (State.fuelSettings && State.fuelSettings.backupRadius) || 30;
+      const radiusM = Math.round(radiusMi * 1609);
+      const sig = `M:${this._manualAnchor.lat.toFixed(2)},${this._manualAnchor.lng.toFixed(2)}:${radiusMi}`;
+      return {
+        mode: 'manual',
+        samples: [{ lat: this._manualAnchor.lat, lng: this._manualAnchor.lng }],
+        radiusM,
+        signature: sig,
+        label: this._manualAnchor.label
+          ? `From ${this._manualAnchor.label}`
+          : 'Custom area',
+        journey: null
+      };
+    }
+
     const journey = State.currentJourneyId ? State.getJourney(State.currentJourneyId) : null;
     const legs = journey?.legs || [];
     const jctx = (journey && State.getJourneyContext)
@@ -234,12 +249,13 @@ const Discover = {
         routeSig += `${l.fromId || ''}>${l.destId || ''}|`;
       }
       if (samples.length) {
+        const jName = journey?.name ? `Along trip "${journey.name}"` : 'Along your trip';
         return {
           mode: 'route',
           samples: samples.slice(0, this.MAX_SAMPLES),
           radiusM: this.ROUTE_RADIUS_M,
           signature: routeSig + samples.length,
-          label: 'along your route',
+          label: jName,
           journey
         };
       }
@@ -262,6 +278,49 @@ const Discover = {
     }
 
     return { mode: null, samples: [], signature: '', label: null, journey: null };
+  },
+
+  // ── Manual search anchor (always-available override) ──────────────────
+  // Set by the user from the Discover modal anchor picker — either by
+  // dropping a pin on the map or entering a city. Wins over GPS / route in
+  // _resolveAnchor(). Persisted to localStorage so it survives reload.
+  _manualAnchor: null,
+
+  _setManualAnchor(lat, lng, label) {
+    if (lat == null || lng == null) return;
+    this._manualAnchor = { lat, lng, label: label || null };
+    State._discoverManualAnchor = this._manualAnchor;
+    this._persistManualAnchor();
+    if (this._modalOpen) this.refresh();
+    else this.render();
+  },
+
+  _clearManualAnchor() {
+    this._manualAnchor = null;
+    State._discoverManualAnchor = null;
+    try { localStorage.removeItem(this.MANUAL_ANCHOR_KEY); }
+    catch (e) { /* ignore */ }
+    if (this._modalOpen) this.refresh();
+    else this.render();
+  },
+
+  _persistManualAnchor() {
+    if (!this._manualAnchor) return;
+    try {
+      localStorage.setItem(this.MANUAL_ANCHOR_KEY, JSON.stringify(this._manualAnchor));
+    } catch (e) { /* ignore quota */ }
+  },
+
+  _loadManualAnchor() {
+    try {
+      const raw = localStorage.getItem(this.MANUAL_ANCHOR_KEY);
+      if (!raw) return;
+      const obj = JSON.parse(raw);
+      if (obj && obj.lat != null && obj.lng != null) {
+        this._manualAnchor = obj;
+        State._discoverManualAnchor = obj;
+      }
+    } catch (e) { /* ignore */ }
   },
 
   // routeGeometry is GeoJSON [[lng,lat], ...]. Sample one point every
@@ -294,15 +353,22 @@ const Discover = {
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   },
 
-  // ── Refresh: pull from cache or call Overpass ──────────────────────────
+  // ── Refresh: pull from cache or call Overpass / OpenTripMap ────────────
+  // Only fetches when the modal is open OR being opened. The Explore tile
+  // grid never triggers a fetch — the user has to tap a tile first. This
+  // is the linchpin of the auto-fetch removal: every `refresh()` call from
+  // the old wiring is now a no-op as long as the modal is closed.
   async refresh() {
-    if (State.currentView && State.currentView !== 'explore') {
-      this.render();
-      return;
-    }
     const a = this._resolveAnchor();
     this.mode = a.mode;
     this.anchorLabel = a.label;
+
+    // Always re-render so the modal header and tile-grid badges reflect the
+    // current anchor — even if we're not going to fetch.
+    if (!this._modalOpen) {
+      this.render();
+      return;
+    }
 
     if (!a.mode) {
       this.results = [];
@@ -312,7 +378,8 @@ const Discover = {
       return;
     }
 
-    const key = `${this.modeChoice}:${a.mode}:${a.signature}:${this.category}`;
+    const cacheNs = this.OTM_CATEGORIES.includes(this.category) ? 'otm' : 'osm';
+    const key = `${cacheNs}:${a.mode}:${a.signature}:${this.category}`;
 
     // In-memory cache (fastest) → localStorage cache (survives reload).
     if (this._cache[key]) {
@@ -364,13 +431,29 @@ const Discover = {
     }
   },
 
+  // Top-level dispatcher: routes Camping/Hiking to Overpass and the rest to
+  // OpenTripMap. Both paths return the same normalized POI shape so the rest
+  // of the module (cache, render, detail panel, save flow) doesn't care.
+  async _fetchPOIs(anchor) {
+    if (this.OTM_CATEGORIES.includes(this.category)) {
+      return this._fetchOTM(anchor);
+    }
+    return this._fetchOverpass(anchor);
+  },
+
   // Build one Overpass QL query that unions every tag selector × every
   // sample point. Single POST, no concurrency fan-out. Returns deduped POIs.
-  async _fetchPOIs(anchor) {
-    const tagSelectors = this.CATEGORY_TAGS[this.category] || this.CATEGORY_TAGS.all;
-    const samples = anchor.samples;
+  async _fetchOverpass(anchor) {
+    const tagSelectors = this.CATEGORY_TAGS[this.category];
+    if (!tagSelectors) return [];
+    // Hiking gets a tighter sample cap — most users were waiting 30s+ on
+    // route-mode hiking before this. 6 samples × 4 selectors = 24 nwr lines,
+    // well under Overpass's payload limits.
+    const sampleCap = this.category === 'hiking' ? this.MAX_SAMPLES_HIKING : this.MAX_SAMPLES;
+    const samples = anchor.samples.slice(0, sampleCap);
+    const timeout = this.category === 'hiking' ? this.OVERPASS_TIMEOUT_HIKING : 60;
 
-    let body = '[out:json][timeout:60];(\n';
+    let body = `[out:json][timeout:${timeout}];(\n`;
     for (const s of samples) {
       for (const sel of tagSelectors) {
         // sel can be: raw Overpass string (e.g. '["highway"="path"]["name"]'),
@@ -482,16 +565,201 @@ const Discover = {
     throw lastErr || Object.assign(new Error('All Overpass mirrors failed'), { type: 'network' });
   },
 
+  // ── OpenTripMap fetch + normalization ──────────────────────────────────
+  // For Natural / Cultural / Quirky / Historical / Top Picks. One radius call
+  // per sample point (route mode) or one call total (near/manual). OTM has
+  // cleaner data than Overpass for tourist-style POIs and ships back popularity
+  // ratings, Wikidata/Wikipedia IDs, preview images, and structured addresses.
+  async _fetchOTM(anchor) {
+    const apiKey = (typeof CONFIG !== 'undefined' && CONFIG.OPENTRIPMAP_KEY)
+      || window.CONFIG?.OPENTRIPMAP_KEY;
+    if (!apiKey || apiKey === 'YOUR_OPENTRIPMAP_KEY') {
+      throw Object.assign(new Error('OpenTripMap API key not configured'), { type: 'network' });
+    }
+    const cfg = this.OTM_KIND_MAP[this.category];
+    if (!cfg) return [];
+
+    // Cap samples to keep request count reasonable. Top Picks always uses a
+    // single anchor (broader radius) so we sweep the area uniformly.
+    const samples = this.category === 'top'
+      ? anchor.samples.slice(0, 1)
+      : anchor.samples.slice(0, 4);
+    const radius = anchor.mode === 'route' ? this.ROUTE_RADIUS_M : this.OTM_RADIUS_M;
+    const limit = this.category === 'top' ? this.OTM_LIMIT : this.OTM_LIMIT;
+
+    // One list call per sample, run in parallel.
+    const lists = await Promise.all(samples.map(async (s) => {
+      const url = `${this.OTM_BASE}/places/radius`
+        + `?radius=${radius}`
+        + `&lon=${s.lng}&lat=${s.lat}`
+        + `&kinds=${encodeURIComponent(cfg.kinds)}`
+        + `&rate=${cfg.rate}`
+        + `&format=json&limit=${limit}`
+        + `&apikey=${encodeURIComponent(apiKey)}`;
+      try {
+        const r = await fetch(url);
+        if (r.status === 401 || r.status === 403) {
+          throw Object.assign(new Error('OTM auth failed'), { type: 'network' });
+        }
+        if (r.status === 429) {
+          throw Object.assign(new Error('OTM rate-limited'), { type: 'busy' });
+        }
+        if (!r.ok) {
+          throw Object.assign(new Error('OTM HTTP ' + r.status), { type: 'network' });
+        }
+        const data = await r.json();
+        return Array.isArray(data) ? data : [];
+      } catch (e) {
+        if (!e.type) e.type = navigator.onLine ? 'network' : 'offline';
+        throw e;
+      }
+    }));
+
+    // Flatten + dedupe by xid.
+    const seen = new Map();
+    const refLat = State.userLat ?? anchor.samples[0].lat;
+    const refLng = State.userLng ?? anchor.samples[0].lng;
+    for (const list of lists) {
+      for (const raw of list) {
+        if (!raw.xid || !raw.name) continue;
+        const xid = 'otm:' + raw.xid;
+        if (seen.has(xid)) continue;
+        const lat = raw.point?.lat;
+        const lng = raw.point?.lon;
+        if (lat == null || lng == null) continue;
+        seen.set(xid, this._normalizeOTM(raw, refLat, refLng));
+      }
+    }
+
+    let results = [...seen.values()];
+
+    // Top Picks: keep only 4★ or 5★ (display scale), sort by stars desc then
+    // distance asc, take top N.
+    if (this.category === 'top') {
+      results = results
+        .filter(p => (p.stars || 0) >= 4)
+        .sort((a, b) => (b.stars || 0) - (a.stars || 0) || a.distance - b.distance)
+        .slice(0, this.TOP_PICKS_LIMIT);
+    } else {
+      // Other OTM categories: sort by stars desc, distance asc.
+      results.sort((a, b) => (b.stars || 0) - (a.stars || 0) || a.distance - b.distance);
+      results = results.slice(0, this.MAX_RESULTS);
+    }
+
+    return results;
+  },
+
+  // Normalize an OTM list-endpoint POI into the same internal shape as
+  // Overpass POIs, so the rest of the module is source-agnostic.
+  _normalizeOTM(raw, refLat, refLng) {
+    const lat = raw.point.lat;
+    const lng = raw.point.lon;
+    const kindsCsv = raw.kinds || '';
+    const stars = this._otmRateToStars(raw.rate);
+    return {
+      xid: 'otm:' + raw.xid,
+      name: raw.name,
+      lat, lng,
+      // Internal display category derived from OTM kinds — used for the
+      // category badge on hero cards.
+      category: this._otmCategoryFromKinds(kindsCsv),
+      // Synthetic tags so existing badge / classify logic finds nothing
+      // OSM-shaped to read but won't crash. Real OTM detail is loaded on
+      // openDetail() and merged in.
+      tags: { otm_kinds: kindsCsv, otm_rate: raw.rate || '' },
+      badges: [],
+      distance: this._haversine(refLat, refLng, lat, lng),
+      _approx: true,
+      _otm: true,
+      stars,
+      // Filled in by detail-endpoint fetch on openDetail():
+      images: [],
+      wikidata: null,
+      wikipedia: null,
+      address: null,
+      description: null
+    };
+  },
+
+  // OTM rate strings include the half-tier "h" suffix ("2h", "3h") and a
+  // special 7 for UNESCO heritage. Map all → 1–5 display stars.
+  _otmRateToStars(rate) {
+    if (rate == null) return 0;
+    const key = String(rate);
+    return this.OTM_RATE_TO_STARS[key] != null ? this.OTM_RATE_TO_STARS[key] : 0;
+  },
+
+  // Map OTM `kinds` CSV → human-readable category label for the badge.
+  // OTM tags POIs with multiple kinds; pick the first family that matches.
+  _otmCategoryFromKinds(csv) {
+    if (!csv) return 'Place';
+    const tokens = csv.split(',');
+    const has = (t) => tokens.includes(t);
+    if (has('historic') || has('archaeology') || has('history')) return 'Historic';
+    if (has('museums') || has('cultural') || has('theatres_and_entertainments')) return 'Cultural';
+    if (has('amusements') || has('unclassified_objects')) return 'Quirky';
+    if (has('natural') || has('geological_formations') || has('mountain_peaks')
+        || has('waterfalls') || has('caves') || has('glaciers')
+        || has('nature_reserves')) return 'Natural';
+    if (has('interesting_places')) return 'Place';
+    return 'Place';
+  },
+
+  // Lazy detail enrichment for an OTM POI — calls /xid/{xid} and merges the
+  // returned image, wikidata, wikipedia, description, and address fields back
+  // into the POI object. Cached in _otmDetailCache so reopens are free.
+  async _loadOTMDetail(poi) {
+    if (!poi || !poi._otm) return null;
+    const rawXid = poi.xid.replace(/^otm:/, '');
+    if (this._otmDetailCache[rawXid] !== undefined) return this._otmDetailCache[rawXid];
+    const apiKey = (typeof CONFIG !== 'undefined' && CONFIG.OPENTRIPMAP_KEY)
+      || window.CONFIG?.OPENTRIPMAP_KEY;
+    if (!apiKey || apiKey === 'YOUR_OPENTRIPMAP_KEY') {
+      this._otmDetailCache[rawXid] = null;
+      return null;
+    }
+    try {
+      const url = `${this.OTM_BASE}/places/xid/${encodeURIComponent(rawXid)}?apikey=${encodeURIComponent(apiKey)}`;
+      const r = await fetch(url);
+      if (!r.ok) { this._otmDetailCache[rawXid] = null; return null; }
+      const d = await r.json();
+      // Build images array: preview thumbnail first, then full-size if distinct.
+      const imgs = [];
+      const preview = d.preview?.source;
+      const full = d.image;
+      if (preview) imgs.push(preview);
+      if (full && full !== preview) imgs.push(full);
+      // Merge structured fields onto the POI so downstream rendering finds them.
+      poi.images = imgs;
+      poi.wikidata = d.wikidata || null;
+      poi.wikipedia = d.wikipedia || null;
+      poi.description = d.wikipedia_extracts?.text || d.info?.descr || null;
+      poi.address = d.address || null;
+      this._otmDetailCache[rawXid] = d;
+      return d;
+    } catch (e) {
+      console.warn('[Discover] OTM detail fetch failed:', e);
+      this._otmDetailCache[rawXid] = null;
+      return null;
+    }
+  },
+
   // ── Persistent cache (localStorage with TTL) ──────────────────────────
-  // Survives page reloads. Same key shape as the in-memory _cache. On write,
-  // if the quota is exceeded, prunes expired + oldest half and retries.
+  // Survives page reloads. Same key shape as the in-memory _cache. The cache
+  // namespace prefix differs by source (Overpass vs OTM) since the POI shape
+  // differs slightly. On write, if the quota is exceeded, prunes expired +
+  // oldest half and retries.
+  _cachePrefixFor(key) {
+    return key.startsWith('otm:') ? this.OTM_CACHE_PREFIX : this.CACHE_PREFIX;
+  },
   _persistRead(key) {
     try {
-      const raw = localStorage.getItem(this.CACHE_PREFIX + key);
+      const prefix = this._cachePrefixFor(key);
+      const raw = localStorage.getItem(prefix + key);
       if (!raw) return null;
       const obj = JSON.parse(raw);
       if (!obj.expires || obj.expires < Date.now()) {
-        localStorage.removeItem(this.CACHE_PREFIX + key);
+        localStorage.removeItem(prefix + key);
         return null;
       }
       return obj.data;
@@ -503,11 +771,12 @@ const Discover = {
     const obj = { expires: Date.now() + this.CACHE_TTL_MS, data };
     let json;
     try { json = JSON.stringify(obj); } catch { return; }
+    const prefix = this._cachePrefixFor(key);
     try {
-      localStorage.setItem(this.CACHE_PREFIX + key, json);
+      localStorage.setItem(prefix + key, json);
     } catch (e) {
       this._prunePersisted();
-      try { localStorage.setItem(this.CACHE_PREFIX + key, json); }
+      try { localStorage.setItem(prefix + key, json); }
       catch (e2) { console.warn('[Discover] persist failed after prune:', e2); }
     }
   },
@@ -516,7 +785,7 @@ const Discover = {
     const ours = [];
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
-      if (k && k.startsWith(this.CACHE_PREFIX)) ours.push(k);
+      if (k && (k.startsWith(this.CACHE_PREFIX) || k.startsWith(this.OTM_CACHE_PREFIX))) ours.push(k);
     }
     // Drop expired first.
     let removed = 0;
@@ -656,55 +925,18 @@ const Discover = {
     return out;
   },
 
-  // ── Save POI as a normal Entry (auto-fill amenity flags from tags) ─────
-  async savePOI(xid) {
+  // ── Open Add Location form pre-filled with POI data ──────────────────
+  savePOI(xid) {
     const poi = this.results.find(p => p.xid === xid);
     if (!poi) return;
-    if (this._savingXids.has(xid)) return;
     if (!window.Firebase?.getUserId?.()) {
-      if (window.UI?.toast) UI.toast('Sign in to save locations');
+      if (window.UI?.showToast) UI.showToast('Sign in to save locations', 'error');
       return;
     }
-    this._savingXids.add(xid);
-    this.render();
-    try {
-      const tags = poi.tags || {};
-      const entry = {
-        name: poi.name,
-        lat: poi.lat,
-        lng: poi.lng,
-        type: poi.category,
-        status: 'planned',
-        notes: 'Discovered via OpenStreetMap',
-        sourceXid: poi.xid,
-        sourceTags: tags
-      };
-      // Auto-fill amenity fields from OSM tags so vanlife data flows into
-      // the rest of the app (Saved card, filters, Trips planning) without
-      // the user having to re-enter it.
-      if (tags.drinking_water === 'yes' || tags.amenity === 'drinking_water') entry.hasPotableWater = true;
-      if (tags.sanitary_dump_station === 'yes' || tags.amenity === 'sanitary_dump_station') entry.hasDumpStation = true;
-      if (tags.power_supply === 'yes') entry.hasHookups = true;
-      if (tags.dog === 'yes') entry.hasPets = true;
-      if (tags.reservation === 'required' || tags.reservation === 'recommended') entry.needsReservations = true;
-      if (tags.fee === 'no') entry.cost = 0;
-      else if (tags['fee:amount']) {
-        const n = parseFloat(tags['fee:amount']);
-        if (!isNaN(n)) entry.cost = n;
-      }
-      if (tags.website) entry.website = tags.website;
-      else if (tags['contact:website']) entry.website = tags['contact:website'];
-      if (tags.phone) entry.phone = tags.phone;
-      else if (tags['contact:phone']) entry.phone = tags['contact:phone'];
-      await Firebase.saveEntry(entry);
-      if (window.UI?.toast) UI.toast(`Saved "${poi.name}"`);
-    } catch (e) {
-      console.error('[Discover] save failed:', e);
-      if (window.UI?.toast) UI.toast('Could not save location');
-    } finally {
-      this._savingXids.delete(xid);
-      this.render();
-    }
+    // Close detail panel first (add-location CSS hides it anyway, but clean up
+    // the body class so the panel doesn't reappear if the user cancels)
+    this.closeDetail();
+    Entries.openFromDiscover(poi);
   },
 
   // Rough match: same xid OR same name AND within ~0.3 mi. Lets the card
@@ -796,73 +1028,99 @@ const Discover = {
   },
 
   // ── Render ─────────────────────────────────────────────────────────────
+  // Renders BOTH the Explore-page tile grid (always) and the Discover modal
+  // contents (when open). Either target may be missing from the DOM at the
+  // moment render() is called — both branches no-op gracefully.
   render() {
+    this._renderTilesIntoExplore();
+    if (this._modalOpen) this._renderModalContents();
+  },
+
+  // Render the 7-tile category grid that lives in #discover-wrap on the
+  // Explore page. Lazy-builds the grid container the first time, then keeps
+  // it in sync (saved-badge counts, etc.) on subsequent renders.
+  _renderTilesIntoExplore() {
     const wrap = document.getElementById('discover-wrap');
     if (!wrap) return;
 
-    // Preserve section collapsed state across re-renders.
-    wrap.classList.toggle('collapsed', !!this.collapsed);
-
-    const sub = wrap.querySelector('#discover-subtitle');
-    if (sub) {
-      sub.textContent = this.anchorLabel || '';
+    let grid = wrap.querySelector('#discover-tiles');
+    if (!grid) {
+      grid = document.createElement('div');
+      grid.id = 'discover-tiles';
+      grid.className = 'discover-tile-grid';
+      // Replace any inline list/chip/more-button DOM the old layout left
+      // behind — those now live inside #modal-discover.
+      const existingList = wrap.querySelector('#discover-list');
+      const existingMore = wrap.querySelector('#discover-more-btn');
+      const existingChips = wrap.querySelector('#discover-chips');
+      const existingMode = wrap.querySelector('#discover-mode');
+      [existingList, existingMore, existingChips, existingMode].forEach(el => el?.remove());
+      wrap.appendChild(grid);
     }
 
-    // Mode toggle pill row — Route vs Nearby. Lets the user explicitly
-    // pick instead of relying on auto-detection. Inserted before chips.
-    let modeBar = wrap.querySelector('#discover-mode');
-    if (!modeBar) {
-      modeBar = document.createElement('div');
-      modeBar.id = 'discover-mode';
-      modeBar.className = 'discover-mode';
-      const chipBarEl = wrap.querySelector('#discover-chips');
-      if (chipBarEl) wrap.insertBefore(modeBar, chipBarEl);
-      else wrap.appendChild(modeBar);
-    }
-    const modes = [
-      ['auto',  'Auto'],
-      ['route', 'Along route'],
-      ['near',  'Nearby']
-    ];
-    modeBar.innerHTML = modes.map(([k, label]) =>
-      `<button type="button" class="discover-mode-btn${this.modeChoice === k ? ' active' : ''}"
-                data-mode="${k}">${label}</button>`
-    ).join('');
-    modeBar.querySelectorAll('.discover-mode-btn').forEach(b => {
-      b.onclick = () => Discover.setModeChoice(b.dataset.mode);
+    grid.innerHTML = this.TILE_ORDER.map(t => {
+      const cls = 'discover-tile' + (t.key === 'top' ? ' top-picks' : '');
+      return `
+        <button type="button" class="${cls}" data-cat="${t.key}" aria-label="${this._esc(t.label)}">
+          <img src="icons/categories/${t.icon}.png" alt="" class="discover-tile-icon" loading="lazy" />
+          <span class="discover-tile-label">${this._esc(t.label)}</span>
+        </button>`;
+    }).join('');
+
+    grid.querySelectorAll('.discover-tile').forEach(tile => {
+      tile.onclick = () => Discover.openModal(tile.dataset.cat);
     });
+  },
 
-    const chipBar = wrap.querySelector('#discover-chips');
+  // ── Modal: contents render ─────────────────────────────────────────────
+  // Renders chips, anchor header, results list/grid, error/loading states
+  // into the #modal-discover body. Called on every refresh() while the modal
+  // is open, and once on openModal().
+  _renderModalContents() {
+    const modal = document.getElementById('modal-discover');
+    if (!modal) return;
+
+    // Header bar: title + anchor pill
+    const titleEl = modal.querySelector('#modal-discover-title');
+    if (titleEl) {
+      const tile = this.TILE_ORDER.find(t => t.key === this.category);
+      titleEl.textContent = tile ? tile.label : 'Discover';
+    }
+    const anchorEl = modal.querySelector('#modal-discover-anchor');
+    if (anchorEl) {
+      const label = this.anchorLabel || 'Pick a search area';
+      anchorEl.innerHTML = `<span class="dd-anchor-icon">📍</span><span>${this._esc(label)}</span><span class="dd-anchor-chevron">▾</span>`;
+    }
+
+    // Chip row
+    const chipBar = modal.querySelector('#discover-chips');
     if (chipBar) {
-      const chips = [
-        ['all',      'All'],
-        ['camping',  'Camping'],
-        ['hiking',   'Hiking'],
-        ['quirky',   'Quirky'],
-        ['historic', 'Historic'],
-        ['natural',  'Natural'],
-        ['cultural', 'Cultural']
-      ];
-      chipBar.innerHTML = chips.map(([k, label]) =>
-        `<button type="button" class="discover-chip${this.category === k ? ' active' : ''}"
-                  data-cat="${k}">${label}</button>`
+      const chips = this.TILE_ORDER; // same order as the tile grid
+      chipBar.innerHTML = chips.map(t =>
+        `<button type="button" class="discover-chip${this.category === t.key ? ' active' : ''}"
+                  data-cat="${t.key}">${this._esc(t.label)}</button>`
       ).join('');
       chipBar.querySelectorAll('.discover-chip').forEach(c => {
         c.onclick = () => Discover.setCategory(c.dataset.cat);
       });
     }
 
-    const list = wrap.querySelector('#discover-list');
-    const moreBtn = wrap.querySelector('#discover-more-btn');
+    const list = modal.querySelector('#discover-list');
+    const moreBtn = modal.querySelector('#discover-more-btn');
     if (!list) return;
 
+    // No anchor at all — first-class CTA to pick a search area.
     if (this.mode == null) {
       list.classList.remove('expanded');
       list.innerHTML = `
-        <div class="empty-state" style="padding:20px;text-align:center">
-          <div style="font-size:24px;margin-bottom:6px">🧭</div>
-          <div style="font-size:13px;color:var(--color-text-muted)">
-            Plan a journey or enable location to discover places.
+        <div class="empty-state" style="padding:28px 20px;text-align:center">
+          <div style="font-size:28px;margin-bottom:8px">📍</div>
+          <div style="font-size:14px;color:var(--color-text-muted);margin-bottom:14px">
+            Pick a search area to start discovering.
+          </div>
+          <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+            <button class="btn btn-primary btn-sm" onclick="Discover._dropPinFromPicker()">Drop pin on map</button>
+            <button class="btn btn-outline btn-sm" onclick="Discover._openAnchorPicker(true)">Enter a city</button>
           </div>
         </div>`;
       if (moreBtn) moreBtn.style.display = 'none';
@@ -881,18 +1139,33 @@ const Discover = {
 
     if (this.error) {
       list.classList.remove('expanded');
-      // Three error states get distinct UI so the user knows what to do.
       const t = this.errorType || 'network';
       const copy = t === 'busy'
-        ? { icon: '⏳', msg: 'OpenStreetMap is busy right now.', retry: 'Try again' }
+        ? { icon: '⏳', msg: 'The discovery service is busy right now.', retry: 'Try again' }
         : t === 'offline'
         ? { icon: '📡', msg: "You're offline. Connect to load discoveries.", retry: null }
-        : { icon: '⚠️', msg: "Couldn't reach OpenStreetMap.", retry: 'Try again' };
+        : { icon: '⚠️', msg: "Couldn't reach the discovery service.", retry: 'Try again' };
       list.innerHTML = `
         <div class="empty-state" style="padding:20px;text-align:center">
           <div style="font-size:24px;margin-bottom:6px">${copy.icon}</div>
           <div style="font-size:13px;color:var(--color-text-muted);margin-bottom:${copy.retry ? '12px' : '0'}">${this._esc(copy.msg)}</div>
           ${copy.retry ? `<button class="btn btn-outline btn-sm" onclick="Discover.retry()">${copy.retry}</button>` : ''}
+        </div>`;
+      if (moreBtn) moreBtn.style.display = 'none';
+      return;
+    }
+
+    // Top Picks empty: dedicated CTA to switch to Natural (the broadest OTM
+    // bucket) without forcing the user back to the tile grid.
+    if (!this.results.length && this.category === 'top') {
+      list.classList.remove('expanded');
+      list.innerHTML = `
+        <div class="empty-state" style="padding:28px 20px;text-align:center">
+          <div style="font-size:28px;margin-bottom:8px">⭐</div>
+          <div style="font-size:14px;color:var(--color-text-muted);margin-bottom:14px">
+            No top picks for this area.
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="Discover.setCategory('natural')">View all nearby places</button>
         </div>`;
       if (moreBtn) moreBtn.style.display = 'none';
       return;
@@ -915,14 +1188,19 @@ const Discover = {
     const visible = this.results.slice(0, this._visibleCount);
 
     list.classList.toggle('expanded', this._visibleCount > this.INITIAL_COUNT);
-    list.innerHTML = visible.map(p => this._renderCard(p)).join('');
+    // Top Picks uses hero cards (image-forward); other categories use the
+    // existing compact card.
+    if (this.category === 'top') {
+      list.classList.add('hero-list');
+      list.innerHTML = visible.map(p => this._renderHeroCard(p)).join('');
+    } else {
+      list.classList.remove('hero-list');
+      list.innerHTML = visible.map(p => this._renderCard(p)).join('');
+    }
 
-    // Whole-card click → open the detail panel. Save and Maps buttons inside
-    // stop propagation so they don't double-trigger.
     list.querySelectorAll('.discover-card').forEach(card => {
       card.onclick = () => Discover.openDetail(card.dataset.xid);
     });
-
     list.querySelectorAll('.discover-card .discover-save').forEach(btn => {
       btn.onclick = (ev) => {
         ev.stopPropagation();
@@ -938,31 +1216,275 @@ const Discover = {
       };
     });
 
-    if (moreBtn) {
-      const total = this.results.length;
-      const showing = Math.min(this._visibleCount, total);
-      const hiddenCount = total - showing;
-      if (total > this.INITIAL_COUNT) {
-        moreBtn.style.display = '';
-        if (hiddenCount > 0) {
-          // Add up to PAGE_INCREMENT more per click — keeps DOM size bounded
-          // and lets the user pace expansion without dumping all results.
-          const next = Math.min(hiddenCount, this.PAGE_INCREMENT);
-          moreBtn.textContent = `Show ${next} more (${hiddenCount} left)`;
-          moreBtn.onclick = () => {
-            Discover._visibleCount = Math.min(total, Discover._visibleCount + Discover.PAGE_INCREMENT);
-            Discover.render();
-          };
-        } else {
-          moreBtn.textContent = 'Show less';
-          moreBtn.onclick = () => {
-            Discover._visibleCount = Discover.INITIAL_COUNT;
-            Discover.render();
-          };
-        }
-      } else {
-        moreBtn.style.display = 'none';
+    this._updateMoreBtn(moreBtn);
+  },
+
+  // ── More-button (Show N more / Show less) ──────────────────────────────
+  _updateMoreBtn(moreBtn) {
+    if (!moreBtn) return;
+    const total = this.results.length;
+    const showing = Math.min(this._visibleCount, total);
+    const hiddenCount = total - showing;
+    // Top Picks is intentionally a small curated list; no pagination.
+    if (this.category === 'top' || total <= this.INITIAL_COUNT) {
+      moreBtn.style.display = 'none';
+      return;
+    }
+    moreBtn.style.display = '';
+    if (hiddenCount > 0) {
+      const next = Math.min(hiddenCount, this.PAGE_INCREMENT);
+      moreBtn.textContent = `Show ${next} more (${hiddenCount} left)`;
+      moreBtn.onclick = () => {
+        Discover._visibleCount = Math.min(total, Discover._visibleCount + Discover.PAGE_INCREMENT);
+        Discover.render();
+      };
+    } else {
+      moreBtn.textContent = 'Show less';
+      moreBtn.onclick = () => {
+        Discover._visibleCount = Discover.INITIAL_COUNT;
+        Discover.render();
+      };
+    }
+  },
+
+  // ── Modal: open / close ────────────────────────────────────────────────
+  // Triggered by tapping a tile on the Explore page (or via the "View all
+  // nearby" CTA when Top Picks is empty). Sets the active category, marks
+  // the modal as open, and kicks off a fetch.
+  _modalOpen: false,
+
+  openModal(category) {
+    if (!category) return;
+    this.category = category;
+    this.expanded = false;
+    this._visibleCount = this.INITIAL_COUNT;
+    this._modalOpen = true;
+    if (window.UI?.openModal) UI.openModal('modal-discover');
+    // Render the modal scaffolding once before the fetch so the user sees
+    // the loading state instead of an empty modal.
+    this._renderModalContents();
+    this.refresh();
+    if (window.matchMedia('(max-width: 767px)').matches && window.UI?.initMobileDrawers) {
+      UI.initMobileDrawers();
+      UI._applySnap('full');
+    }
+  },
+
+  closeModal() {
+    this._modalOpen = false;
+    if (window.UI?.closeModal) UI.closeModal('modal-discover');
+    this.closeDetail();
+  },
+
+  // ── Anchor picker (sub-panel inside modal) ─────────────────────────────
+  // Opens the search-area selector — radio rows for current options + manual
+  // pin-drop / city-entry buttons.
+  _openAnchorPicker(focusInput = false) {
+    const modal = document.getElementById('modal-discover');
+    const host = modal?.querySelector('#discover-anchor-picker');
+    if (!host) return;
+    host.style.display = 'block';
+    host.innerHTML = this._renderAnchorPicker();
+    if (focusInput) {
+      setTimeout(() => host.querySelector('#disc-place-input')?.focus(), 50);
+    }
+  },
+
+  _closeAnchorPicker() {
+    const modal = document.getElementById('modal-discover');
+    const host = modal?.querySelector('#discover-anchor-picker');
+    if (!host) return;
+    host.style.display = 'none';
+    host.innerHTML = '';
+  },
+
+  _renderAnchorPicker() {
+    const hasGps = State.userLat != null && State.userLng != null;
+    const hasManual = !!this._manualAnchor;
+    const journey = State.currentJourneyId ? State.getJourney(State.currentJourneyId) : null;
+    const hasRoute = !!(journey && (journey.legs || []).some(l => l.routeGeometry));
+    const mode = this.mode;
+    return `
+      <div class="dd-anchor-card">
+        <div class="dd-anchor-title">Search area</div>
+        <div class="dd-anchor-options">
+          ${hasGps ? `
+            <button type="button" class="dd-anchor-row${(mode === 'near' && !hasManual) ? ' active' : ''}"
+                    onclick="Discover._chooseGpsAnchor()">
+              <span class="dd-anchor-radio"></span>
+              <span class="dd-anchor-row-label">Near you (GPS)</span>
+            </button>
+          ` : ''}
+          ${hasRoute ? `
+            <button type="button" class="dd-anchor-row${(mode === 'route' && !hasManual) ? ' active' : ''}"
+                    onclick="Discover._chooseRouteAnchor()">
+              <span class="dd-anchor-radio"></span>
+              <span class="dd-anchor-row-label">Along your trip</span>
+            </button>
+          ` : ''}
+          ${hasManual ? `
+            <button type="button" class="dd-anchor-row active"
+                    onclick="Discover._closeAnchorPicker()">
+              <span class="dd-anchor-radio"></span>
+              <span class="dd-anchor-row-label">${this._esc(this._manualAnchor.label || 'Custom area')}</span>
+            </button>
+            <button type="button" class="dd-anchor-clear" onclick="Discover._clearManualAnchorAndClose()">
+              Clear custom area
+            </button>
+          ` : ''}
+        </div>
+
+        <div class="dd-anchor-divider">— or set a custom area —</div>
+
+        <button type="button" class="btn btn-primary btn-sm" style="width:100%;margin-bottom:10px"
+                onclick="Discover._dropPinFromPicker()">
+          📍 Drop pin on map
+        </button>
+
+        <label class="input-label" style="display:block;margin-bottom:4px">Enter a city or address</label>
+        <div style="display:flex;gap:8px">
+          <input type="text" id="disc-place-input" class="input" style="flex:1"
+                 placeholder="e.g. Moab, UT"
+                 onkeydown="if(event.key==='Enter'){Discover._submitPlaceAnchor();}" />
+          <button type="button" class="btn btn-outline btn-sm" onclick="Discover._submitPlaceAnchor()">Use</button>
+        </div>
+
+        <div style="margin-top:12px;text-align:right">
+          <button type="button" class="btn btn-outline btn-sm" onclick="Discover._closeAnchorPicker()">Close</button>
+        </div>
+      </div>
+    `;
+  },
+
+  _chooseGpsAnchor() {
+    if (this._manualAnchor) this._clearManualAnchor();
+    this.modeChoice = 'near';
+    this._closeAnchorPicker();
+    this.refresh();
+  },
+
+  _chooseRouteAnchor() {
+    if (this._manualAnchor) this._clearManualAnchor();
+    this.modeChoice = 'route';
+    this._closeAnchorPicker();
+    this.refresh();
+  },
+
+  _clearManualAnchorAndClose() {
+    this._clearManualAnchor();
+    this._closeAnchorPicker();
+  },
+
+  // Drop-pin flow: collapse the modal to half-snap so the user sees the map,
+  // show a draggable pin at the current anchor (or center of the map), and
+  // surface a floating "Use this location" confirm.
+  _dropPinFromPicker() {
+    const map = window.MapModule?.map;
+    if (!map || !window.MapModule?.showDragPin) {
+      if (window.UI?.showToast) UI.showToast('Map not available', 'error');
+      return;
+    }
+    this._closeAnchorPicker();
+    // Drop the pin where we already have an anchor; otherwise the map center.
+    let lat, lng;
+    if (this._manualAnchor) {
+      lat = this._manualAnchor.lat; lng = this._manualAnchor.lng;
+    } else if (this.mode === 'near' && State.userLat != null) {
+      lat = State.userLat; lng = State.userLng;
+    } else {
+      const c = map.getCenter();
+      lat = c.lat; lng = c.lng;
+    }
+    MapModule.showDragPin(lat, lng);
+    State.pendingLat = lat;
+    State.pendingLng = lng;
+    State.on('dragpin:moved', this._onPinMoved);
+    // Mobile: peek the modal so the map shows behind it.
+    if (window.matchMedia('(max-width: 767px)').matches && window.UI) {
+      UI._applySnap('peek');
+    }
+    this._showPinConfirmBar();
+  },
+
+  _onPinMoved({ lat, lng } = {}) {
+    if (lat != null && lng != null) {
+      State.pendingLat = lat;
+      State.pendingLng = lng;
+    }
+  },
+
+  _showPinConfirmBar() {
+    let bar = document.getElementById('discover-pin-confirm');
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = 'discover-pin-confirm';
+      bar.className = 'discover-pin-confirm';
+      document.body.appendChild(bar);
+    }
+    bar.innerHTML = `
+      <div class="discover-pin-confirm-text">Drag the pin to your search area</div>
+      <div class="discover-pin-confirm-actions">
+        <button class="btn btn-outline btn-sm" onclick="Discover._cancelPinDrop()">Cancel</button>
+        <button class="btn btn-primary btn-sm" onclick="Discover._confirmPinDrop()">Use this location</button>
+      </div>`;
+    bar.style.display = 'flex';
+  },
+
+  _hidePinConfirmBar() {
+    const bar = document.getElementById('discover-pin-confirm');
+    if (bar) bar.style.display = 'none';
+  },
+
+  _confirmPinDrop() {
+    const lat = State.pendingLat;
+    const lng = State.pendingLng;
+    State.off('dragpin:moved', this._onPinMoved);
+    if (lat == null || lng == null) {
+      this._cancelPinDrop();
+      return;
+    }
+    if (window.MapModule?.hideDragPin) MapModule.hideDragPin();
+    this._hidePinConfirmBar();
+    this._setManualAnchor(lat, lng, 'Custom area');
+    if (window.matchMedia('(max-width: 767px)').matches && window.UI) {
+      UI._applySnap('full');
+    }
+  },
+
+  _cancelPinDrop() {
+    State.off('dragpin:moved', this._onPinMoved);
+    if (window.MapModule?.hideDragPin) MapModule.hideDragPin();
+    this._hidePinConfirmBar();
+    if (window.matchMedia('(max-width: 767px)').matches && window.UI) {
+      UI._applySnap('full');
+    }
+  },
+
+  // City/address entry flow: reuse Entries.geocodeAddress (Geocodio) so we
+  // don't add a new API dependency.
+  async _submitPlaceAnchor() {
+    const input = document.getElementById('disc-place-input');
+    if (!input) return;
+    const q = input.value.trim();
+    if (!q) return;
+    if (!window.Entries?.geocodeAddress) {
+      if (window.UI?.showToast) UI.showToast('Geocoding not available', 'error');
+      return;
+    }
+    input.disabled = true;
+    try {
+      const coords = await Entries.geocodeAddress(q);
+      if (!coords) {
+        if (window.UI?.showToast) UI.showToast(`Couldn't find "${q}"`, 'error');
+        return;
       }
+      this._setManualAnchor(coords.lat, coords.lng, q);
+      this._closeAnchorPicker();
+    } catch (e) {
+      console.error('[Discover] geocode failed:', e);
+      if (window.UI?.showToast) UI.showToast('Lookup failed', 'error');
+    } finally {
+      input.disabled = false;
     }
   },
 
@@ -992,16 +1514,20 @@ const Discover = {
     const footer = document.getElementById('discover-detail-footer');
     if (!panel || !content || !footer) return;
 
+    const isOTM = !!poi._otm;
     const wikiTag = poi.tags?.wikipedia || poi.tags?.['wikipedia:en'];
     const qid = poi.tags?.wikidata;
-    const enriching = !!(wikiTag || qid);
-    // Need a reverse-geocode if the POI carries no city/state tags — the
-    // Google search query is much weaker without those, and the subline is
-    // less informative.
+    // For OTM, we always want to call /xid/{xid} the first time the user
+    // opens this POI — that's where the image, address, description, and
+    // wikidata/wikipedia IDs live (the list endpoint only returns name/coords
+    // /rate/kinds). Cached after first call.
+    const enriching = isOTM ? true : !!(wikiTag || qid);
+    // Need a reverse-geocode if the POI carries no city/state — Overpass POIs
+    // sometimes do; OTM detail returns address structured, so we usually skip.
     const t = poi.tags || {};
     const hasCity = !!(t['addr:city'] || t['addr:town'] || t['addr:village']);
     const hasState = !!t['addr:state'];
-    const needReverse = (!hasCity || !hasState) && poi._reverseAddr === undefined;
+    const needReverse = !isOTM && (!hasCity || !hasState) && poi._reverseAddr === undefined;
 
     content.innerHTML = this._renderDetailContent(poi, /*wiki*/ null, /*wd*/ null, /*loading*/ enriching);
     footer.innerHTML = this._renderDetailFooter(poi);
@@ -1028,22 +1554,32 @@ const Discover = {
       }
     }, 60);
 
-    // Async: fetch Wikipedia + Wikidata + reverse-geocode in parallel.
-    // All cached on the POI / per id-or-tag so repeat opens skip the network.
+    // Async enrichment: OTM detail (if OTM) → falls through to Wikipedia /
+    // Wikidata for fields OTM didn't supply. Reverse-geocode runs only when
+    // we have no city/state at all. All cached so repeat opens skip the
+    // network.
     if (enriching || needReverse) {
-      Promise.all([
-        wikiTag ? this._loadWikipedia(wikiTag) : Promise.resolve(null),
-        qid ? this._loadWikidata(qid) : Promise.resolve(null),
-        needReverse ? this._reverseGeocode(poi) : Promise.resolve(null)
-      ]).then(([wiki, wd, _addr]) => {
-        // Guard: user may have closed or opened a different POI by then.
+      const enrich = async () => {
+        // Step 1: OTM detail (also populates wikidata / wikipedia / images).
+        if (isOTM) await this._loadOTMDetail(poi);
+        // Step 2: derive wiki/wd lookups. Prefer OTM-supplied IDs; fall back
+        // to OSM tags. Skip Wikidata if OTM already has an image AND a
+        // description (the only fields we'd render from it).
+        const finalWikiTag = wikiTag || poi.wikipedia || null;
+        const finalQid = qid || poi.wikidata || null;
+        const otmHasEnough = isOTM && (poi.images?.length > 0) && !!poi.description;
+        const wikiP = finalWikiTag ? this._loadWikipedia(finalWikiTag) : Promise.resolve(null);
+        const wdP = (finalQid && !otmHasEnough) ? this._loadWikidata(finalQid) : Promise.resolve(null);
+        const revP = needReverse ? this._reverseGeocode(poi) : Promise.resolve(null);
+        const [wiki, wd] = await Promise.all([wikiP, wdP, revP]);
+        return { wiki, wd };
+      };
+      enrich().then(({ wiki, wd }) => {
         if (this._detailXid !== xid) return;
         const c = document.getElementById('discover-detail-content');
         const f = document.getElementById('discover-detail-footer');
         if (c) c.innerHTML = this._renderDetailContent(poi, wiki, wd, false);
-        // Footer re-render is needed when reverse-geocode returned, since
-        // poi._reverseAddr changes the Google query and the address row.
-        if (f && needReverse) f.innerHTML = this._renderDetailFooter(poi);
+        if (f) f.innerHTML = this._renderDetailFooter(poi);
       });
     }
   },
@@ -1094,28 +1630,80 @@ const Discover = {
     const esc = s => this._esc(s);
     const tags = poi.tags || {};
 
-    // Hero priority: Wikipedia thumb > Wikidata image (Commons) > OSM image tag > gradient
-    const heroSrc = wiki?.thumbnail || wd?.image || tags.image || null;
-    const heroIcon = this._categoryIcon(poi.category);
-    const hero = heroSrc
-      ? `<div class="dd-hero" style="background-image:url('${esc(heroSrc)}')"><span class="dd-hero-pill">${esc(poi.category)}</span></div>`
-      : `<div class="dd-hero fallback"><span class="dd-hero-pill">${esc(poi.category)}</span><span>${heroIcon}</span></div>`;
+    // ── Photo gallery (1–2 images) ─────────────────────────────────────
+    // Build a deduped list from up to 4 sources in priority order:
+    //   1. OTM preview thumbnail (poi.images[0])
+    //   2. OTM full-size image (poi.images[1])
+    //   3. Wikipedia thumbnail
+    //   4. Wikidata P18 (Commons) image
+    // De-dupe by stripping host+path so that resized variants of the same
+    // image don't both appear. Render the first 2 unique sources.
+    const sourcesRaw = [];
+    if (poi.images?.length) {
+      poi.images.forEach(u => u && sourcesRaw.push(u));
+    }
+    if (wiki?.thumbnail) sourcesRaw.push(wiki.thumbnail);
+    if (wd?.image) sourcesRaw.push(wd.image);
+    if (tags.image) sourcesRaw.push(tags.image);
+    const seenKeys = new Set();
+    const sources = [];
+    for (const u of sourcesRaw) {
+      try {
+        const k = u.replace(/^https?:\/\//, '').split('?')[0].toLowerCase();
+        if (seenKeys.has(k)) continue;
+        seenKeys.add(k);
+        sources.push(u);
+      } catch { /* skip malformed */ }
+    }
+    const photos = sources.slice(0, 2);
 
-    // Subline: distance + operator/region if available. Region falls back to
-    // the reverse-geocoded city/state when no addr:* tag is present.
+    let hero = '';
+    if (photos.length === 0) {
+      const heroIcon = this._categoryIcon(poi.category);
+      hero = `<div class="dd-hero fallback"><span class="dd-hero-pill">${esc(poi.category)}</span><span>${heroIcon}</span></div>`;
+    } else if (photos.length === 1) {
+      hero = `<div class="dd-hero" style="background-image:url('${esc(photos[0])}')"><span class="dd-hero-pill">${esc(poi.category)}</span></div>`;
+    } else {
+      hero = `
+        <div class="dd-photo-row">
+          <div class="dd-photo" style="background-image:url('${esc(photos[0])}')">
+            <span class="dd-hero-pill">${esc(poi.category)}</span>
+          </div>
+          <div class="dd-photo" style="background-image:url('${esc(photos[1])}')"></div>
+        </div>`;
+    }
+
+    // Subline: stars (when available) + distance + operator/region.
     const distLabel = (poi._approx ? '~' : '') + State.formatDistance(poi.distance) + ' away';
     const revCity = poi._reverseAddr?.city;
     const revState = poi._reverseAddr?.state;
+    // OTM detail address structure → city/state strings.
+    const otmAddr = poi.address || null;
+    const otmCity = otmAddr?.city || otmAddr?.town || otmAddr?.village || null;
+    const otmState = otmAddr?.state || null;
     const region = tags.operator
-      || [tags['addr:city'] || revCity, tags['addr:state'] || revState].filter(Boolean).join(', ')
+      || [tags['addr:city'] || otmCity || revCity, tags['addr:state'] || otmState || revState].filter(Boolean).join(', ')
       || '';
-    const subline = region ? `${distLabel} · ${esc(region)}` : distLabel;
+    const starsHtml = poi.stars ? `<span class="dd-stars">${this._renderStars(poi.stars)}</span> ` : '';
+    const sublineText = region ? `${distLabel} · ${esc(region)}` : distLabel;
+    const subline = `${starsHtml}${sublineText}`;
 
-    // Description priority: Wikipedia extract > OSM description > Wikidata description > empty
+    // Description priority: OTM extract > Wikipedia extract > OSM description
+    // > Wikidata description > empty.
     const osmDesc = tags.description || tags['description:en'];
     let descBlock = '';
     if (loading) {
       descBlock = `<div class="dd-loading">Loading description…</div>`;
+    } else if (poi.description) {
+      // OTM-supplied. Stripped HTML (it's plain text from wikipedia_extracts.text).
+      descBlock = `<div class="dd-description">${esc(poi.description)}</div>`;
+      if (poi.wikipedia) {
+        const m = poi.wikipedia.match(/^([a-z-]+):(.+)$/i);
+        const wlink = m ? `https://${m[1]}.wikipedia.org/wiki/${encodeURIComponent(m[2])}` : null;
+        if (wlink) {
+          descBlock += `<a href="${esc(wlink)}" target="_blank" rel="noopener" class="dd-wiki-link">Read more on Wikipedia →</a>`;
+        }
+      }
     } else if (wiki?.extract) {
       descBlock = `
         <div class="dd-description">${esc(wiki.extract)}</div>
@@ -1124,14 +1712,12 @@ const Discover = {
     } else if (osmDesc) {
       descBlock = `<div class="dd-description" style="margin-bottom:18px">${esc(osmDesc)}</div>`;
     } else if (wd?.description) {
-      // Wikidata "descriptions" are a one-line gloss, not a full extract — but
-      // still better than the generic empty-state when available.
       descBlock = `<div class="dd-description" style="margin-bottom:18px">${esc(wd.description)}</div>`;
     } else if (!tags.website && !tags['contact:website'] && !tags.phone && !wd?.officialWebsite) {
       descBlock = `
         <div class="dd-empty-blurb">
           <strong>No description available</strong>
-          This place is in OpenStreetMap but doesn't have a description, Wikipedia article, or website yet. Use the search buttons below to look it up.
+          Use the search buttons below to look this place up online.
         </div>`;
     }
 
@@ -1182,12 +1768,14 @@ const Discover = {
       ? `<div class="dd-section-label">Amenities</div><div class="dd-badges">${badges.map(([l, k]) => `<span class="dd-badge${k === 'warn' ? ' warn' : ''}">${esc(l)}</span>`).join('')}</div>`
       : '';
 
-    // Address (compose from addr:* tags, fall back to reverse-geocoded
-    // city/state when only coords are tagged on the POI).
+    // Address (compose from addr:* tags, fall back to OTM structured
+    // address, then reverse-geocoded city/state when only coords are tagged
+    // on the POI).
+    const otmStreet = otmAddr?.road || otmAddr?.pedestrian || null;
     const addrParts = [
-      tags['addr:street'],
-      tags['addr:city'] || revCity,
-      tags['addr:state'] || revState
+      tags['addr:street'] || otmStreet,
+      tags['addr:city'] || otmCity || revCity,
+      tags['addr:state'] || otmState || revState
     ].filter(Boolean);
     const addressLine = addrParts.join(', ');
 
@@ -1221,11 +1809,10 @@ const Discover = {
   _renderDetailFooter(poi) {
     const esc = s => this._esc(s);
     const saved = this._alreadySaved(poi);
-    const saving = this._savingXids.has(poi.xid);
     const saveBtn = saved
       ? `<button class="btn btn-outline" disabled style="flex:1">✓ Saved</button>`
-      : `<button class="btn btn-primary" style="flex:1" ${saving ? 'disabled' : ''}
-                 onclick="Discover.savePOI('${poi.xid}')">${saving ? 'Saving…' : '+ Save'}</button>`;
+      : `<button class="btn btn-primary" style="flex:1"
+                 onclick="Discover.savePOI('${poi.xid}')">+ Save</button>`;
 
     // Search-the-web row. Suffix the Google query with city + state to
     // disambiguate generic POI names ("Bidwell Mansion" vs the dozens of
@@ -1295,6 +1882,15 @@ const Discover = {
     return map[category] || '📍';
   },
 
+  // Render a 1–5 star row. Returns '' when stars is 0 / null so OSM-source
+  // cards (Camping/Hiking) get no row at all.
+  _renderStars(stars) {
+    if (!stars || stars < 1) return '';
+    const filled = Math.max(0, Math.min(5, Math.round(stars)));
+    const empty = 5 - filled;
+    return `<span class="discover-stars" aria-label="${filled} of 5 stars">${'★'.repeat(filled)}${'☆'.repeat(empty)}</span>`;
+  },
+
   _renderCard(p) {
     // Prefix '~' while distance is still straight-line — driving miles can be
     // 5–10× crow-flies in mountain terrain, so the unprefixed number would
@@ -1303,22 +1899,20 @@ const Discover = {
       ? (p._approx ? '~' : '') + State.formatDistance(p.distance) + ' away'
       : (p._approx ? '~' : '') + Math.round(p.distance) + ' mi away';
     const saved = this._alreadySaved(p);
-    const saving = this._savingXids.has(p.xid);
     const saveButton = saved
       ? `<span class="discover-saved-badge">✓ Saved</span>`
-      : `<button type="button" class="discover-save${saving ? ' loading' : ''}"
-                  data-xid="${p.xid}" ${saving ? 'disabled' : ''}>
-           ${saving ? 'Saving…' : '+ Save'}
-         </button>`;
+      : `<button type="button" class="discover-save" data-xid="${p.xid}">+ Save</button>`;
     const badges = (p.badges || []).map(b =>
       `<span class="discover-badge ${b.kind}">${this._esc(b.label)}</span>`
     ).join('');
+    const stars = this._renderStars(p.stars);
     return `
       <div class="discover-card" data-xid="${p.xid}">
         <div class="discover-card-content">
           <div class="discover-card-name">${this._esc(p.name)}</div>
           <div class="discover-card-meta">
             <span class="discover-tag">${this._esc(p.category)}</span>
+            ${stars}
             <span class="discover-dist">${this._esc(distLabel)}</span>
           </div>
           ${badges ? `<div class="discover-card-badges">${badges}</div>` : ''}
@@ -1335,6 +1929,50 @@ const Discover = {
               <circle cx="12" cy="10" r="3"/>
             </svg>
           </button>
+        </div>
+      </div>`;
+  },
+
+  // Hero card for Top Picks: large preview image, category badge, stars,
+  // distance, Save. Falls back to a category-tinted gradient + the category
+  // PNG icon when no preview image is available (which is most OTM list
+  // results — the image lives in the detail-endpoint payload, not the list).
+  _renderHeroCard(p) {
+    const distLabel = State.formatDistance
+      ? (p._approx ? '~' : '') + State.formatDistance(p.distance) + ' away'
+      : (p._approx ? '~' : '') + Math.round(p.distance) + ' mi away';
+    const saved = this._alreadySaved(p);
+    const saveButton = saved
+      ? `<span class="discover-saved-badge">✓ Saved</span>`
+      : `<button type="button" class="discover-save" data-xid="${p.xid}">+ Save</button>`;
+    const stars = this._renderStars(p.stars);
+    // Map OTM category → tile icon for the gradient fallback hero.
+    const iconMap = {
+      'Natural': 'natural', 'Cultural': 'cultural', 'Quirky': 'quirky',
+      'Historic': 'historical', 'Place': 'top-picks'
+    };
+    const iconFile = iconMap[p.category] || 'top-picks';
+    const heroSrc = (p.images && p.images[0]) || null;
+    const hero = heroSrc
+      ? `<div class="discover-hero-image" style="background-image:url('${this._esc(heroSrc)}')"></div>`
+      : `<div class="discover-hero-image fallback">
+           <img src="icons/categories/${iconFile}.png" alt="" />
+         </div>`;
+    return `
+      <div class="discover-card hero" data-xid="${p.xid}">
+        ${hero}
+        <div class="discover-card-content">
+          <div class="discover-card-row">
+            <span class="discover-card-name">${this._esc(p.name)}</span>
+            <span class="discover-cat-badge">${this._esc(p.category)}</span>
+          </div>
+          <div class="discover-card-meta">
+            ${stars}
+            <span class="discover-dist">${this._esc(distLabel)}</span>
+          </div>
+        </div>
+        <div class="discover-card-actions">
+          ${saveButton}
         </div>
       </div>`;
   },

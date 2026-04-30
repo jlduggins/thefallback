@@ -19,5 +19,12 @@ const CONFIG = {
 
   // Anthropic API Key - for AI suggestions
   // Get yours at: https://console.anthropic.com/
-  ANTHROPIC_KEY: 'YOUR_ANTHROPIC_API_KEY'
+  ANTHROPIC_KEY: 'YOUR_ANTHROPIC_API_KEY',
+
+  // OpenTripMap API Key — tourist/attraction POIs with popularity ratings,
+  // Wikidata/Wikipedia linkage, and preview images.
+  // Get yours at: https://opentripmap.io/product
+  // Used by Discover for Natural, Cultural, Quirky, Historical, and Top Picks.
+  // Camping and Hiking remain on Overpass (OSM amenity tags + trail data).
+  OPENTRIPMAP_KEY: 'YOUR_OPENTRIPMAP_KEY'
 };

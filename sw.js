@@ -3,7 +3,7 @@
  * Handles caching for offline support
  */
 
-const CACHE_NAME = 'fallback-v2-cache-v33';
+const CACHE_NAME = 'fallback-v2-cache-v35';
 
 const STATIC_ASSETS = [
   './',
@@ -23,7 +23,14 @@ const STATIC_ASSETS = [
   './js/trips.js',
   './js/discover.js',
   './js/app.js',
-  './icons/logo.png'
+  './icons/logo.png',
+  './icons/categories/top-picks.png',
+  './icons/categories/camping.png',
+  './icons/categories/hiking.png',
+  './icons/categories/natural.png',
+  './icons/categories/cultural.png',
+  './icons/categories/quirky.png',
+  './icons/categories/historical.png'
 ];
 
 const EXTERNAL_ASSETS = [
@@ -35,13 +42,25 @@ const EXTERNAL_ASSETS = [
 ];
 
 // Install event - cache static assets
+// Uses per-asset adds (instead of cache.addAll) so a single missing optional
+// asset (e.g. category icons that haven't been cropped from the design files
+// yet) doesn't fail the entire install and leave the app uncached. Critical
+// assets are still attempted and any failure logs to console for diagnosis.
 self.addEventListener('install', event => {
   console.log('[SW] Installing...');
-  
+
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => {
+    caches.open(CACHE_NAME).then(async cache => {
       console.log('[SW] Caching static assets');
-      return cache.addAll([...STATIC_ASSETS, ...EXTERNAL_ASSETS]);
+      const all = [...STATIC_ASSETS, ...EXTERNAL_ASSETS];
+      const results = await Promise.allSettled(
+        all.map(url => cache.add(url).catch(err => {
+          console.warn('[SW] Failed to cache:', url, err.message);
+          throw err;
+        }))
+      );
+      const failed = results.filter(r => r.status === 'rejected').length;
+      if (failed) console.warn(`[SW] ${failed} asset(s) failed to cache (continuing)`);
     }).then(() => {
       console.log('[SW] Install complete');
       return self.skipWaiting();

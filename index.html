@@ -174,22 +174,16 @@
             <button type="button" id="nearby-more-btn" class="show-more-btn" style="display:none">Show more</button>
           </div>
 
-          <!-- Phase 1: Discover (Overpass / OSM) — along route OR near user GPS -->
+          <!-- Discover: 7-tile category grid. Tapping a tile opens #modal-discover
+               where the actual fetch (Overpass for Camping/Hiking, OpenTripMap for
+               the rest) runs. Nothing fires automatically on Explore landing. -->
           <div id="discover-wrap" class="explore-discover-wrap">
             <div class="section-divider"></div>
-            <div class="section-header" onclick="Discover.toggleCollapsed()">
+            <div class="section-header">
               <span class="section-title">Discover</span>
-              <span class="section-subtitle" id="discover-subtitle"></span>
-              <span class="section-toggle-icon" aria-hidden="true">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-                     stroke="currentColor" stroke-width="2.5">
-                  <polyline points="6 9 12 15 18 9"/>
-                </svg>
-              </span>
+              <span class="section-subtitle">Tap a category to explore</span>
             </div>
-            <div id="discover-chips" class="discover-chips"></div>
-            <div id="discover-list" class="discover-list"></div>
-            <button type="button" id="discover-more-btn" class="show-more-btn" style="display:none">Show more</button>
+            <!-- Tiles render in JS — Discover._renderTilesIntoExplore -->
           </div>
 
           </div><!-- /.explore-content-scroll -->
@@ -419,6 +413,28 @@
   <div id="modal-backdrop" class="modal-backdrop" onclick="UI.closeAllModals()"></div>
 
   <!-- ═══ MODALS ═══ -->
+
+  <!-- Discover: full-screen on mobile, large modal on desktop. Hosts the
+       category chips, anchor picker, results list, and Top Picks hero cards.
+       The detail panel (#discover-detail-panel) slides in over this modal
+       when a result is opened. -->
+  <div id="modal-discover" class="modal modal-sheet modal-discover">
+    <div class="modal-handle"></div>
+    <div class="modal-header modal-discover-header">
+      <button class="modal-close" onclick="Discover.closeModal()" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+      <h2 class="modal-title" id="modal-discover-title">Discover</h2>
+      <button type="button" class="dd-anchor-pill" id="modal-discover-anchor"
+              onclick="Discover._openAnchorPicker()" aria-label="Set search area"></button>
+    </div>
+    <div class="modal-body modal-discover-body">
+      <div id="discover-anchor-picker" style="display:none"></div>
+      <div id="discover-chips" class="discover-chips"></div>
+      <div id="discover-list" class="discover-list"></div>
+      <button type="button" id="discover-more-btn" class="show-more-btn" style="display:none">Show more</button>
+    </div>
+  </div>
 
   <!-- Add / Edit Location -->
   <div id="modal-add-location" class="modal modal-sheet">

@@ -2191,6 +2191,7 @@ body.add-location-drawer-open .leaflet-popup-pane { display: none !important; }
   body.add-location-drawer-open #trips-list-panel,
   body.add-location-drawer-open #explore-backup-panel,
   body.add-location-drawer-open #discover-detail-panel,
+  body.add-location-drawer-open #modal-discover,
   body.add-location-drawer-open .explore-left {
     display: none !important;
   }
@@ -2220,4 +2221,352 @@ body.add-location-drawer-open .leaflet-popup-pane { display: none !important; }
     background: var(--color-surface);
     border-top: 0.5px solid var(--color-border);
   }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   DISCOVER — Tile grid (Explore page entry point)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.discover-tile-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+}
+.discover-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 18px 10px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg, 16px);
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+  min-height: 100px;
+  text-align: center;
+}
+.discover-tile:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.08);
+  border-color: var(--color-primary);
+}
+.discover-tile:active { transform: translateY(0); }
+.discover-tile-icon {
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+  pointer-events: none;
+}
+.discover-tile-label {
+  font-family: var(--font-display, inherit);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+/* Top Picks — gold accent border + spans both columns on mobile so it reads
+   as the headline option. */
+.discover-tile.top-picks {
+  grid-column: 1 / -1;
+  border-color: var(--color-accent, #c9a13b);
+  background: linear-gradient(180deg,
+    rgba(201,161,59,0.06) 0%,
+    var(--color-surface) 60%);
+}
+.discover-tile.top-picks .discover-tile-label {
+  color: var(--color-primary);
+}
+
+@media (min-width: 768px) {
+  .discover-tile-grid { grid-template-columns: repeat(3, 1fr); }
+  .discover-tile.top-picks { grid-column: 1 / -1; }
+}
+@media (min-width: 1024px) {
+  /* On wider screens, give Top Picks the natural 1-of-3 width — no need to
+     span when there's plenty of room. */
+  .discover-tile.top-picks { grid-column: auto; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   DISCOVER — Modal overlay (per-category results, anchor picker, hero list)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+#modal-discover.modal {
+  /* Desktop: large centered modal. Mobile rules in the responsive block below. */
+  max-width: 720px;
+  max-height: 85vh;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.modal-discover-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 0.5px solid var(--color-border);
+}
+.modal-discover-header .modal-title {
+  flex: 1;
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+.modal-discover-header .modal-close {
+  margin-right: 4px;
+}
+.modal-discover-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* Anchor pill ("📍 Near you ▾") in the modal header */
+.dd-anchor-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  background: rgba(0,0,0,0.04);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full, 999px);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text);
+  cursor: pointer;
+  transition: background 120ms ease;
+  white-space: nowrap;
+  max-width: 60%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dd-anchor-pill:hover { background: rgba(0,0,0,0.07); }
+.dd-anchor-icon { font-size: 12px; }
+.dd-anchor-chevron { font-size: 10px; opacity: 0.6; }
+
+/* Anchor picker sub-panel inside the modal */
+.dd-anchor-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 12px);
+  padding: var(--space-4);
+}
+.dd-anchor-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.dd-anchor-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.dd-anchor-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md, 12px);
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left;
+  color: var(--color-text);
+}
+.dd-anchor-row:hover { background: rgba(0,0,0,0.03); }
+.dd-anchor-row.active {
+  border-color: var(--color-primary);
+  background: rgba(45,90,71,0.05);
+}
+.dd-anchor-radio {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--color-border);
+  flex-shrink: 0;
+}
+.dd-anchor-row.active .dd-anchor-radio {
+  border-color: var(--color-primary);
+  background: var(--color-primary);
+  box-shadow: inset 0 0 0 2px var(--color-surface);
+}
+.dd-anchor-row-label { flex: 1; }
+.dd-anchor-clear {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 4px 0;
+}
+.dd-anchor-divider {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  text-align: center;
+  margin: 8px 0 10px;
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+}
+
+/* Floating "Use this location" bar shown when the user is dropping a pin */
+.discover-pin-confirm {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--space-4) + var(--safe-bottom));
+  transform: translateX(-50%);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg, 16px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+  padding: 12px 14px;
+  z-index: 500; /* above modal + drawer */
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  max-width: 320px;
+}
+.discover-pin-confirm-text {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+.discover-pin-confirm-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   DISCOVER — Star rating row (used in cards and detail panel)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.discover-stars {
+  color: var(--color-accent, #c9a13b);
+  font-size: 12px;
+  letter-spacing: 1px;
+  white-space: nowrap;
+}
+.dd-stars .discover-stars { font-size: 14px; }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   DISCOVER — Hero card (Top Picks)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.discover-list.hero-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.discover-card.hero {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg, 16px);
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+.discover-card.hero:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.08);
+}
+.discover-hero-image {
+  width: 100%;
+  height: 140px;
+  background-position: center;
+  background-size: cover;
+  background-color: rgba(0,0,0,0.04);
+}
+.discover-hero-image.fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(45,90,71,0.10), rgba(201,161,59,0.10));
+}
+.discover-hero-image.fallback img {
+  width: 60px;
+  height: 60px;
+  opacity: 0.7;
+  object-fit: contain;
+}
+.discover-card.hero .discover-card-content {
+  padding: 12px 14px 4px;
+}
+.discover-card-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.discover-card.hero .discover-card-name {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 600;
+}
+.discover-cat-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 8px;
+  background: rgba(45,90,71,0.08);
+  color: var(--color-primary);
+  border-radius: var(--radius-full, 999px);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.discover-card.hero .discover-card-actions {
+  padding: 0 14px 12px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   DISCOVER — Detail panel photo gallery (1–2 photos)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.dd-photo-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.dd-photo {
+  position: relative;
+  height: 160px;
+  background-position: center;
+  background-size: cover;
+  background-color: rgba(0,0,0,0.04);
+  border-radius: var(--radius-md, 12px);
+}
+@media (max-width: 480px) {
+  .dd-photo-row { grid-template-columns: 1fr; }
+  .dd-photo { height: 180px; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   DISCOVER — Modal responsive (mobile takeover)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 767px) {
+  /* Mobile: full-screen sheet, mirrors #modal-add-location's behavior. */
+  #modal-discover.modal-sheet {
+    max-width: none;
+    max-height: none;
+    background: var(--color-surface);
+  }
+  /* Tile grid: tighter padding so 2 columns fit cleanly. */
+  .discover-tile { min-height: 90px; padding: 14px 8px; }
+  .discover-tile-icon { width: 40px; height: 40px; }
+  /* Anchor pill on mobile shrinks aggressively. */
+  .modal-discover-header .modal-title { font-size: 15px; }
+  .dd-anchor-pill { max-width: 45%; font-size: 11px; padding: 5px 8px; }
 }
