@@ -626,7 +626,14 @@ const Discover = {
     const samples = this.category === 'top'
       ? anchor.samples.slice(0, 1)
       : anchor.samples.slice(0, 4);
-    const radius = anchor.mode === 'route' ? this.ROUTE_RADIUS_M : this.OTM_RADIUS_M;
+    // Manual mode: use the viewport-derived radius from _resolveAnchor so
+    // panning/zooming the map actually changes the search area for OTM
+    // categories too (Top Picks, Natural, Cultural, Quirky, Historical).
+    // Route mode keeps its per-sample window. Near mode uses OTM's wider
+    // default since GPS-anchored search shouldn't depend on map view.
+    const radius = anchor.mode === 'route' ? this.ROUTE_RADIUS_M
+                : anchor.mode === 'manual' ? anchor.radiusM
+                : this.OTM_RADIUS_M;
     const limit = this.category === 'top' ? this.OTM_LIMIT : this.OTM_LIMIT;
 
     // One list call per sample, run in parallel.
@@ -1322,12 +1329,17 @@ const Discover = {
   // ── Auto-refresh on map pan/zoom (manual mode only) ────────────────
   // When the user pans or zooms the map while the modal is open and a
   // manual anchor is active, debounce ~800ms then re-anchor at the new
-  // map center. This gives a Google-Maps-style "search this area"
-  // behavior without requiring a button tap. We only auto-refresh in
-  // manual mode — Nearby and Along-route modes have their own anchor
-  // logic that shouldn't be hijacked by map navigation.
+  // map center. Gives a Google-Maps-style "search this area" feel without
+  // requiring a button tap.
+  //
+  // We must NOT trigger on our own programmatic moves (flyTo when a
+  // result is clicked, fitBounds after results land). We mark a timestamp
+  // before each programmatic move and ignore moveend events that fire
+  // within ~1.5s after — that's the cleanest way to distinguish them
+  // since Leaflet doesn't expose a "user-initiated" flag on moveend.
   _mapMoveTimer: null,
   _boundMapMove: null,
+  _lastProgrammaticMove: 0,
 
   _attachMapMoveListener() {
     const map = window.MapModule?.map;
@@ -1348,29 +1360,27 @@ const Discover = {
     }
   },
 
+  // Mark that we're about to programmatically move the map — call this
+  // immediately before any map.flyTo / map.fitBounds we kick off ourselves.
+  _markProgrammaticMove() {
+    this._lastProgrammaticMove = Date.now();
+  },
+
   _onMapMove() {
     if (!this._modalOpen) return;
     if (!this._manualAnchor) return; // only auto-refresh in manual mode
     const map = window.MapModule?.map;
     if (!map) return;
+    // Ignore moveend that came from our own flyTo/fitBounds.
+    if (Date.now() - this._lastProgrammaticMove < 1500) return;
 
     if (this._mapMoveTimer) clearTimeout(this._mapMoveTimer);
     this._mapMoveTimer = setTimeout(() => {
       this._mapMoveTimer = null;
+      // Re-check the programmatic-move guard at fire time too — a flyTo
+      // could land mid-debounce.
+      if (Date.now() - this._lastProgrammaticMove < 1500) return;
       const c = map.getCenter();
-      // Skip refresh if center moved less than ~0.5 mi — guards against
-      // the moveend that fires after our own programmatic flyTo (e.g.
-      // when the user clicks a result and the map zooms to it).
-      const dist = this._haversine(
-        this._manualAnchor.lat, this._manualAnchor.lng,
-        c.lat, c.lng
-      );
-      // Always refresh on significant zoom change too (radius derives
-      // from viewport, so zoom alone alters search area).
-      const oldZoom = this._lastMapZoom;
-      const newZoom = map.getZoom();
-      this._lastMapZoom = newZoom;
-      if (dist < 0.5 && oldZoom === newZoom) return;
       // Re-anchor: keeps the same label so the pin strip doesn't flicker.
       this._setManualAnchor(c.lat, c.lng, this._manualAnchor.label || 'Map area');
     }, 800);
@@ -1389,7 +1399,10 @@ const Discover = {
       // Defer one frame so any concurrent panel-resize finishes first;
       // otherwise fitBounds runs against stale viewport dimensions and
       // the camera lands off-target.
-      setTimeout(() => MapModule.fitDiscoverResultsBounds(), 80);
+      setTimeout(() => {
+        this._markProgrammaticMove();
+        MapModule.fitDiscoverResultsBounds();
+      }, 80);
     }
   },
 
@@ -1656,6 +1669,7 @@ const Discover = {
       MapModule.map.invalidateSize();
       if (poi.lat && poi.lng) {
         MapModule.showDiscoverMarker(poi.lat, poi.lng, poi.name);
+        this._markProgrammaticMove();
         MapModule.flyTo(poi.lat, poi.lng, 15);
       }
     }, 60);

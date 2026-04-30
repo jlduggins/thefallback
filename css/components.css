@@ -2442,6 +2442,20 @@ body.add-location-drawer-open .leaflet-popup-pane { display: none !important; }
   font-size: 14px; color: #8b9a91;
   cursor: pointer; padding: 2px 4px;
 }
+.disc-pin-refresh {
+  background: rgba(201,164,92,0.2);
+  border: 1px solid rgba(201,164,92,0.4);
+  border-radius: 999px;
+  font-size: 13px; line-height: 1;
+  width: 26px; height: 26px;
+  color: #1a1f1e;
+  cursor: pointer; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  transition: background 120ms ease, transform 200ms ease;
+}
+.disc-pin-refresh:hover { background: rgba(201,164,92,0.3); }
+.disc-pin-refresh:active { transform: rotate(180deg); }
 
 /* ── City-entry picker (drop-pin sub-panel) ─────────────────────────── */
 #discover-anchor-picker {

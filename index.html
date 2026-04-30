@@ -219,12 +219,16 @@
             </div>
           </div>
 
-          <!-- Amber strip: shown when a manual (pin) anchor is active -->
+          <!-- Amber strip: shown when a manual (pin) anchor is active.
+               Tapping the strip itself re-anchors at the current map center
+               (handy if the auto-refresh-on-pan didn't trigger or if the
+               user wants to confirm a new view). -->
           <div class="disc-pin-strip" id="disc-pin-strip" style="display:none">
-            <div class="disc-pin-dot">
+            <div class="disc-pin-dot" onclick="Discover._anchorAtMapCenter()" style="cursor:pointer">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#1a1f1e" stroke-width="2.5" stroke-linecap="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
             </div>
-            <div class="disc-pin-text" id="disc-pin-text"><strong>Custom area</strong> · Click map to move pin</div>
+            <div class="disc-pin-text" id="disc-pin-text" onclick="Discover._anchorAtMapCenter()" style="cursor:pointer"><strong>Map area</strong> · Pan or zoom the map</div>
+            <button class="disc-pin-refresh" onclick="Discover._anchorAtMapCenter()" aria-label="Refresh results for current map area" title="Refresh for current map area">↻</button>
             <button class="disc-pin-clear" onclick="Discover._clearManualAnchor()" aria-label="Clear pin">✕</button>
           </div>
 
