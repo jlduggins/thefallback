@@ -1262,7 +1262,75 @@ const Entries = {
   // ═══════════════════════════════════════════════════════════════════════════
   // FORM
   // ═══════════════════════════════════════════════════════════════════════════
-  
+
+  openFromDiscover(poi) {
+    this.resetForm();
+
+    const tags = poi.tags || {};
+    const form = document.getElementById('modal-add-location');
+    if (!form) return;
+
+    // Pre-fill from OSM data
+    form.querySelector('#f-name').value = poi.name || '';
+    State.pendingLat = poi.lat;
+    State.pendingLng = poi.lng;
+    form.querySelector('#f-coords').value =
+      poi.lat != null && poi.lng != null
+        ? `${poi.lat.toFixed(6)}, ${poi.lng.toFixed(6)}`
+        : '';
+
+    // Map OSM category to entry type
+    form.querySelector('#f-type').value = poi.category === 'camping' ? 'Dispersed' : 'Other';
+
+    // Map amenities from OSM tags
+    const flagged = {
+      hasPotableWater: tags.drinking_water === 'yes' || tags.amenity === 'drinking_water',
+      hasDumpStation:  tags.sanitary_dump_station === 'yes' || tags.amenity === 'sanitary_dump_station',
+      hasHookups:      tags.power_supply === 'yes',
+      hasPets:         tags.dog === 'yes',
+      needsReservations: tags.reservation === 'required' || tags.reservation === 'recommended'
+    };
+    State.AMENITY_META.forEach(am => {
+      const chip = form.querySelector(`[data-amenity="${am.id}"]`);
+      if (chip && flagged[am.id]) {
+        chip.classList.add('active');
+        chip.querySelector('input').checked = true;
+      }
+    });
+
+    // Map cost
+    if (tags.fee === 'no') {
+      form.querySelector('#f-cost').value = '0';
+    } else if (tags['fee:amount']) {
+      const n = parseFloat(tags['fee:amount']);
+      if (!isNaN(n)) form.querySelector('#f-cost').value = String(n);
+    }
+
+    // Website link
+    const website = tags.website || tags['contact:website'] || '';
+    if (website) {
+      form.querySelector('#f-link').value = website;
+      this.updateLinkPreview(website);
+    }
+
+    form.querySelector('.modal-title').textContent = 'Save Location';
+
+    // Tag so saveEntry knows to navigate to detail afterwards
+    State._discoverSourceXid = poi.xid;
+
+    // Show map pin
+    if (poi.lat && poi.lng) MapModule.showDragPin(poi.lat, poi.lng);
+
+    // Open the drawer
+    document.body.classList.add('add-location-drawer-open');
+    document.body.style.overflow = '';
+    UI.openModal('modal-add-location');
+    if (window.matchMedia('(max-width: 767px)').matches) {
+      UI.initMobileDrawers();
+      UI._applySnap('full');
+    }
+  },
+
   resetForm() {
     State.editingEntryId = null;
     State.pendingLat = null;
@@ -1460,11 +1528,33 @@ const Entries = {
       }
     });
     
+    const fromDiscover = State._discoverSourceXid || null;
+    State._discoverSourceXid = null;
+
     try {
-      await Firebase.saveEntry(entry);
+      const savedId = await Firebase.saveEntry(entry);
       UI.showToast(State.editingEntryId ? 'Location updated' : 'Location saved', 'success');
       UI.closeAddModal();
+
+      if (fromDiscover && savedId) {
+        const openDetail = () => {
+          State.selectEntry(savedId);
+          this.showDetail(savedId);
+        };
+        if (State.getEntry(savedId)) {
+          openDetail();
+        } else {
+          const unsub = State.on('entries:changed', () => {
+            if (State.getEntry(savedId)) {
+              unsub();
+              openDetail();
+            }
+          });
+          setTimeout(unsub, 3000);
+        }
+      }
     } catch (err) {
+      State._discoverSourceXid = fromDiscover; // restore on failure
       console.error('Save error:', err);
       UI.showToast('Failed to save', 'error');
     }

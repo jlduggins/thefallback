@@ -189,28 +189,68 @@
           </div><!-- /.explore-content-scroll -->
         </div>
 
-        <!-- Discover list panel — third flex column when a Discover tile is tapped.
-             Slides in from the right edge of .explore-left, leaving the map visible
-             and interactive. When a result is opened, #discover-detail-panel takes
-             this same slot and the list panel hides; closing the detail returns to
-             the list with state preserved. -->
-        <aside id="modal-discover" class="explore-backup-panel discover-list-panel" style="display:none">
-          <div class="side-panel-hd">
-            <div style="display:flex;align-items:center;gap:10px">
-              <button onclick="Discover.closeModal()" class="btn btn-ghost btn-icon" style="width:28px;height:28px" aria-label="Close">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-              </button>
-              <div id="modal-discover-title" style="font-size:14px;font-weight:600;color:var(--color-text);flex:1">Discover</div>
-              <button type="button" class="dd-anchor-pill" id="modal-discover-anchor"
-                      onclick="Discover._openAnchorPicker()" aria-label="Set search area"></button>
+        <!-- Discover list panel — slides in covering .explore-left when a tile is tapped.
+             Map stays fully visible and interactive to the right.
+             Closing returns to the Explore panel (explore-left is restored). -->
+        <aside id="modal-discover" class="discover-list-panel" style="display:none">
+
+          <!-- Dark hero header: back btn, category icon+title, mode selector -->
+          <div class="disc-hero" id="disc-hero">
+            <button class="disc-back-btn" onclick="Discover.closeModal()">
+              <span class="disc-back-arr">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.8)" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+              </span>
+              Back to Explore
+            </button>
+            <div class="disc-hero-row">
+              <div class="disc-hero-icon" id="disc-hero-icon">
+                <!-- JS populates with the category PNG -->
+              </div>
+              <div class="disc-hero-titles">
+                <div class="disc-hero-title" id="modal-discover-title">Discover</div>
+                <div class="disc-hero-count" id="disc-hero-count"></div>
+              </div>
+            </div>
+            <!-- Mode selector: Nearby / Along route / Drop pin (segmented control style) -->
+            <div class="disc-mode-seg" id="disc-mode-row">
+              <button class="disc-mode-btn" data-mode="near" onclick="Discover._setMode('near')">Nearby</button>
+              <button class="disc-mode-btn" data-mode="route" onclick="Discover._setMode('route')">Along route</button>
+              <button class="disc-mode-btn" data-mode="pin" onclick="Discover._setMode('pin')">📍 Drop pin</button>
             </div>
           </div>
-          <div class="side-panel-body">
-            <div id="discover-anchor-picker" style="display:none"></div>
-            <div id="discover-chips" class="discover-chips"></div>
-            <div id="discover-list" class="discover-list"></div>
-            <button type="button" id="discover-more-btn" class="show-more-btn" style="display:none">Show more</button>
+
+          <!-- Amber strip: shown when a manual (pin) anchor is active -->
+          <div class="disc-pin-strip" id="disc-pin-strip" style="display:none">
+            <div class="disc-pin-dot">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#1a1f1e" stroke-width="2.5" stroke-linecap="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            </div>
+            <div class="disc-pin-text" id="disc-pin-text"><strong>Custom area</strong> · Click map to move pin</div>
+            <button class="disc-pin-clear" onclick="Discover._clearManualAnchor()" aria-label="Clear pin">✕</button>
           </div>
+
+          <!-- City entry sub-panel (shown when Drop pin is clicked without a map) -->
+          <div id="discover-anchor-picker" style="display:none"></div>
+
+          <!-- Search bar -->
+          <div class="disc-search-wrap">
+            <div class="disc-search-bar">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8b9a91" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input type="text" id="disc-search-input" class="disc-search-input" placeholder="Search…" oninput="Discover._onSearchInput(this.value)" />
+            </div>
+          </div>
+
+          <!-- Distance badge -->
+          <div class="disc-dist-row">
+            <span class="disc-dist-label">Results within</span>
+            <span class="disc-dist-badge" id="disc-dist-badge">30 mi</span>
+          </div>
+
+          <!-- Scrollable results + show-more -->
+          <div id="discover-list" class="discover-list disc-results"></div>
+          <div class="disc-more-wrap">
+            <button type="button" id="discover-more-btn" class="disc-show-more" style="display:none">Show more</button>
+          </div>
+
         </aside>
 
         <!-- Discover POI detail panel — third flex column when a Discover card is tapped -->

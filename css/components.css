@@ -558,6 +558,22 @@
   height: 32px;
 }
 
+/* Teal result markers for every POI in the current Discover results.
+   Smaller than the gold "selected" marker so when both are visible the
+   selected one stands out. Click → opens the detail panel for that POI. */
+.marker-pin.discover-result {
+  background: #7FC3A5;
+  border: 2px solid white;
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.marker-pin.discover-result:hover {
+  transform: scale(1.25);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
+}
+
 /* Custom popup styles */
 .custom-popup .leaflet-popup-content-wrapper {
   border-radius: var(--radius-lg) !important;
@@ -2175,36 +2191,8 @@ body.add-location-drawer-open .map-popup-edit-btn,
 body.add-location-drawer-open .leaflet-popup,
 body.add-location-drawer-open .leaflet-popup-pane { display: none !important; }
 
-/* Mobile: Discover detail and Edit Location each take over the drawer slot.
-   Hide all peer drawers underneath so the map stays visible behind when the
-   user drags the active drawer down to peek/half. */
+/* Edit Location modal — keep these mobile overrides */
 @media (max-width: 767px) {
-  body.discover-detail-open #locations-panel,
-  body.discover-detail-open #location-detail-panel,
-  body.discover-detail-open #trips-list-panel,
-  body.discover-detail-open #explore-backup-panel,
-  body.discover-detail-open #modal-discover,
-  body.discover-detail-open .explore-left {
-    display: none !important;
-  }
-  /* Discover list panel: hide peer drawers underneath so the map stays
-     visible behind when the user peeks the drawer to drop a pin. */
-  body.discover-list-open #locations-panel,
-  body.discover-list-open #location-detail-panel,
-  body.discover-list-open #trips-list-panel,
-  body.discover-list-open #explore-backup-panel,
-  body.discover-list-open .explore-left {
-    display: none !important;
-  }
-  body.add-location-drawer-open #locations-panel,
-  body.add-location-drawer-open #location-detail-panel,
-  body.add-location-drawer-open #trips-list-panel,
-  body.add-location-drawer-open #explore-backup-panel,
-  body.add-location-drawer-open #discover-detail-panel,
-  body.add-location-drawer-open #modal-discover,
-  body.add-location-drawer-open .explore-left {
-    display: none !important;
-  }
   /* Hide the bottom nav while editing so it doesn't cover the Save Location
      footer (nav z-index 300 > drawer z-index 40). User exits via the modal X. */
   body.add-location-drawer-open #bottom-nav { display: none !important; }
@@ -2233,6 +2221,7 @@ body.add-location-drawer-open .leaflet-popup-pane { display: none !important; }
   }
 }
 
+
 /* ═══════════════════════════════════════════════════════════════════════
    DISCOVER — Tile grid (Explore page entry point)
    ═══════════════════════════════════════════════════════════════════════ */
@@ -2252,7 +2241,7 @@ body.add-location-drawer-open .leaflet-popup-pane { display: none !important; }
   padding: 18px 10px;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg, 16px);
+  border-radius: 16px;
   cursor: pointer;
   transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
   box-shadow: 0 1px 2px rgba(0,0,0,0.03);
@@ -2277,274 +2266,414 @@ body.add-location-drawer-open .leaflet-popup-pane { display: none !important; }
   font-weight: 600;
   color: var(--color-text);
 }
-/* Top Picks — gold accent border + spans both columns on mobile so it reads
-   as the headline option. */
 .discover-tile.top-picks {
   grid-column: 1 / -1;
-  border-color: var(--color-accent, #c9a13b);
-  background: linear-gradient(180deg,
-    rgba(201,161,59,0.06) 0%,
-    var(--color-surface) 60%);
+  border-color: #c9a45c;
+  background: linear-gradient(180deg, rgba(201,164,92,0.06) 0%, var(--color-surface) 60%);
 }
-.discover-tile.top-picks .discover-tile-label {
-  color: var(--color-primary);
-}
+.discover-tile.top-picks .discover-tile-label { color: var(--color-primary); }
 
 @media (min-width: 768px) {
   .discover-tile-grid { grid-template-columns: repeat(3, 1fr); }
   .discover-tile.top-picks { grid-column: 1 / -1; }
 }
 @media (min-width: 1024px) {
-  /* On wider screens, give Top Picks the natural 1-of-3 width — no need to
-     span when there's plenty of room. */
   .discover-tile.top-picks { grid-column: auto; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
-   DISCOVER — List side panel (per-category results, anchor picker, hero list)
-   Slides in from the right edge of .explore-left as a third flex column.
-   Inherits sizing from .explore-backup-panel; only the content needs overrides.
-   The map column to the right stays interactive — important for the
-   "Drop pin on map" anchor picker flow.
+   DISCOVER — List panel (covers .explore-left when open)
+   Design: mockup-concept2-discover.html
    ═══════════════════════════════════════════════════════════════════════ */
 
+/* The panel matches .explore-left's exact width so it slots in cleanly
+   when explore-left is hidden. On mobile it goes full-screen (position:fixed
+   via .explore-backup-panel mobile rules). */
 .discover-list-panel {
-  /* Slightly wider than the default backup panel since results lists need
-     room for hero cards on Top Picks. */
-  width: 420px;
-  max-width: 44vw;
-  min-width: 340px;
-}
-.discover-list-panel .side-panel-body {
+  width: 380px;
+  max-width: 40vw;
+  min-width: 320px;
+  flex-shrink: 0;
+  background: #fff;
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-}
-.discover-list-panel .side-panel-hd .modal-title {
-  font-size: 14px;
-  font-weight: 600;
-  margin: 0;
-}
-
-/* Anchor pill ("📍 Near you ▾") in the modal header */
-.dd-anchor-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 10px;
-  background: rgba(0,0,0,0.04);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-full, 999px);
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--color-text);
-  cursor: pointer;
-  transition: background 120ms ease;
-  white-space: nowrap;
-  max-width: 60%;
   overflow: hidden;
-  text-overflow: ellipsis;
+  animation: explore-backup-slide-in 200ms ease-out;
+  z-index: 6;
 }
-.dd-anchor-pill:hover { background: rgba(0,0,0,0.07); }
-.dd-anchor-icon { font-size: 12px; }
-.dd-anchor-chevron { font-size: 10px; opacity: 0.6; }
 
-/* Anchor picker sub-panel inside the modal */
-.dd-anchor-card {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md, 12px);
-  padding: var(--space-4);
+/* ── Hero header ────────────────────────────────────────────────────── */
+.disc-hero {
+  background: linear-gradient(160deg, #1a3d2d, #2d5a47);
+  padding: 18px 20px 20px;
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
 }
-.dd-anchor-title {
-  font-size: 14px;
-  font-weight: 600;
-  margin-bottom: 10px;
+.disc-hero::after {
+  content: '';
+  position: absolute;
+  top: -30px; right: -30px;
+  width: 140px; height: 140px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.06);
+  pointer-events: none;
 }
-.dd-anchor-options {
+.disc-back-btn {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.7);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
   margin-bottom: 14px;
 }
-.dd-anchor-row {
+.disc-back-arr {
+  width: 26px; height: 26px;
+  background: rgba(255,255,255,0.12);
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.disc-hero-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.disc-hero-icon {
+  width: 52px; height: 52px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.disc-hero-icon img {
+  width: 36px; height: 36px;
+  object-fit: contain;
+  filter: brightness(0) invert(1);  /* make icon white on dark bg */
+  opacity: 0.85;
+}
+.disc-hero-titles { display: flex; flex-direction: column; }
+.disc-hero-title {
+  font-family: 'Poppins', var(--font-display, sans-serif);
+  font-size: 22px;
+  font-weight: 700;
+  color: white;
+  line-height: 1.1;
+}
+.disc-hero-count {
+  font-size: 12px;
+  color: rgba(255,255,255,0.6);
+  margin-top: 2px;
+}
+
+/* ── Mode selector (segmented control in hero) ─────────────────────── */
+/* Shape from the screenshot: horizontal segment group with filled active.
+   Colors from the mockup: dark green (#2d5a47) active, gold (#c9a45c) for
+   the pin/drop-pin active state. */
+.disc-mode-seg {
+  display: flex;
+  gap: 2px;
+  margin-top: 14px;
+  background: rgba(0,0,0,0.25);
+  border-radius: 9999px;
+  padding: 3px;
+}
+.disc-mode-btn {
+  flex: 1;
+  padding: 7px 10px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.65);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease;
+  white-space: nowrap;
+  text-align: center;
+}
+.disc-mode-btn:hover { color: rgba(255,255,255,0.9); }
+.disc-mode-btn.active {
+  background: white;
+  color: #2d5a47;
+}
+.disc-mode-btn.active[data-mode="pin"] {
+  background: #c9a45c;
+  color: #1a1f1e;
+}
+
+/* ── Pin-active amber strip ─────────────────────────────────────────── */
+.disc-pin-strip {
+  background: rgba(201,164,92,0.12);
+  border-top: 1px solid rgba(201,164,92,0.28);
+  padding: 10px 20px;
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
-  background: transparent;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md, 12px);
-  cursor: pointer;
-  font-size: 13px;
-  text-align: left;
-  color: var(--color-text);
-}
-.dd-anchor-row:hover { background: rgba(0,0,0,0.03); }
-.dd-anchor-row.active {
-  border-color: var(--color-primary);
-  background: rgba(45,90,71,0.05);
-}
-.dd-anchor-radio {
-  width: 14px; height: 14px;
-  border-radius: 50%;
-  border: 2px solid var(--color-border);
   flex-shrink: 0;
 }
-.dd-anchor-row.active .dd-anchor-radio {
-  border-color: var(--color-primary);
-  background: var(--color-primary);
-  box-shadow: inset 0 0 0 2px var(--color-surface);
+.disc-pin-dot {
+  width: 24px; height: 24px;
+  background: #c9a45c;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
 }
-.dd-anchor-row-label { flex: 1; }
-.dd-anchor-clear {
-  align-self: flex-start;
-  background: none;
-  border: none;
+.disc-pin-text {
+  flex: 1;
   font-size: 12px;
-  color: var(--color-text-muted);
-  text-decoration: underline;
-  cursor: pointer;
-  padding: 4px 0;
+  color: #5a6360;
+  line-height: 1.4;
 }
-.dd-anchor-divider {
-  font-size: 11px;
-  color: var(--color-text-muted);
-  text-align: center;
-  margin: 8px 0 10px;
-  text-transform: lowercase;
-  letter-spacing: 0.04em;
+.disc-pin-text strong { color: #1a1f1e; }
+.disc-pin-clear {
+  background: none; border: none;
+  font-size: 14px; color: #8b9a91;
+  cursor: pointer; padding: 2px 4px;
 }
 
-/* Floating "Use this location" bar shown when the user is dropping a pin */
-.discover-pin-confirm {
-  position: fixed;
-  left: 50%;
-  bottom: calc(var(--space-4) + var(--safe-bottom));
-  transform: translateX(-50%);
+/* ── City-entry picker (drop-pin sub-panel) ─────────────────────────── */
+#discover-anchor-picker {
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--color-border);
+  flex-shrink: 0;
+}
+.dd-anchor-card {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg, 16px);
-  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
-  padding: 12px 14px;
-  z-index: 500; /* above modal + drawer */
-  display: none;
-  flex-direction: column;
-  gap: 8px;
+  border-radius: 12px;
+  padding: 14px;
+}
+.dd-anchor-title { font-size: 13px; font-weight: 600; margin-bottom: 10px; }
+.dd-anchor-divider {
+  font-size: 11px; color: var(--color-text-muted);
+  text-align: center; margin: 8px 0 10px;
+}
+
+/* ── Search bar ─────────────────────────────────────────────────────── */
+.disc-search-wrap {
+  padding: 10px 20px;
+  border-bottom: 1px solid #e8e4dc;
+  flex-shrink: 0;
+}
+.disc-search-bar {
+  display: flex;
   align-items: center;
-  max-width: 320px;
+  gap: 8px;
+  background: #f8f6f2;
+  border-radius: 10px;
+  padding: 8px 12px;
 }
-.discover-pin-confirm-text {
-  font-size: 12px;
-  color: var(--color-text-muted);
+.disc-search-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 13px;
+  color: #1a1f1e;
 }
-.discover-pin-confirm-actions {
+.disc-search-input::placeholder { color: #8b9a91; }
+
+/* ── Distance row ───────────────────────────────────────────────────── */
+.disc-dist-row {
+  padding: 8px 20px 0;
   display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+.disc-dist-label { font-size: 11px; color: #8b9a91; }
+.disc-dist-badge {
+  background: #f8f6f2;
+  border-radius: 9999px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #2d5a47;
+}
+
+/* ── Results list ───────────────────────────────────────────────────── */
+.disc-results {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 10px 20px 0;
+  display: flex;
+  flex-direction: column;
   gap: 8px;
 }
 
-/* ═══════════════════════════════════════════════════════════════════════
-   DISCOVER — Star rating row (used in cards and detail panel)
-   ═══════════════════════════════════════════════════════════════════════ */
-
-.discover-stars {
-  color: var(--color-accent, #c9a13b);
-  font-size: 12px;
-  letter-spacing: 1px;
-  white-space: nowrap;
-}
-.dd-stars .discover-stars { font-size: 14px; }
-
-/* ═══════════════════════════════════════════════════════════════════════
-   DISCOVER — Hero card (Top Picks)
-   ═══════════════════════════════════════════════════════════════════════ */
-
-.discover-list.hero-list {
+/* Card tile — matches mockup r-tile style */
+.disc-r-tile {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
+  gap: 12px;
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid #e8e4dc;
+  border-radius: 14px;
+  align-items: center;
+  cursor: pointer;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
 }
+.disc-r-tile:hover {
+  border-color: #2d5a47;
+  box-shadow: 0 2px 10px rgba(45,90,71,0.08);
+}
+.disc-r-thumb {
+  width: 52px; height: 52px;
+  border-radius: 10px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  /* Light cream background matches the PNG's own tile background so the
+     icon reads cleanly. Each category-tinted left edge creates the
+     mockup's "category color" feel without fighting the PNG. */
+  background: #f8f6f2;
+  border-left: 3px solid #2d5a47;
+}
+.disc-r-thumb img {
+  width: 44px; height: 44px;
+  object-fit: contain;
+}
+/* Per-category accent colour on the thumbnail's left edge. Mirrors the
+   gradient palette but without overlaying the icon. */
+.disc-r-thumb[data-cat="camping"]    { border-left-color: #3d7a5f; }
+.disc-r-thumb[data-cat="hiking"]     { border-left-color: #5a7a50; }
+.disc-r-thumb[data-cat="natural"]    { border-left-color: #4a8a65; }
+.disc-r-thumb[data-cat="cultural"]   { border-left-color: #7b5ea7; }
+.disc-r-thumb[data-cat="historical"] { border-left-color: #b87c3a; }
+.disc-r-thumb[data-cat="quirky"]     { border-left-color: #3a7ab8; }
+.disc-r-thumb[data-cat="top-picks"]  { border-left-color: #c9a45c; }
+.disc-r-body { flex: 1; min-width: 0; }
+.disc-r-name {
+  font-family: 'Poppins', var(--font-display, sans-serif);
+  font-size: 13px;
+  font-weight: 600;
+  color: #1a1f1e;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.disc-r-meta { font-size: 11px; color: #8b9a91; margin-top: 2px; }
+.disc-r-tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+.disc-r-tag {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 8px;
+  line-height: 1.5;
+}
+.disc-r-tag.green  { background: #e8f5e9; color: #2d5a47; }
+.disc-r-tag.amber  { background: #fff3e0; color: #e65100; }
+.disc-r-tag.blue   { background: #e3f2fd; color: #1565c0; }
+.disc-r-tag.purple { background: #f3e5f5; color: #6a1b9a; }
+.disc-r-chevron {
+  font-size: 20px;
+  color: #e8e4dc;
+  margin-left: auto;
+  flex-shrink: 0;
+  line-height: 1;
+}
+/* saved state: ✓ check replaces chevron */
+.disc-r-tile.saved .disc-r-chevron { display: none; }
+.disc-r-saved-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: #2d5a47;
+  flex-shrink: 0;
+}
+
+/* ── Show more ──────────────────────────────────────────────────────── */
+.disc-more-wrap {
+  padding: 8px 20px 20px;
+  flex-shrink: 0;
+}
+.disc-show-more {
+  width: 100%;
+  padding: 10px;
+  background: transparent;
+  border: 1px solid #e8e4dc;
+  border-radius: 10px;
+  font-size: 13px;
+  color: #2d5a47;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.disc-show-more:hover { background: #f8f6f2; }
+
+/* Stars (OTM ratings) */
+.discover-stars {
+  color: #c9a45c;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+}
+
+/* ── Hero card (Top Picks) ──────────────────────────────────────────── */
 .discover-card.hero {
   display: flex;
   flex-direction: column;
   padding: 0;
   overflow: hidden;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg, 16px);
+  background: #fff;
+  border: 1px solid #e8e4dc;
+  border-radius: 14px;
   cursor: pointer;
-  transition: transform 120ms ease, box-shadow 120ms ease;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
 }
 .discover-card.hero:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 18px rgba(0,0,0,0.08);
+  border-color: #2d5a47;
+  box-shadow: 0 4px 14px rgba(45,90,71,0.1);
 }
 .discover-hero-image {
-  width: 100%;
-  height: 140px;
-  background-position: center;
-  background-size: cover;
+  width: 100%; height: 140px;
+  background-position: center; background-size: cover;
   background-color: rgba(0,0,0,0.04);
 }
 .discover-hero-image.fallback {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, rgba(45,90,71,0.10), rgba(201,161,59,0.10));
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, rgba(45,90,71,0.12), rgba(201,164,92,0.12));
 }
 .discover-hero-image.fallback img {
-  width: 60px;
-  height: 60px;
-  opacity: 0.7;
-  object-fit: contain;
+  width: 52px; height: 52px; opacity: 0.6; object-fit: contain;
 }
-.discover-card.hero .discover-card-content {
-  padding: 12px 14px 4px;
-}
-.discover-card-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
-}
-.discover-card.hero .discover-card-name {
-  flex: 1;
-  font-size: 15px;
-  font-weight: 600;
-}
+.discover-card.hero .discover-card-content { padding: 10px 14px 4px; }
+.discover-card-row { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+.discover-card.hero .discover-card-name { flex: 1; font-size: 14px; font-weight: 600; }
 .discover-cat-badge {
-  font-size: 10px;
-  font-weight: 600;
-  padding: 3px 8px;
-  background: rgba(45,90,71,0.08);
-  color: var(--color-primary);
-  border-radius: var(--radius-full, 999px);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-size: 9px; font-weight: 700; padding: 2px 7px;
+  background: rgba(45,90,71,0.08); color: #2d5a47;
+  border-radius: 999px; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.discover-card.hero .discover-card-meta {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; color: #8b9a91;
 }
 .discover-card.hero .discover-card-actions {
-  padding: 0 14px 12px;
-  display: flex;
-  justify-content: flex-end;
+  padding: 0 14px 12px; display: flex; justify-content: flex-end;
 }
 
-/* ═══════════════════════════════════════════════════════════════════════
-   DISCOVER — Detail panel photo gallery (1–2 photos)
-   ═══════════════════════════════════════════════════════════════════════ */
-
+/* ── Detail panel photo gallery ─────────────────────────────────────── */
 .dd-photo-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  margin-bottom: 14px;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px;
 }
 .dd-photo {
-  position: relative;
-  height: 160px;
-  background-position: center;
-  background-size: cover;
-  background-color: rgba(0,0,0,0.04);
-  border-radius: var(--radius-md, 12px);
+  position: relative; height: 160px;
+  background-position: center; background-size: cover;
+  background-color: rgba(0,0,0,0.04); border-radius: 12px;
 }
 @media (max-width: 480px) {
   .dd-photo-row { grid-template-columns: 1fr; }
@@ -2552,17 +2681,51 @@ body.add-location-drawer-open .leaflet-popup-pane { display: none !important; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
-   DISCOVER — Side panel responsive (mobile takeover)
+   DISCOVER — Body-class stacking rules
    ═══════════════════════════════════════════════════════════════════════ */
 
+/* On ALL viewports: when the Discover list is open, hide the Explore panel
+   so the list panel covers that slot cleanly. */
+body.discover-list-open .explore-left { display: none !important; }
+
+/* When detail opens, also hide the list panel (they share the slot). */
+body.discover-detail-open .explore-left  { display: none !important; }
+body.discover-detail-open #modal-discover { display: none !important; }
+
+/* Hide Discover panels when Add-Location form is open. */
+body.add-location-drawer-open #modal-discover,
+body.add-location-drawer-open #discover-detail-panel { display: none !important; }
+
+/* ─── Mobile-only stacking ─────────────────────────────────────────── */
 @media (max-width: 767px) {
-  /* Mobile: side panel becomes a bottom-sheet drawer (handled by
-     .explore-backup-panel mobile rules). Inherits the snap system. */
-  .discover-list-panel { width: 100%; max-width: none; min-width: 0; }
-  /* Tile grid: tighter padding so 2 columns fit cleanly. */
+  .discover-list-panel {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    width: 100%; max-width: none; min-width: 0;
+    z-index: 100;
+  }
+  body.discover-list-open #locations-panel,
+  body.discover-list-open #location-detail-panel,
+  body.discover-list-open #trips-list-panel,
+  body.discover-list-open #explore-backup-panel { display: none !important; }
+
+  body.discover-detail-open #locations-panel,
+  body.discover-detail-open #location-detail-panel,
+  body.discover-detail-open #trips-list-panel,
+  body.discover-detail-open #explore-backup-panel { display: none !important; }
+
+  body.add-location-drawer-open #locations-panel,
+  body.add-location-drawer-open #location-detail-panel,
+  body.add-location-drawer-open #trips-list-panel,
+  body.add-location-drawer-open #explore-backup-panel,
+  body.add-location-drawer-open .explore-left { display: none !important; }
+
+  /* Tile grid */
   .discover-tile { min-height: 90px; padding: 14px 8px; }
   .discover-tile-icon { width: 40px; height: 40px; }
-  /* Anchor pill on mobile shrinks aggressively. */
-  .discover-list-panel .side-panel-hd .modal-title { font-size: 13px; }
-  .dd-anchor-pill { max-width: 45%; font-size: 11px; padding: 5px 8px; }
+  /* Mode selector: smaller text on narrow screens */
+  .disc-mode-btn { font-size: 11px; padding: 6px 8px; }
+  /* Hero title slightly smaller */
+  .disc-hero-title { font-size: 19px; }
+  /* Bottom nav hides during Add Location */
+  body.add-location-drawer-open #bottom-nav { display: none !important; }
 }

@@ -18,7 +18,8 @@ const MapModule = {
   userMarker: null,
   userCircle: null,
   dragPin: null,
-  discoverMarker: null,
+  discoverMarker: null,            // single gold pin for the active POI detail
+  discoverResultMarkers: [],       // teal pins for every POI in the current Discover results
   
   // ═══════════════════════════════════════════════════════════════════════════
   // INITIALIZATION
@@ -577,6 +578,54 @@ const MapModule = {
     if (this.discoverMarker) {
       this.discoverMarker.remove();
       this.discoverMarker = null;
+    }
+  },
+
+  // ── Teal result markers for every POI in the current Discover results ──
+  // Gives the user spatial context for the list panel: each card has a pin
+  // on the map, and clicking the pin opens that POI's detail panel.
+  // Existing `discoverMarker` (gold) still shows on top when a detail panel
+  // is open — the teal layer is the "all results" backdrop.
+  showDiscoverResultMarkers(results, onMarkerClick) {
+    this.hideDiscoverResultMarkers();
+    if (!this.map || !results?.length) return;
+
+    const icon = L.divIcon({
+      className: 'custom-marker',
+      html: '<div class="marker-pin discover-result"></div>',
+      iconSize: [24, 24],
+      iconAnchor: [12, 12]
+    });
+
+    results.forEach(p => {
+      if (p.lat == null || p.lng == null) return;
+      const m = L.marker([p.lat, p.lng], { icon, zIndexOffset: 800 }).addTo(this.map);
+      if (p.name) m.bindTooltip(this.escapeHtml(p.name), { direction: 'top', offset: [0, -8] });
+      if (typeof onMarkerClick === 'function') {
+        m.on('click', (e) => {
+          // Stop the map click handler from also firing (which clears selection).
+          if (e.originalEvent) L.DomEvent.stopPropagation(e.originalEvent);
+          onMarkerClick(p.xid);
+        });
+      }
+      this.discoverResultMarkers.push(m);
+    });
+  },
+
+  hideDiscoverResultMarkers() {
+    this.discoverResultMarkers.forEach(m => m.remove());
+    this.discoverResultMarkers = [];
+  },
+
+  // Fit the map to show all current Discover result markers.
+  // Called once when results first land for an anchor change so the user
+  // immediately sees where everything is.
+  fitDiscoverResultsBounds(padding = 60) {
+    if (!this.map || !this.discoverResultMarkers.length) return;
+    const group = L.featureGroup(this.discoverResultMarkers);
+    const bounds = group.getBounds();
+    if (bounds.isValid()) {
+      this.map.fitBounds(bounds, { padding: [padding, padding], maxZoom: 13 });
     }
   },
   
