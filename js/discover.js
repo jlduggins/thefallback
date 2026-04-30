@@ -406,13 +406,19 @@ const Discover = {
     const cacheNs = this.OTM_CATEGORIES.includes(this.category) ? 'otm' : 'osm';
     const key = `${cacheNs}:${a.mode}:${a.signature}:${this.category}`;
 
+    // Re-anchors triggered by the user panning/zooming the map should NOT
+    // refit the camera — that would fight the gesture. _onMapMove sets this
+    // flag before calling _setManualAnchor; consumed once here.
+    const skipFit = this._skipFitOnce === true;
+    this._skipFitOnce = false;
+
     // In-memory cache (fastest) → localStorage cache (survives reload).
     if (this._cache[key]) {
       this.results = this._cache[key];
       this.loading = false;
       this.error = null;
       this.render();
-      this._showResultMarkers(/*fit*/ true);
+      this._showResultMarkers(/*fit*/ !skipFit);
       if (this.results.some(p => p._approx)) this._refreshDrivingDistances(a, this.results);
       return;
     }
@@ -423,7 +429,7 @@ const Discover = {
       this.loading = false;
       this.error = null;
       this.render();
-      this._showResultMarkers(/*fit*/ true);
+      this._showResultMarkers(/*fit*/ !skipFit);
       if (this.results.some(p => p._approx)) this._refreshDrivingDistances(a, this.results);
       return;
     }
@@ -443,7 +449,7 @@ const Discover = {
       this.results = pois;
       this.error = null;
       this.errorType = null;
-      this._showResultMarkers(/*fit*/ true);
+      this._showResultMarkers(/*fit*/ !skipFit);
       this._refreshDrivingDistances(a, pois);
     } catch (e) {
       console.error('[Discover] fetch failed:', e);
@@ -1382,6 +1388,9 @@ const Discover = {
       if (Date.now() - this._lastProgrammaticMove < 1500) return;
       const c = map.getCenter();
       // Re-anchor: keeps the same label so the pin strip doesn't flicker.
+      // User-initiated zoom/pan — skip the post-fetch refit so we don't
+      // snap the camera back to a wider view than the user just chose.
+      this._skipFitOnce = true;
       this._setManualAnchor(c.lat, c.lng, this._manualAnchor.label || 'Map area');
     }, 800);
   },
