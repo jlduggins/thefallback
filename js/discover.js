@@ -1353,6 +1353,11 @@ const Discover = {
     if (!this._boundMapMove) {
       this._boundMapMove = () => this._onMapMove();
     }
+    // Seed the move-tracking state so _onMapMove can tell pan vs zoom on
+    // the very first user gesture after the modal opens.
+    const c = map.getCenter();
+    this._lastMoveCenter = { lat: c.lat, lng: c.lng };
+    this._lastMoveZoom = map.getZoom();
     map.off('moveend', this._boundMapMove);
     map.on('moveend', this._boundMapMove);
   },
@@ -1380,18 +1385,42 @@ const Discover = {
     // Ignore moveend that came from our own flyTo/fitBounds.
     if (Date.now() - this._lastProgrammaticMove < 1500) return;
 
+    // Distinguish pan from zoom-only. Zoom shouldn't trigger a re-search
+    // (it changes detail, not the area the user wants to look in) — and
+    // re-fetching can return a different result set or briefly clear
+    // markers, which feels broken to the user. Only re-anchor when the
+    // map center actually moved enough to be meaningful (~half a mile).
+    const c = map.getCenter();
+    const z = map.getZoom();
+    const last = this._lastMoveCenter;
+    if (last) {
+      const drift = this._haversine(last.lat, last.lng, c.lat, c.lng);
+      const zoomChanged = z !== this._lastMoveZoom;
+      // <0.5 mi drift = treat as zoom-only / micro-jitter; skip.
+      if (drift < 0.5 && zoomChanged) {
+        this._lastMoveZoom = z;
+        return;
+      }
+      if (drift < 0.05) {
+        this._lastMoveZoom = z;
+        return;
+      }
+    }
+    this._lastMoveCenter = { lat: c.lat, lng: c.lng };
+    this._lastMoveZoom = z;
+
     if (this._mapMoveTimer) clearTimeout(this._mapMoveTimer);
     this._mapMoveTimer = setTimeout(() => {
       this._mapMoveTimer = null;
       // Re-check the programmatic-move guard at fire time too — a flyTo
       // could land mid-debounce.
       if (Date.now() - this._lastProgrammaticMove < 1500) return;
-      const c = map.getCenter();
+      const cc = map.getCenter();
       // Re-anchor: keeps the same label so the pin strip doesn't flicker.
-      // User-initiated zoom/pan — skip the post-fetch refit so we don't
-      // snap the camera back to a wider view than the user just chose.
+      // User-initiated pan — skip the post-fetch refit so we don't snap
+      // the camera back to a wider view than the user just chose.
       this._skipFitOnce = true;
-      this._setManualAnchor(c.lat, c.lng, this._manualAnchor.label || 'Map area');
+      this._setManualAnchor(cc.lat, cc.lng, this._manualAnchor.label || 'Map area');
     }, 800);
   },
 
