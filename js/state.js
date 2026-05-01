@@ -228,7 +228,16 @@ const State = {
         }
       }
 
-      // Each destination — tie-breaker picks the CLOSER stop
+      // Each destination — tie-breaker picks the CLOSER stop, and on a
+      // distance tie (same location appearing twice in the journey, e.g. an
+      // out-and-back) prefers the leg whose date range contains today, then
+      // the later leg. Without this, the first occurrence always wins, so
+      // the dashboard's "next destination" stays stuck on the leg AFTER the
+      // first occurrence even when the user is on the second visit.
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const legCoversToday = (l) =>
+        !!(l.arriveDate && l.departDate
+           && l.arriveDate <= todayStr && todayStr <= l.departDate);
       for (let i = 0; i < legs.length; i++) {
         const l = legs[i];
         const destE = this.getEntry(l.destId);
@@ -236,7 +245,22 @@ const State = {
         const destLng = destE?.lng ?? l.destLng;
         if (destLat == null || destLng == null) continue;
         const d = this.getDistanceMiles(uLat, uLng, destLat, destLng);
-        if (d <= PROX && d < closestDist) {
+        if (d > PROX) continue;
+        let beats = false;
+        if (d < closestDist) {
+          beats = true;
+        } else if (currentLegIndex >= 0 && Math.abs(d - closestDist) < 1e-6) {
+          // Distance tie. Prefer the candidate that better matches today's
+          // date. Fall back to the later leg index if neither (or both)
+          // covers today — that's typically where the user actually is on a
+          // forward-progressing itinerary.
+          const curLeg = legs[currentLegIndex];
+          const curCovers = legCoversToday(curLeg);
+          const newCovers = legCoversToday(l);
+          if (newCovers && !curCovers) beats = true;
+          else if (newCovers === curCovers && i > currentLegIndex) beats = true;
+        }
+        if (beats) {
           closestDist = d;
           atStartingPoint = false;
           currentLegIndex = i;

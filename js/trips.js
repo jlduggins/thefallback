@@ -426,9 +426,12 @@ const Trips = {
     const totalNights = legs.reduce((s,l)=>{ if(!l.arriveDate||!l.departDate)return s;return s+Math.max(0,Math.round((new Date(l.departDate)-new Date(l.arriveDate))/86400000));},0);
     const totalLodging = legs.reduce((s,l)=>{ const e=State.getEntry(l.destId);if(!e||!l.arriveDate||!l.departDate)return s;const n=Math.round((new Date(l.departDate)-new Date(l.arriveDate))/86400000);if(n<=0)return s;let c=(e.cost||0)*n;if(e.discountPercent&&e.discountType)c=c*(1-e.discountPercent/100);return s+c;},0);
 
-    let curIdx=-1, atStart=false;
-    const uLat=State.userLat, uLng=State.userLng, PROX=2;
-    if(uLat){let cl=Infinity;if(legs.length>0&&legs[0].fromLat){const d=this.haversine(uLat,uLng,legs[0].fromLat,legs[0].fromLng);if(d<=PROX&&d<cl){cl=d;atStart=true;curIdx=-1;}}legs.forEach((l,i)=>{if(!l.destLat)return;const d=this.haversine(uLat,uLng,l.destLat,l.destLng);if(d<=PROX&&d<cl){cl=d;atStart=false;curIdx=i;}});}
+    // Use the shared journey-context helper so the "Currently here" badge
+    // stays in sync with the dashboard's "Next destination". The shared
+    // helper has date-aware tie-breaking for repeated stops (out-and-back).
+    const _ctx = State.getJourneyContext(journey);
+    const atStart = _ctx.atStartingPoint;
+    const curIdx = atStart ? -1 : _ctx.currentLegIndex;
 
     // Auto-refresh routes in background if any are missing
     const hasMissingRoute = legs.some(l => !l.routeGeometry && l.destLat);
@@ -944,9 +947,12 @@ const Trips = {
     MapModule.markers.forEach(mk=>mk.remove());
     this.backupMarkers.forEach(mk=>m.removeLayer(mk));this.backupMarkers=[];this.showingBackups=false;
     this.journeyMarkers.forEach(mk=>m.removeLayer(mk));this.journeyMarkers=[];
-    const legs=j.legs,uLat=State.userLat,uLng=State.userLng,PROX=2;
-    let curIdx=-1,atStart=false;
-    if(uLat){let cl=Infinity;if(legs.length>0&&legs[0].fromLat){const d=this.haversine(uLat,uLng,legs[0].fromLat,legs[0].fromLng);if(d<=PROX&&d<cl){cl=d;atStart=true;curIdx=-1;}}legs.forEach((l,i)=>{if(!l.destLat)return;const d=this.haversine(uLat,uLng,l.destLat,l.destLng);if(d<=PROX&&d<cl){cl=d;atStart=false;curIdx=i;}});}
+    const legs=j.legs,uLat=State.userLat,uLng=State.userLng;
+    // Shared journey-context helper — date-aware tie-breaking for repeated
+    // stops keeps map "current" pin in sync with dashboard + list.
+    const _ctx=State.getJourneyContext(j);
+    const atStart=_ctx.atStartingPoint;
+    const curIdx=atStart?-1:_ctx.currentLegIndex;
     const allCoords=[],sLat=legs[0].fromLat||uLat,sLng=legs[0].fromLng||uLng,sName=legs[0].fromName||'Start';
     if(sLat){allCoords.push([sLat,sLng]);const si=L.divIcon({html:atStart?`<div style="width:26px;height:26px;background:#586F6B;border:2.5px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,.3),0 0 0 6px rgba(88,111,107,.25);display:flex;align-items:center;justify-content:center"><svg width="13" height="13" viewBox="0 0 24 24" fill="white"><polygon points="12,2 15,9 22,9 16,14 18,22 12,17 6,22 8,14 2,9 9,9"/></svg></div>`:`<div style="width:20px;height:20px;background:#586F6B;border:2px solid white;border-radius:50%;box-shadow:0 2px 5px rgba(0,0,0,.2)"></div>`,className:'journey-marker',iconSize:atStart?[26,26]:[20,20],iconAnchor:atStart?[13,13]:[10,10]});const sm=L.marker([sLat,sLng],{icon:si,zIndexOffset:1000}).addTo(m);sm.bindPopup(`<b>${sName}</b><br>${atStart?'📍 Currently here':'Starting point'}`);this.journeyMarkers.push(sm);}
     legs.forEach((leg,i)=>{const e=State.getEntry(leg.destId),lat=e?.lat||leg.destLat,lng=e?.lng||leg.destLng;if(!lat||!lng)return;allCoords.push([lat,lng]);const ic=i===curIdx;const icon=L.divIcon({html:ic?`<div style="width:26px;height:26px;background:var(--color-primary,#2d5a47);border:2.5px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,.3),0 0 0 5px rgba(45,90,71,.2);display:flex;align-items:center;justify-content:center;color:white;font-size:10px;font-weight:600">${i+1}</div>`:`<div style="width:20px;height:20px;background:var(--color-primary,#2d5a47);border:2px solid white;border-radius:50%;box-shadow:0 2px 5px rgba(0,0,0,.2);display:flex;align-items:center;justify-content:center;color:white;font-size:9px;font-weight:600">${i+1}</div>`,className:'journey-marker',iconSize:[26,26],iconAnchor:[13,13]});const mk=L.marker([lat,lng],{icon,zIndexOffset:1000+i}).addTo(m);mk.bindPopup(`<b>${leg.destName}</b>${ic?'<br>📍 Currently here':''}`);this.journeyMarkers.push(mk);});
