@@ -2223,14 +2223,71 @@ body.add-location-drawer-open .leaflet-popup-pane { display: none !important; }
 
 
 /* ═══════════════════════════════════════════════════════════════════════
-   DISCOVER — Tile grid (Explore page entry point)
+   DISCOVER — Banner + tile grid (Explore page entry point)
+   Design: fallback-design-system mockup-concept1-explore.html
    ═══════════════════════════════════════════════════════════════════════ */
+
+/* Dark forest-green banner that wraps the eyebrow / title / subtitle / tile
+   grid. Gold concentric rings in the upper-right corner via the deco div. */
+.discover-banner {
+  background: #1a2e26;
+  border-radius: 16px;
+  padding: 18px 18px 16px;
+  margin: var(--space-4) 0 0;
+  position: relative;
+  overflow: hidden;
+}
+.discover-banner-deco {
+  position: absolute;
+  top: -28px;
+  right: -28px;
+  width: 160px;
+  height: 160px;
+  border-radius: 50%;
+  border: 2px solid rgba(201,164,92,0.18);
+  pointer-events: none;
+}
+.discover-banner-deco::after {
+  content: '';
+  position: absolute;
+  top: 22px;
+  right: 22px;
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+  border: 2px solid rgba(201,164,92,0.10);
+}
+.discover-banner-content {
+  position: relative;
+  z-index: 1;
+}
+.discover-banner-eyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  color: #c9a45c;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.discover-banner-title {
+  font-family: var(--font-display, 'Poppins', sans-serif);
+  font-size: 20px;
+  font-weight: 700;
+  color: #ffffff;
+  margin-bottom: 4px;
+}
+.discover-banner-sub {
+  font-size: 12.5px;
+  color: rgba(255,255,255,0.62);
+  line-height: 1.4;
+  margin-bottom: 14px;
+}
 
 .discover-tile-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: var(--space-3);
-  padding: var(--space-3) 0;
+  /* No outer padding — banner padding handles spacing. */
 }
 .discover-tile {
   display: flex;
@@ -2240,18 +2297,18 @@ body.add-location-drawer-open .leaflet-popup-pane { display: none !important; }
   gap: 8px;
   padding: 18px 10px;
   background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px;
   cursor: pointer;
   transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
   min-height: 100px;
   text-align: center;
 }
 .discover-tile:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(0,0,0,0.08);
-  border-color: var(--color-primary);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.25);
+  border-color: rgba(201,164,92,0.5);
 }
 .discover-tile:active { transform: translateY(0); }
 .discover-tile-icon {
@@ -2269,16 +2326,15 @@ body.add-location-drawer-open .leaflet-popup-pane { display: none !important; }
 .discover-tile.top-picks {
   grid-column: 1 / -1;
   border-color: #c9a45c;
-  background: linear-gradient(180deg, rgba(201,164,92,0.06) 0%, var(--color-surface) 60%);
+  background: linear-gradient(180deg, rgba(201,164,92,0.12) 0%, var(--color-surface) 60%);
 }
 .discover-tile.top-picks .discover-tile-label { color: var(--color-primary); }
 
+/* Desktop: same 2-column layout as mobile (Top Picks spanning the top, two
+   columns of icons below) — per user request. */
 @media (min-width: 768px) {
-  .discover-tile-grid { grid-template-columns: repeat(3, 1fr); }
+  .discover-tile-grid { grid-template-columns: repeat(2, 1fr); }
   .discover-tile.top-picks { grid-column: 1 / -1; }
-}
-@media (min-width: 1024px) {
-  .discover-tile.top-picks { grid-column: auto; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -2409,6 +2465,40 @@ body.add-location-drawer-open .leaflet-popup-pane { display: none !important; }
   color: #2d5a47;
 }
 .disc-mode-btn.active[data-mode="pin"] {
+  background: #c9a45c;
+  color: #1a1f1e;
+}
+
+/* Divider between the location-mode pill row and the category-pill row
+   below it. Subtle gold-tinted line on the dark hero. */
+.disc-hero-divider {
+  height: 1px;
+  background: rgba(201,164,92,0.22);
+  margin: 12px 0 10px;
+}
+
+/* Category pill row inside the modal hero — matches the design's
+   `.cat-pills` from concept1-explore.html. Lets the user switch
+   categories without backing out to the Explore tile grid. */
+.disc-cat-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.disc-cat-pill {
+  background: rgba(255,255,255,0.10);
+  border: none;
+  border-radius: 9999px;
+  padding: 6px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.85);
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease;
+  white-space: nowrap;
+}
+.disc-cat-pill:hover { background: rgba(255,255,255,0.18); }
+.disc-cat-pill.active {
   background: #c9a45c;
   color: #1a1f1e;
 }

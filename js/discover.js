@@ -525,8 +525,16 @@ const Discover = {
     const data = await this._overpassQuery(body);
 
     const seen = new Map();
-    const refLat = State.userLat ?? anchor.samples[0].lat;
-    const refLng = State.userLng ?? anchor.samples[0].lng;
+    // Reference point for distance + sort. In manual (Map Area) and route
+    // modes the user is searching somewhere they're not currently standing,
+    // so GPS would skew both the displayed distance and the MAX_RESULTS
+    // truncation (closest-to-GPS would drop legitimate campsites near the
+    // anchor). Use the anchor center for those modes; only fall back to GPS
+    // for the implicit "Nearby" mode where the user IS the anchor.
+    const useGps = anchor.mode === 'near'
+      && State.userLat != null && State.userLng != null;
+    const refLat = useGps ? State.userLat : anchor.samples[0].lat;
+    const refLng = useGps ? State.userLng : anchor.samples[0].lng;
     for (const el of data.elements) {
       // Nodes carry lat/lon directly; ways and relations carry center.lat/lon
       // because we asked for `out center`.
@@ -691,10 +699,14 @@ const Discover = {
       }
     }));
 
-    // Flatten + dedupe by xid.
+    // Flatten + dedupe by xid. Same anchor-vs-GPS reasoning as in
+    // _fetchOverpass — manual/route modes anchor the search away from the
+    // user's current location, so distances must come from the anchor.
     const seen = new Map();
-    const refLat = State.userLat ?? anchor.samples[0].lat;
-    const refLng = State.userLng ?? anchor.samples[0].lng;
+    const useGps = anchor.mode === 'near'
+      && State.userLat != null && State.userLng != null;
+    const refLat = useGps ? State.userLat : anchor.samples[0].lat;
+    const refLng = useGps ? State.userLng : anchor.samples[0].lng;
     for (const list of lists) {
       for (const raw of list) {
         if (!raw.xid || !raw.name) continue;
@@ -1125,6 +1137,10 @@ const Discover = {
     const wrap = document.getElementById('discover-wrap');
     if (!wrap) return;
 
+    // Mount tiles inside the banner content column when available, else
+    // directly inside the wrap (for backwards-compat with older markup).
+    const host = wrap.querySelector('.discover-banner-content') || wrap;
+
     let grid = wrap.querySelector('#discover-tiles');
     if (!grid) {
       grid = document.createElement('div');
@@ -1137,7 +1153,7 @@ const Discover = {
       const existingChips = wrap.querySelector('#discover-chips');
       const existingMode = wrap.querySelector('#discover-mode');
       [existingList, existingMore, existingChips, existingMode].forEach(el => el?.remove());
-      wrap.appendChild(grid);
+      host.appendChild(grid);
     }
 
     grid.innerHTML = this.TILE_ORDER.map(t => {
@@ -1179,6 +1195,21 @@ const Discover = {
     modal.querySelectorAll('.disc-mode-btn').forEach(btn => {
       btn.classList.toggle('active', btn.dataset.mode === displayMode);
     });
+
+    // ── Category pills: render once per category change ──────────────
+    // Lets the user jump between categories without backing out to the
+    // Explore page tile grid. Uses the same TILE_ORDER as the grid so the
+    // ordering stays consistent.
+    const pillRow = modal.querySelector('#disc-cat-pills');
+    if (pillRow) {
+      pillRow.innerHTML = this.TILE_ORDER.map(t => {
+        const active = t.key === this.category;
+        return `<button type="button" class="disc-cat-pill${active ? ' active' : ''}" data-cat="${t.key}">${this._esc(t.label)}</button>`;
+      }).join('');
+      pillRow.querySelectorAll('.disc-cat-pill').forEach(btn => {
+        btn.onclick = () => Discover.setCategory(btn.dataset.cat);
+      });
+    }
 
     // ── Pin strip ──────────────────────────────────────────────────────
     const pinStrip = modal.querySelector('#disc-pin-strip');

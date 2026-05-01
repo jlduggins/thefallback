@@ -174,16 +174,18 @@
             <button type="button" id="nearby-more-btn" class="show-more-btn" style="display:none">Show more</button>
           </div>
 
-          <!-- Discover: 7-tile category grid. Tapping a tile opens #modal-discover
-               where the actual fetch (Overpass for Camping/Hiking, OpenTripMap for
-               the rest) runs. Nothing fires automatically on Explore landing. -->
-          <div id="discover-wrap" class="explore-discover-wrap">
-            <div class="section-divider"></div>
-            <div class="section-header">
-              <span class="section-title">Discover</span>
-              <span class="section-subtitle">Tap a category to explore</span>
+          <!-- Discover: dark-green banner from the design system + 7-tile
+               category grid. Tapping a tile opens #modal-discover where the
+               actual fetch (Overpass for Camping/Hiking, OpenTripMap for the
+               rest) runs. Nothing fires automatically on Explore landing. -->
+          <div id="discover-wrap" class="explore-discover-wrap discover-banner">
+            <div class="discover-banner-deco" aria-hidden="true"></div>
+            <div class="discover-banner-content">
+              <div class="discover-banner-eyebrow">✦ Discover</div>
+              <div class="discover-banner-title">What's out there?</div>
+              <div class="discover-banner-sub">Explore points of interest near you or anywhere along your route.</div>
+              <!-- Tiles render in JS — Discover._renderTilesIntoExplore -->
             </div>
-            <!-- Tiles render in JS — Discover._renderTilesIntoExplore -->
           </div>
 
           </div><!-- /.explore-content-scroll -->
@@ -217,6 +219,12 @@
               <button class="disc-mode-btn" data-mode="route" onclick="Discover._setMode('route')">Along route</button>
               <button class="disc-mode-btn" data-mode="pin" onclick="Discover._setMode('pin')">📍 Map Area</button>
             </div>
+            <!-- Divider between the location-pill row above and the category-
+                 pill row below — keeps the two filter axes visually distinct. -->
+            <div class="disc-hero-divider" aria-hidden="true"></div>
+            <!-- Category pill row: lets the user switch categories without
+                 leaving the modal. Populated by Discover._renderCategoryPills. -->
+            <div class="disc-cat-pills" id="disc-cat-pills"></div>
           </div>
 
           <!-- Amber strip: shown when a manual (pin) anchor is active.
@@ -228,7 +236,7 @@
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#1a1f1e" stroke-width="2.5" stroke-linecap="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
             </div>
             <div class="disc-pin-text" id="disc-pin-text" onclick="Discover._anchorAtMapCenter()" style="cursor:pointer"><strong>Map area</strong> · Click to refresh map</div>
-            <button class="disc-pin-refresh" onclick="Discover._anchorAtMapCenter()" aria-label="Refresh results for current map area" title="Refresh for current map area">↻</button>
+            <button class="disc-pin-refresh" onclick="Discover._forceRefresh()" aria-label="Refresh results for current map area" title="Refresh for current map area">↻</button>
             <button class="disc-pin-clear" onclick="Discover._clearManualAnchor()" aria-label="Clear pin">✕</button>
           </div>
 
