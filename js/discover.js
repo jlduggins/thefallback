@@ -152,6 +152,13 @@ const Discover = {
     // a state event.
     State.on('entries:changed',  () => this.render());
     State.on('journeys:changed', () => this.render());
+    // backupRadius drives both the dist-row badge and (in Nearby mode) the
+    // search radius. Re-fetch when it changes so the user sees the effect
+    // immediately. Render-only when the modal is closed.
+    State.on('fuel:changed', () => {
+      if (this._modalOpen && !this._manualAnchor) this.refresh();
+      else this.render();
+    });
     State.on('view:changed', ({ from, to }) => {
       // Close the detail panel when the user navigates away from Explore so it
       // doesn't sit on top of unrelated views.
@@ -1166,13 +1173,19 @@ const Discover = {
       const isPin = !!this._manualAnchor;
       pinStrip.style.display = isPin ? 'flex' : 'none';
       if (isPin && pinText) {
-        pinText.innerHTML = `<strong>${this._esc(this._manualAnchor.label || 'Custom area')}</strong> · Click map to move pin`;
+        pinText.innerHTML = `<strong>${this._esc(this._manualAnchor.label || 'Map area')}</strong> · Click to refresh map`;
       }
     }
 
     // ── Distance badge ─────────────────────────────────────────────────
+    // Hidden in Map Area (pin) mode: the search radius is derived from the
+    // visible map there, so a static "30 mi" badge would be misleading. In
+    // Nearby/Route modes, the badge reflects fuelSettings.backupRadius and
+    // is clickable → opens the fuel-settings modal so the user can change it.
+    const distRow = modal.querySelector('#disc-dist-row');
     const distBadge = modal.querySelector('#disc-dist-badge');
-    if (distBadge) {
+    if (distRow) distRow.style.display = this._manualAnchor ? 'none' : '';
+    if (distBadge && !this._manualAnchor) {
       const radiusMi = (State.fuelSettings && State.fuelSettings.backupRadius) || 30;
       distBadge.textContent = `${radiusMi} mi`;
     }
@@ -1319,6 +1332,14 @@ const Discover = {
       this._anchorAtMapCenter();
     }
     this._renderModalContents();
+  },
+
+  // Tapping the "Results within N mi" row in Nearby/Route modes opens the
+  // fuel-settings modal where backupRadius lives. No-op in Map Area (pin)
+  // mode — that row is hidden there since radius comes from the viewport.
+  _openRadiusSettings() {
+    if (this._manualAnchor) return;
+    if (window.Trips?.openFuelSettingsModal) Trips.openFuelSettingsModal();
   },
 
   // Set the manual anchor to whatever the map is centered on right now.

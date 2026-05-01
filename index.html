@@ -215,7 +215,7 @@
             <div class="disc-mode-seg" id="disc-mode-row">
               <button class="disc-mode-btn" data-mode="near" onclick="Discover._setMode('near')">Nearby</button>
               <button class="disc-mode-btn" data-mode="route" onclick="Discover._setMode('route')">Along route</button>
-              <button class="disc-mode-btn" data-mode="pin" onclick="Discover._setMode('pin')">📍 Drop pin</button>
+              <button class="disc-mode-btn" data-mode="pin" onclick="Discover._setMode('pin')">📍 Map Area</button>
             </div>
           </div>
 
@@ -227,7 +227,7 @@
             <div class="disc-pin-dot" onclick="Discover._anchorAtMapCenter()" style="cursor:pointer">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#1a1f1e" stroke-width="2.5" stroke-linecap="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
             </div>
-            <div class="disc-pin-text" id="disc-pin-text" onclick="Discover._anchorAtMapCenter()" style="cursor:pointer"><strong>Map area</strong> · Pan or zoom the map</div>
+            <div class="disc-pin-text" id="disc-pin-text" onclick="Discover._anchorAtMapCenter()" style="cursor:pointer"><strong>Map area</strong> · Click to refresh map</div>
             <button class="disc-pin-refresh" onclick="Discover._anchorAtMapCenter()" aria-label="Refresh results for current map area" title="Refresh for current map area">↻</button>
             <button class="disc-pin-clear" onclick="Discover._clearManualAnchor()" aria-label="Clear pin">✕</button>
           </div>
@@ -243,8 +243,11 @@
             </div>
           </div>
 
-          <!-- Distance badge -->
-          <div class="disc-dist-row">
+          <!-- Distance badge — hidden in Map Area (pin) mode since the
+               search radius is derived from the visible map. In Nearby/Route
+               modes the badge opens the fuel settings drawer where the
+               backupRadius is configured. -->
+          <div class="disc-dist-row" id="disc-dist-row" onclick="Discover._openRadiusSettings()" style="cursor:pointer">
             <span class="disc-dist-label">Results within</span>
             <span class="disc-dist-badge" id="disc-dist-badge">30 mi</span>
           </div>
