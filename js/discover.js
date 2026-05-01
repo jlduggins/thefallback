@@ -390,7 +390,7 @@ const Discover = {
   // grid never triggers a fetch — the user has to tap a tile first. This
   // is the linchpin of the auto-fetch removal: every `refresh()` call from
   // the old wiring is now a no-op as long as the modal is closed.
-  async refresh() {
+  async refresh({ force = false } = {}) {
     const a = this._resolveAnchor();
     this.mode = a.mode;
     this.anchorLabel = a.label;
@@ -419,8 +419,18 @@ const Discover = {
     const skipFit = this._skipFitOnce === true;
     this._skipFitOnce = false;
 
+    // Force-refresh (↻ button) bypasses both caches so the user can recover
+    // from a stale or empty cache hit and re-attempt a failed fetch.
+    if (force) {
+      delete this._cache[key];
+      try {
+        const prefix = this._cachePrefixFor(key);
+        localStorage.removeItem(prefix + key);
+      } catch (e) { /* ignore */ }
+    }
+
     // In-memory cache (fastest) → localStorage cache (survives reload).
-    if (this._cache[key]) {
+    if (!force && this._cache[key]) {
       this.results = this._cache[key];
       this.loading = false;
       this.error = null;
@@ -429,7 +439,7 @@ const Discover = {
       if (this.results.some(p => p._approx)) this._refreshDrivingDistances(a, this.results);
       return;
     }
-    const persisted = this._persistRead(key);
+    const persisted = force ? null : this._persistRead(key);
     if (persisted) {
       this._cache[key] = persisted;
       this.results = persisted;
@@ -452,7 +462,11 @@ const Discover = {
     try {
       const pois = await this._fetchPOIs(a);
       this._cache[key] = pois;
-      this._persistWrite(key, pois);
+      // Don't poison the persistent cache with empty results — Overpass and
+      // OTM occasionally return [] for transient reasons (timeout, mirror
+      // hiccup, rate-limit-without-error), and a 7-day-cached empty would
+      // mask the real data on every reload until TTL.
+      if (pois && pois.length) this._persistWrite(key, pois);
       this.results = pois;
       this.error = null;
       this.errorType = null;
@@ -1353,6 +1367,28 @@ const Discover = {
     this._setManualAnchor(c.lat, c.lng, 'Map area');
   },
 
+  // Force-refresh the current results: re-anchor at map center AND bypass
+  // both the in-memory and persistent caches. Wired to the ↻ button on the
+  // pin strip — gives the user an escape hatch when a previous fetch
+  // returned empty or stale and the cached "no results" is sticking.
+  _forceRefresh() {
+    const map = window.MapModule?.map;
+    if (map) {
+      const c = map.getCenter();
+      // Update the anchor lat/lng silently; we'll do the refresh ourselves
+      // with force:true so the cache is bypassed.
+      this._manualAnchor = {
+        lat: c.lat,
+        lng: c.lng,
+        label: this._manualAnchor?.label || 'Map area'
+      };
+      State._discoverManualAnchor = this._manualAnchor;
+      this._persistManualAnchor();
+    }
+    this._skipFitOnce = true;
+    this.refresh({ force: true });
+  },
+
   // ── Auto-refresh on map pan/zoom (manual mode only) ────────────────
   // When the user pans or zooms the map while the modal is open and a
   // manual anchor is active, debounce ~800ms then re-anchor at the new
@@ -1374,18 +1410,18 @@ const Discover = {
     if (!this._boundMapMove) {
       this._boundMapMove = () => this._onMapMove();
     }
-    // Seed the move-tracking state so _onMapMove can tell pan vs zoom on
-    // the very first user gesture after the modal opens.
-    const c = map.getCenter();
-    this._lastMoveCenter = { lat: c.lat, lng: c.lng };
-    this._lastMoveZoom = map.getZoom();
-    map.off('moveend', this._boundMapMove);
-    map.on('moveend', this._boundMapMove);
+    // Use `dragend` (fires only on actual user pan) instead of `moveend`
+    // (which also fires on every zoom step and animated flyTo, including
+    // mouse-wheel zoom which shifts the center toward the cursor by miles
+    // per click — looking like a pan and triggering unwanted re-fetches
+    // that hit the Overpass rate limit). Touch-pan also fires `dragend`.
+    map.off('dragend', this._boundMapMove);
+    map.on('dragend', this._boundMapMove);
   },
 
   _detachMapMoveListener() {
     const map = window.MapModule?.map;
-    if (map && this._boundMapMove) map.off('moveend', this._boundMapMove);
+    if (map && this._boundMapMove) map.off('dragend', this._boundMapMove);
     if (this._mapMoveTimer) {
       clearTimeout(this._mapMoveTimer);
       this._mapMoveTimer = null;
@@ -1403,45 +1439,20 @@ const Discover = {
     if (!this._manualAnchor) return; // only auto-refresh in manual mode
     const map = window.MapModule?.map;
     if (!map) return;
-    // Ignore moveend that came from our own flyTo/fitBounds.
+    // Ignore drags that finished right after our own flyTo/fitBounds — the
+    // momentum from a programmatic move can otherwise look like a user pan.
     if (Date.now() - this._lastProgrammaticMove < 1500) return;
-
-    // Distinguish pan from zoom-only. Zoom shouldn't trigger a re-search
-    // (it changes detail, not the area the user wants to look in) — and
-    // re-fetching can return a different result set or briefly clear
-    // markers, which feels broken to the user. Only re-anchor when the
-    // map center actually moved enough to be meaningful (~half a mile).
-    const c = map.getCenter();
-    const z = map.getZoom();
-    const last = this._lastMoveCenter;
-    if (last) {
-      const drift = this._haversine(last.lat, last.lng, c.lat, c.lng);
-      const zoomChanged = z !== this._lastMoveZoom;
-      // <0.5 mi drift = treat as zoom-only / micro-jitter; skip.
-      if (drift < 0.5 && zoomChanged) {
-        this._lastMoveZoom = z;
-        return;
-      }
-      if (drift < 0.05) {
-        this._lastMoveZoom = z;
-        return;
-      }
-    }
-    this._lastMoveCenter = { lat: c.lat, lng: c.lng };
-    this._lastMoveZoom = z;
 
     if (this._mapMoveTimer) clearTimeout(this._mapMoveTimer);
     this._mapMoveTimer = setTimeout(() => {
       this._mapMoveTimer = null;
-      // Re-check the programmatic-move guard at fire time too — a flyTo
-      // could land mid-debounce.
       if (Date.now() - this._lastProgrammaticMove < 1500) return;
-      const cc = map.getCenter();
+      const c = map.getCenter();
       // Re-anchor: keeps the same label so the pin strip doesn't flicker.
       // User-initiated pan — skip the post-fetch refit so we don't snap
       // the camera back to a wider view than the user just chose.
       this._skipFitOnce = true;
-      this._setManualAnchor(cc.lat, cc.lng, this._manualAnchor.label || 'Map area');
+      this._setManualAnchor(c.lat, c.lng, this._manualAnchor.label || 'Map area');
     }, 800);
   },
 
