@@ -1930,10 +1930,12 @@ body[data-view="login"] .map-layers-panel { display: none !important; }
   #location-detail-panel,
   #explore-backup-panel,
   #discover-detail-panel,
+  #modal-discover,
   .explore-left,
   #modal-add-location {
     width: 100% !important;
     max-width: 100% !important;
+    min-width: 0 !important;
     border-right: none;
     border-top: 0.5px solid var(--color-border);
     border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
