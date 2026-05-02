@@ -2416,8 +2416,10 @@ body.add-location-drawer-open .leaflet-popup-pane { display: none !important; }
 .disc-hero-icon img {
   width: 36px; height: 36px;
   object-fit: contain;
-  filter: brightness(0) invert(1);  /* make icon white on dark bg */
-  opacity: 0.85;
+  /* Show the icon in its natural colors (dark line drawing) — the
+     translucent-white pill behind it provides enough contrast on the
+     dark hero. The previous brightness(0) invert(1) filter was making
+     the icon a pure-white silhouette that washed out against the box. */
 }
 .disc-hero-titles { display: flex; flex-direction: column; }
 .disc-hero-title {
@@ -2802,10 +2804,32 @@ body.add-location-drawer-open #discover-detail-panel { display: none !important;
 
 /* ─── Mobile-only stacking ─────────────────────────────────────────── */
 @media (max-width: 767px) {
+  /* Mobile: behave as a bottom drawer like the other panels (Locations,
+     Trips, etc.) — use top:0 + fixed height so the snap-to-anchor
+     translateY rules in layout.css can move it between full / half / peek
+     positions. The previous bottom:0 pin made it cover the whole viewport
+     and the drag handler had nothing to translate against. */
   .discover-list-panel {
-    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: auto;
     width: 100%; max-width: none; min-width: 0;
+    height: calc(100vh - 48px);
     z-index: 100;
+    transition: transform 280ms cubic-bezier(0.32, 0.72, 0, 1);
+    will-change: transform;
+  }
+  /* Hero header stays pinned at the drawer top — its own scroll surface
+     is the results list below. Without flex-shrink:0 the hero collapses
+     when the body scrolls, hiding the back button and pills. */
+  .discover-list-panel .disc-hero { flex-shrink: 0; }
+  /* Results list takes remaining height and scrolls; its parent flex
+     column needs min-height:0 so the inner scroll actually activates. */
+  .discover-list-panel #discover-list {
+    flex: 1; min-height: 0; overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    /* Bottom nav (z 300) overlays ~72px+safe-area at the drawer's bottom;
+       pad so trailing results scroll above it. */
+    padding-bottom: calc(var(--nav-height-mobile) + var(--space-4));
   }
   body.discover-list-open #locations-panel,
   body.discover-list-open #location-detail-panel,
