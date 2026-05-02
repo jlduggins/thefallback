@@ -2375,6 +2375,16 @@ body.add-location-drawer-open .leaflet-popup-pane { display: none !important; }
   border: 2px solid rgba(255,255,255,0.06);
   pointer-events: none;
 }
+/* Top row of the dark hero: back-button on the left, refresh icon on
+   the right. Replaces the old standalone .disc-back-btn block — the
+   bottom-margin moved to .disc-hero-top so the row keeps its spacing. */
+.disc-hero-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  gap: 8px;
+}
 .disc-back-btn {
   display: flex;
   align-items: center;
@@ -2386,8 +2396,25 @@ body.add-location-drawer-open .leaflet-popup-pane { display: none !important; }
   border: none;
   cursor: pointer;
   padding: 0;
-  margin-bottom: 14px;
 }
+.disc-refresh-btn {
+  width: 32px; height: 32px;
+  background: rgba(255,255,255,0.12);
+  border: none;
+  border-radius: 9px;
+  color: rgba(255,255,255,0.85);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 150ms ease, transform 200ms ease;
+  flex-shrink: 0;
+}
+.disc-refresh-btn:hover { background: rgba(255,255,255,0.22); }
+.disc-refresh-btn:active { transform: rotate(180deg); }
 .disc-back-arr {
   width: 26px; height: 26px;
   background: rgba(255,255,255,0.12);

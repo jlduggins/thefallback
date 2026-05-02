@@ -938,7 +938,7 @@ const Trips = {
 
   // ─── Map operations ───────────────────────────────────────────────────────
 
-  viewJourneyOnMap(journeyId,shouldSwitchView=true) {
+  viewJourneyOnMap(journeyId,shouldSwitchView=true,opts={}) {
     // If map isn't initialized yet, switch to trips view first
     if (!MapModule.map) { State.setView('trips'); return; }
     const j=State.getJourney(journeyId);if(!j?.legs?.length)return;
@@ -947,16 +947,30 @@ const Trips = {
     MapModule.markers.forEach(mk=>mk.remove());
     this.backupMarkers.forEach(mk=>m.removeLayer(mk));this.backupMarkers=[];this.showingBackups=false;
     this.journeyMarkers.forEach(mk=>m.removeLayer(mk));this.journeyMarkers=[];
-    const legs=j.legs,uLat=State.userLat,uLng=State.userLng;
+    const allLegs=j.legs,uLat=State.userLat,uLng=State.userLng;
     // Shared journey-context helper — date-aware tie-breaking for repeated
     // stops keeps map "current" pin in sync with dashboard + list.
     const _ctx=State.getJourneyContext(j);
     const atStart=_ctx.atStartingPoint;
     const curIdx=atStart?-1:_ctx.currentLegIndex;
+    // futureOnly: render only the upcoming portion of the trip — used by
+    // Discover's "Along route" mode so the search corridor on the map
+    // matches what's actually being searched. Slice from the current/next
+    // leg forward; the start point becomes the user's current location
+    // when atStartingPoint is true, else the just-departed destination.
+    const sliceFrom = opts.futureOnly
+      ? Math.max(0, atStart ? 0 : (_ctx.nextLegIndex >= 0 ? _ctx.nextLegIndex : 0))
+      : 0;
+    const legs = sliceFrom > 0 ? allLegs.slice(sliceFrom) : allLegs;
+    // When we slice, the user is currently AT the start point of the
+    // sliced route (the destination of the previous leg) — show that as
+    // "Currently here" and treat no leg as in-progress.
+    const showAtStart = (opts.futureOnly && sliceFrom > 0) ? true : atStart;
+    const showCurIdx  = (opts.futureOnly && sliceFrom > 0) ? -1 : curIdx;
     const allCoords=[],sLat=legs[0].fromLat||uLat,sLng=legs[0].fromLng||uLng,sName=legs[0].fromName||'Start';
-    if(sLat){allCoords.push([sLat,sLng]);const si=L.divIcon({html:atStart?`<div style="width:26px;height:26px;background:#586F6B;border:2.5px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,.3),0 0 0 6px rgba(88,111,107,.25);display:flex;align-items:center;justify-content:center"><svg width="13" height="13" viewBox="0 0 24 24" fill="white"><polygon points="12,2 15,9 22,9 16,14 18,22 12,17 6,22 8,14 2,9 9,9"/></svg></div>`:`<div style="width:20px;height:20px;background:#586F6B;border:2px solid white;border-radius:50%;box-shadow:0 2px 5px rgba(0,0,0,.2)"></div>`,className:'journey-marker',iconSize:atStart?[26,26]:[20,20],iconAnchor:atStart?[13,13]:[10,10]});const sm=L.marker([sLat,sLng],{icon:si,zIndexOffset:1000}).addTo(m);sm.bindPopup(`<b>${sName}</b><br>${atStart?'📍 Currently here':'Starting point'}`);this.journeyMarkers.push(sm);}
-    legs.forEach((leg,i)=>{const e=State.getEntry(leg.destId),lat=e?.lat||leg.destLat,lng=e?.lng||leg.destLng;if(!lat||!lng)return;allCoords.push([lat,lng]);const ic=i===curIdx;const icon=L.divIcon({html:ic?`<div style="width:26px;height:26px;background:var(--color-primary,#2d5a47);border:2.5px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,.3),0 0 0 5px rgba(45,90,71,.2);display:flex;align-items:center;justify-content:center;color:white;font-size:10px;font-weight:600">${i+1}</div>`:`<div style="width:20px;height:20px;background:var(--color-primary,#2d5a47);border:2px solid white;border-radius:50%;box-shadow:0 2px 5px rgba(0,0,0,.2);display:flex;align-items:center;justify-content:center;color:white;font-size:9px;font-weight:600">${i+1}</div>`,className:'journey-marker',iconSize:[26,26],iconAnchor:[13,13]});const mk=L.marker([lat,lng],{icon,zIndexOffset:1000+i}).addTo(m);mk.bindPopup(`<b>${leg.destName}</b>${ic?'<br>📍 Currently here':''}`);this.journeyMarkers.push(mk);});
-    if(allCoords.length>1){const pg=g=>{if(!g)return null;try{const p=typeof g==='string'?JSON.parse(g):g;return p.map(c=>[c[1],c[0]]);}catch(e){return null;}};const f0=pg(legs[0]?.routeGeometry);const l0=f0?L.polyline(f0,{color:'#2d5a47',weight:4,opacity:0.7}):L.polyline([allCoords[0],allCoords[1]],{color:'#2d5a47',weight:3,opacity:0.5,dashArray:'6 4'});l0.addTo(m);this.journeyMarkers.push(l0);for(let i=1;i<legs.length;i++){const g=pg(legs[i].routeGeometry),fr=allCoords[i],to=allCoords[i+1];if(!to)continue;const ln=g?L.polyline(g,{color:'#2d5a47',weight:4,opacity:0.7}):L.polyline([fr,to],{color:'#2d5a47',weight:3,opacity:0.5,dashArray:'6 4'});ln.addTo(m);this.journeyMarkers.push(ln);}
+    if(sLat){allCoords.push([sLat,sLng]);const si=L.divIcon({html:showAtStart?`<div style="width:26px;height:26px;background:#586F6B;border:2.5px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,.3),0 0 0 6px rgba(88,111,107,.25);display:flex;align-items:center;justify-content:center"><svg width="13" height="13" viewBox="0 0 24 24" fill="white"><polygon points="12,2 15,9 22,9 16,14 18,22 12,17 6,22 8,14 2,9 9,9"/></svg></div>`:`<div style="width:20px;height:20px;background:#586F6B;border:2px solid white;border-radius:50%;box-shadow:0 2px 5px rgba(0,0,0,.2)"></div>`,className:'journey-marker',iconSize:showAtStart?[26,26]:[20,20],iconAnchor:showAtStart?[13,13]:[10,10]});const sm=L.marker([sLat,sLng],{icon:si,zIndexOffset:1000}).addTo(m);sm.bindPopup(`<b>${sName}</b><br>${showAtStart?'📍 Currently here':'Starting point'}`);this.journeyMarkers.push(sm);}
+    legs.forEach((leg,i)=>{const e=State.getEntry(leg.destId),lat=e?.lat||leg.destLat,lng=e?.lng||leg.destLng;if(!lat||!lng)return;allCoords.push([lat,lng]);const ic=i===showCurIdx;const icon=L.divIcon({html:ic?`<div style="width:26px;height:26px;background:var(--color-primary,#2d5a47);border:2.5px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,.3),0 0 0 5px rgba(45,90,71,.2);display:flex;align-items:center;justify-content:center;color:white;font-size:10px;font-weight:600">${i+1}</div>`:`<div style="width:20px;height:20px;background:var(--color-primary,#2d5a47);border:2px solid white;border-radius:50%;box-shadow:0 2px 5px rgba(0,0,0,.2);display:flex;align-items:center;justify-content:center;color:white;font-size:9px;font-weight:600">${i+1}</div>`,className:'journey-marker',iconSize:[26,26],iconAnchor:[13,13]});const mk=L.marker([lat,lng],{icon,zIndexOffset:1000+i}).addTo(m);mk.bindPopup(`<b>${leg.destName}</b>${ic?'<br>📍 Currently here':''}`);this.journeyMarkers.push(mk);});
+    if(allCoords.length>1){const pg=g=>{if(!g)return null;try{const p=typeof g==='string'?JSON.parse(g):g;return p.map(c=>[c[1],c[0]]);}catch(e){return null;}};const f0=pg(legs[0]?.routeGeometry);const l0=f0?L.polyline(f0,{color:'#B855D3',weight:4,opacity:0.85}):L.polyline([allCoords[0],allCoords[1]],{color:'#B855D3',weight:3,opacity:0.6,dashArray:'6 4'});l0.addTo(m);this.journeyMarkers.push(l0);for(let i=1;i<legs.length;i++){const g=pg(legs[i].routeGeometry),fr=allCoords[i],to=allCoords[i+1];if(!to)continue;const ln=g?L.polyline(g,{color:'#B855D3',weight:4,opacity:0.85}):L.polyline([fr,to],{color:'#B855D3',weight:3,opacity:0.6,dashArray:'6 4'});ln.addTo(m);this.journeyMarkers.push(ln);}
     m.fitBounds(L.latLngBounds(allCoords),{padding:[60,60],maxZoom:11});}
     else if(allCoords.length===1){m.setView(allCoords[0],12);}
     // Show the Backups toggle button only on Trips view

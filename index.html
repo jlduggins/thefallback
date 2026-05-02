@@ -198,12 +198,19 @@
 
           <!-- Dark hero header: back btn, category icon+title, mode selector -->
           <div class="disc-hero" id="disc-hero">
-            <button class="disc-back-btn" onclick="Discover.closeModal()">
-              <span class="disc-back-arr">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.8)" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
-              </span>
-              Back to Explore
-            </button>
+            <div class="disc-hero-top">
+              <button class="disc-back-btn" onclick="Discover.closeModal()">
+                <span class="disc-back-arr">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.8)" stroke-width="2.5" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+                </span>
+                Back to Explore
+              </button>
+              <!-- Always-visible refresh: forces a fresh fetch (bypasses the
+                   in-memory + persistent caches) for the current category +
+                   mode. Useful when results look stale or a previous fetch
+                   returned empty due to a transient API hiccup. -->
+              <button class="disc-refresh-btn" onclick="Discover._forceRefresh()" title="Refresh results" aria-label="Refresh results">↻</button>
+            </div>
             <div class="disc-hero-row">
               <div class="disc-hero-icon" id="disc-hero-icon">
                 <!-- JS populates with the category PNG -->

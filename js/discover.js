@@ -1365,18 +1365,58 @@ const Discover = {
   //           to where they want to look, taps Drop pin, and we anchor
   //           there immediately. No drag UI, no confirm step.
   _setMode(mode) {
-    if (mode === 'near') {
-      this._clearManualAnchor();
-      this.modeChoice = 'near';
-      this.refresh();
-    } else if (mode === 'route') {
-      this._clearManualAnchor();
-      this.modeChoice = 'route';
-      this.refresh();
-    } else if (mode === 'pin') {
+    // Map Area: anchor to current map center; the journey overlay below is
+    // cleared via _syncJourneyOnMap so the trip's purple route line doesn't
+    // distract from the dropped-pin context. _anchorAtMapCenter triggers
+    // refresh() internally via _setManualAnchor.
+    if (mode === 'pin') {
       this._anchorAtMapCenter();
+      this._syncJourneyOnMap();
+      this._renderModalContents();
+      return;
     }
+    // Near / Along route: clear any manual anchor inline (without the
+    // redundant refresh that _clearManualAnchor would call), update the
+    // mode, sync the journey overlay, then refresh once. Calling
+    // _clearManualAnchor directly would have triggered a refresh against
+    // the *old* modeChoice — that's why switching out of route mode
+    // sometimes left the previous results showing.
+    if (this._manualAnchor) {
+      this._manualAnchor = null;
+      State._discoverManualAnchor = null;
+      try { localStorage.removeItem(this.MANUAL_ANCHOR_KEY); } catch (e) { /* ignore */ }
+    }
+    this.modeChoice = mode;
+    this._syncJourneyOnMap();
+    this.refresh();
     this._renderModalContents();
+  },
+
+  // Keep the journey overlay on the Explore map in sync with Discover's
+  // current mode:
+  //   route → show only the *future* portion of the active journey, so
+  //           the search corridor matches the visible route line.
+  //   near  → clear the journey line; the user expects a "just my GPS"
+  //           map. Saved-location markers come back via renderMarkers().
+  //   pin   → clear the journey line; the dropped-pin location is the
+  //           focus, the trip line would compete for attention.
+  // No-op when there's no active journey.
+  _syncJourneyOnMap() {
+    const jid = State.currentJourneyId;
+    if (!jid || !window.Trips) return;
+    const wantRoute = this.modeChoice === 'route' && !this._manualAnchor;
+    if (wantRoute) {
+      // futureOnly so past legs/route segments don't pollute the view.
+      Trips.viewJourneyOnMap(jid, false, { futureOnly: true });
+    } else {
+      Trips.clearJourneyFromMap();
+      // clearJourneyFromMap calls MapModule.renderMarkers() which can wipe
+      // the user's GPS dot if it shares the markers array — re-emit the
+      // location so the blue dot reappears on the now-cleared map.
+      if (State.userLat != null && State.userLng != null && window.MapModule?.updateUserLocation) {
+        MapModule.updateUserLocation(State.userLat, State.userLng);
+      }
+    }
   },
 
   // Tapping the "Results within N mi" row in Nearby/Route modes opens the
@@ -1553,6 +1593,11 @@ const Discover = {
     }, 200);
     // Wire up auto-refresh on map pan/zoom.
     this._attachMapMoveListener();
+    // Sync the journey overlay to the current mode (future-only when in
+    // route mode, hidden in near/pin modes). Done here so opening the
+    // modal in Nearby with an active trip doesn't leave a stale full-route
+    // line on the map.
+    this._syncJourneyOnMap();
   },
 
   closeModal() {
@@ -1563,6 +1608,14 @@ const Discover = {
     const panel = document.getElementById('modal-discover');
     if (panel) panel.style.display = 'none';
     document.body.classList.remove('discover-list-open');
+    // Restore the full journey overlay on the Explore map — Discover may
+    // have hidden it (near/pin) or trimmed it to future-only (route). The
+    // user is going back to the regular Explore view, so the trip line
+    // should reflect the whole trip again.
+    const jid = State.currentJourneyId;
+    if (jid && window.Trips?.viewJourneyOnMap) {
+      Trips.viewJourneyOnMap(jid, false);
+    }
     // Mobile: snap back to half so user lands on the Explore tile grid
     // (matches existing post-detail snap behavior).
     if (window.matchMedia('(max-width: 767px)').matches && window.UI) {
