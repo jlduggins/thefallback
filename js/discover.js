@@ -276,7 +276,8 @@ const Discover = {
           diagonalMi = this._haversine(ne.lat, ne.lng, sw.lat, sw.lng);
           // Discovery radius: cover the viewport plus a 25% buffer so small pans
           // don't force a network refresh.
-          radiusMi = Math.min(60, Math.max(baseMi, Math.ceil((diagonalMi / 2) * 1.25)));
+          const maxAllowed = this.category === 'hiking' ? (this.SERVED_MAX_MI_HIKING || 35) : 60;
+          radiusMi = Math.min(maxAllowed, Math.max(baseMi, Math.ceil((diagonalMi / 2) * 1.25)));
         } catch (e) { /* fall back to baseMi */ }
       }
       // Viewport too wide to be useful — bail to the prompt rather than
@@ -720,14 +721,27 @@ const Discover = {
 
     let body = `[out:json][timeout:${timeout}];(\n`;
     for (const s of samples) {
+      // Overpass native bounding box is computationally much cheaper than `around:`
+      // especially for dense selectors like highway=path over 30+ mile radii.
+      const latD = anchor.radiusM / 111320;
+      const lngD = anchor.radiusM / (111320 * Math.cos(s.lat * Math.PI / 180));
+      const bbox = `${(s.lat - latD).toFixed(5)},${(s.lng - lngD).toFixed(5)},${(s.lat + latD).toFixed(5)},${(s.lng + lngD).toFixed(5)}`;
+      
       for (const sel of tagSelectors) {
         // sel can be: raw Overpass string (e.g. '["highway"="path"]["name"]'),
         // 1-tuple ['key'] (presence), or 2-tuple ['key','value'] (exact).
         const filter = typeof sel === 'string' ? sel
           : sel.length === 1 ? `["${sel[0]}"]`
           : `["${sel[0]}"="${sel[1]}"]`;
-        // `nwr` = node + way + relation in one go.
-        body += `nwr${filter}(around:${anchor.radiusM},${s.lat},${s.lng});\n`;
+        
+        // Optimizations: relations don't use highway=path, nodes don't either.
+        // nwr covers all, but we can be explicit if we know the type to save server time.
+        let prefix = 'nwr';
+        if (filter.includes('"highway"="path"')) prefix = 'way';
+        else if (filter.includes('"route"=')) prefix = 'relation';
+        else if (filter.includes('"information"="trailhead"')) prefix = 'node';
+
+        body += `${prefix}${filter}(${bbox});\n`;
       }
     }
     // Tighter server-side cap for hiking — broader selectors mean a wider
@@ -911,6 +925,11 @@ const Discover = {
           continue;
         }
         const data = await r.json();
+        if (data.remark && data.remark.toLowerCase().includes('runtime error')) {
+          this._dbgH('mirror: runtime error', { url, remark: data.remark });
+          lastErr = Object.assign(new Error('Overpass: ' + data.remark), { type: 'busy' });
+          continue;
+        }
         if (!Array.isArray(data.elements)) {
           this._dbgH('mirror: non-array elements', { url, dataKeys: Object.keys(data || {}) });
           lastErr = Object.assign(new Error('Overpass: unexpected response'), { type: 'network' });
