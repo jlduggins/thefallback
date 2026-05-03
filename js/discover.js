@@ -150,7 +150,11 @@ const Discover = {
   SERVED_KEY: 'fb-disc-served-v1',     // localStorage key
   SERVED_BUFFER_MI: 15,                // pad around the visible viewport
   SERVED_MIN_MI:    25,                // floor — don't waste a call on tiny areas
-  SERVED_MAX_MI:    75,                // ceiling — Overpass payload safety
+  SERVED_MAX_MI:    75,                // ceiling — Overpass payload safety (camping)
+  // Hiking has 7 broad selectors fanning across the disc; a 75-mi radius
+  // reliably 504s the third Overpass mirror. 35 mi covers Smith Rock from
+  // a Redmond viewport with headroom and keeps the wire query fast.
+  SERVED_MAX_MI_HIKING: 35,
   SERVED_REUSE_SAFETY_MI: 2,           // shrink reuse window so edges stay valid
 
   // Diagnostic logging for hiking flow. Flip to false once the regression is
@@ -269,8 +273,11 @@ const Discover = {
           const ne = b.getNorthEast(), sw = b.getSouthWest();
           const diagonalMi = this._haversine(ne.lat, ne.lng, sw.lat, sw.lng);
           // Half the diagonal is the radius needed to cover the whole viewport.
-          // Use the larger of (configured base) and (viewport-derived).
-          radiusMi = Math.min(100, Math.max(baseMi, Math.ceil(diagonalMi / 2)));
+          // Use the larger of (configured base) and (viewport-derived). Cap
+          // at 50 mi: when the map is zoomed all the way out (whole-country
+          // viewport), the previous 100-mi cap fired a useless nationwide
+          // query that 504'd Overpass and returned nothing.
+          radiusMi = Math.min(50, Math.max(baseMi, Math.ceil(diagonalMi / 2)));
         } catch (e) { /* fall back to baseMi */ }
       }
       const radiusM = Math.round(radiusMi * 1609);
@@ -371,10 +378,17 @@ const Discover = {
     else this.render();
   },
 
+  // Manual anchor is intentionally short-lived. It represents "look here for
+  // this session," not a permanent setting. A stale anchor from a prior
+  // session causes the modal to default to Map Area on a blank map zoom,
+  // firing useless wide queries before the user has chosen a viewport.
+  MANUAL_ANCHOR_TTL_MS: 6 * 60 * 60 * 1000,  // 6 hours
+
   _persistManualAnchor() {
     if (!this._manualAnchor) return;
     try {
-      localStorage.setItem(this.MANUAL_ANCHOR_KEY, JSON.stringify(this._manualAnchor));
+      const out = { ...this._manualAnchor, ts: Date.now() };
+      localStorage.setItem(this.MANUAL_ANCHOR_KEY, JSON.stringify(out));
     } catch (e) { /* ignore quota */ }
   },
 
@@ -383,10 +397,42 @@ const Discover = {
       const raw = localStorage.getItem(this.MANUAL_ANCHOR_KEY);
       if (!raw) return;
       const obj = JSON.parse(raw);
-      if (obj && obj.lat != null && obj.lng != null) {
-        this._manualAnchor = obj;
-        State._discoverManualAnchor = obj;
+      if (!obj || obj.lat == null || obj.lng == null) return;
+      // TTL check — drop stale anchors so the modal falls back to GPS/route.
+      // Older saves predating the `ts` field also get cleared (no ts → stale).
+      const age = obj.ts ? (Date.now() - obj.ts) : Infinity;
+      if (age > this.MANUAL_ANCHOR_TTL_MS) {
+        try { localStorage.removeItem(this.MANUAL_ANCHOR_KEY); } catch (e) { /* ignore */ }
+        return;
       }
+      this._manualAnchor = { lat: obj.lat, lng: obj.lng, label: obj.label || null };
+      State._discoverManualAnchor = this._manualAnchor;
+    } catch (e) { /* ignore */ }
+  },
+
+  // First-open map recenter. Called from openModal() — runs only when:
+  //   • GPS coords are known (State.userLat/Lng set), AND
+  //   • no manual anchor is active (the user hasn't chosen Map Area), AND
+  //   • the current map view is either far from the user (>50 mi) OR
+  //     zoomed out far enough that the viewport diagonal exceeds ~80 mi.
+  // Picks zoom 11 (~5-mi-radius viewport) — wide enough to show nearby
+  // hiking destinations, tight enough to keep the cluster meaningful.
+  _recenterOnUserIfNeeded() {
+    if (this._manualAnchor) return;
+    if (State.userLat == null || State.userLng == null) return;
+    const map = window.MapModule?.map;
+    if (!map) return;
+    try {
+      const c = map.getCenter();
+      const distFromUser = this._haversine(c.lat, c.lng, State.userLat, State.userLng);
+      const b = map.getBounds();
+      const ne = b.getNorthEast(), sw = b.getSouthWest();
+      const diagMi = this._haversine(ne.lat, ne.lng, sw.lat, sw.lng);
+      const tooFar = distFromUser > 50;
+      const tooWide = diagMi > 80;
+      if (!tooFar && !tooWide) return;
+      this._markProgrammaticMove?.();
+      map.flyTo([State.userLat, State.userLng], 11, { duration: 0.6 });
     } catch (e) { /* ignore */ }
   },
 
@@ -548,7 +594,8 @@ const Discover = {
     let key, fetchAnchor = a, servedRecord = null;
     if (servedEligible) {
       const visMi = this._viewportRadiusMi();
-      const wantR = Math.min(this.SERVED_MAX_MI,
+      const maxMi = this.category === 'hiking' ? this.SERVED_MAX_MI_HIKING : this.SERVED_MAX_MI;
+      const wantR = Math.min(maxMi,
                              Math.max(this.SERVED_MIN_MI, visMi + this.SERVED_BUFFER_MI));
       const sLat = a.samples[0].lat, sLng = a.samples[0].lng;
       key = `${cacheNs}:${this._servedKeyFor(a.mode, this.category, sLat, sLng, wantR)}`;
@@ -1460,13 +1507,16 @@ const Discover = {
     const moreBtn = modal.querySelector('#discover-more-btn');
     if (!list) return;
 
-    // No anchor: CTA to set one
+    // No anchor: CTA to set one. We reach here when GPS is denied and the
+    // user has no active route + no saved manual anchor — the only sensible
+    // path is to ask them to pick a Map Area or enter a city. No fetch fires
+    // until they do (refresh() short-circuits on mode == null).
     if (this.mode == null) {
       list.innerHTML = this._emptyHtml(
         '📍',
-        'Pan or zoom the map to where you want to look, then tap Drop pin.',
+        "We can't find your location. Pan or zoom the map to where you want to look, then set Map Area — or enter a city.",
         `<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
-           <button class="btn btn-primary btn-sm" onclick="Discover._anchorAtMapCenter()">📍 Drop pin here</button>
+           <button class="btn btn-primary btn-sm" onclick="Discover._anchorAtMapCenter()">📍 Use Map Area</button>
            <button class="btn btn-outline btn-sm" onclick="Discover._openAnchorPicker(true)">Enter a city</button>
          </div>`
       );
@@ -1760,7 +1810,11 @@ const Discover = {
       (xid) => Discover.openDetail(xid),
       { cluster: this.category === 'hiking' }
     );
-    if (fitBounds && MapModule.fitDiscoverResultsBounds) {
+    // Hiking results legitimately span a 25–35 mi served disc with 30
+    // markers — fitBounds on those zooms the user's viewport way out and
+    // undoes whatever they were looking at. Skip auto-fit for hiking; the
+    // marker cluster handles density and the user keeps their zoom.
+    if (fitBounds && this.category !== 'hiking' && MapModule.fitDiscoverResultsBounds) {
       // Defer one frame so any concurrent panel-resize finishes first;
       // otherwise fitBounds runs against stale viewport dimensions and
       // the camera lands off-target.
@@ -1811,6 +1865,12 @@ const Discover = {
     setTimeout(() => {
       if (window.MapModule?.map) {
         MapModule.map.invalidateSize();
+        // First-open recenter: when GPS is available and we're resolving to
+        // Nearby mode, snap the map onto the user at a sensible hiking zoom
+        // if the current view is far away or zoomed all the way out. Without
+        // this the modal opens against whatever zoom the parent page had —
+        // commonly the whole-country view on mobile cold boot.
+        this._recenterOnUserIfNeeded();
         // Seed _lastMapZoom so the first auto-refresh comparison works.
         this._lastMapZoom = MapModule.map.getZoom();
       }
