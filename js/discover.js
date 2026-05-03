@@ -60,9 +60,11 @@ const Discover = {
       // URBAN_RX client filter below, this catches "Misery Ridge Trail"
       // without dragging in "Maple Avenue Path".
       '["highway"="path"]["name"]',
-      // State / county parks and protected areas — surfaces destinations
-      // like "Smith Rock State Park" that aren't tagged as routes.
-      '["leisure"="park"]["name"]',
+      // Protected areas — surfaces destinations like "Smith Rock State Park"
+      // (which carries `boundary=protected_area` alongside `leisure=park`).
+      // We deliberately do NOT include `leisure=park` on its own: it brings
+      // in every named urban park (Quince Park, American Legion Park, etc.)
+      // which scored higher than named-path trails and crowded the list.
       '["boundary"="protected_area"]["name"]',
       // Hiking-specific tourist attractions
       '["tourism"="attraction"]["sport"="hiking"]'
@@ -131,8 +133,8 @@ const Discover = {
   // Prefix is versioned — bump it (v2 → v3) any time the POI shape changes
   // in a way that would make old cached results wrong. Init() cleans up keys
   // with older prefixes so they don't sit in localStorage forever.
-  CACHE_PREFIX: 'fb-disc-v5-',
-  CACHE_OLD_PREFIXES: ['fb-disc-', 'fb-disc-v2-', 'fb-disc-v3-', 'fb-disc-v4-'],
+  CACHE_PREFIX: 'fb-disc-v6-',
+  CACHE_OLD_PREFIXES: ['fb-disc-', 'fb-disc-v2-', 'fb-disc-v3-', 'fb-disc-v4-', 'fb-disc-v5-'],
   // Separate prefix for OTM cache — different shape than Overpass results.
   OTM_CACHE_PREFIX: 'fb-disc-otm-v1-',
   // localStorage key for the user-picked manual search anchor.
@@ -681,7 +683,11 @@ const Discover = {
     // potential payload, but we only ever render up to MAX_RESULTS=30 after
     // ranking, so 80 leaves plenty of headroom for the relevance filter
     // without dragging the wire.
-    const outCap = this.category === 'hiking' ? 80 : 250;
+    // Hiking has 7 broad selectors fanning across the served disc — an 80
+    // cap was getting truncated by Overpass before useful trail relations
+    // returned. 200 leaves headroom for the relevance ranking to pick the
+    // top 30 without losing real trails to the wire cap.
+    const outCap = this.category === 'hiking' ? 200 : 250;
     body += `);\nout center tags ${outCap};`;
 
     this._dbgH('Overpass body', { selectors: tagSelectors.length, samples: samples.length, radiusM: anchor.radiusM, timeout, outCap, bodyLen: body.length, bodyPreview: body.slice(0, 600) });
