@@ -67,7 +67,15 @@ const Discover = {
       // which scored higher than named-path trails and crowded the list.
       '["boundary"="protected_area"]["name"]',
       // Hiking-specific tourist attractions
-      '["tourism"="attraction"]["sport"="hiking"]'
+      '["tourism"="attraction"]["sport"="hiking"]',
+      // Destination tags — peaks/waterfalls/viewpoints/climbing crags are
+      // what Google's hiking layer surfaces heavily. Smith Rock is tagged
+      // both as `natural=peak` and `sport=climbing`; Steelhead Falls as
+      // `natural=waterfall`; trail-end overlooks as `tourism=viewpoint`.
+      '["natural"="peak"]["name"]',
+      '["natural"="waterfall"]["name"]',
+      '["tourism"="viewpoint"]["name"]',
+      '["sport"="climbing"]["name"]'
     ]
   },
 
@@ -111,6 +119,7 @@ const Discover = {
   OTM_LIMIT: 30,           // OTM list-endpoint result cap before curation
   TOP_PICKS_LIMIT: 6,      // hero cards shown on Top Picks
   MAX_RESULTS: 30,         // hard cap from Overpass-side dedupe
+  MAX_RESULTS_HIKING: 50,  // hiking has more destination tags + paginates well
   INITIAL_COUNT: 10,       // visible on first render
   PAGE_INCREMENT: 10,      // added per "Show more" click
   _visibleCount: 10,       // current display window; reset on category/mode change
@@ -133,8 +142,8 @@ const Discover = {
   // Prefix is versioned — bump it (v2 → v3) any time the POI shape changes
   // in a way that would make old cached results wrong. Init() cleans up keys
   // with older prefixes so they don't sit in localStorage forever.
-  CACHE_PREFIX: 'fb-disc-v6-',
-  CACHE_OLD_PREFIXES: ['fb-disc-', 'fb-disc-v2-', 'fb-disc-v3-', 'fb-disc-v4-', 'fb-disc-v5-'],
+  CACHE_PREFIX: 'fb-disc-v7-',
+  CACHE_OLD_PREFIXES: ['fb-disc-', 'fb-disc-v2-', 'fb-disc-v3-', 'fb-disc-v4-', 'fb-disc-v5-', 'fb-disc-v6-'],
   // Separate prefix for OTM cache — different shape than Overpass results.
   OTM_CACHE_PREFIX: 'fb-disc-otm-v1-',
   // localStorage key for the user-picked manual search anchor.
@@ -257,28 +266,29 @@ const Discover = {
   // (using jctx.nextLegIndex) so finishing your last stop doesn't drag in
   // POIs 100+ mi behind you.
   _resolveAnchor() {
-    // 1. Manual anchor wins.
+    // 1. Manual anchor wins — UNLESS the current map viewport is too wide
+    // to represent a meaningful "look here" (whole state or country
+    // visible). In that case we treat the anchor as absent and fall through
+    // to mode=null, which surfaces the GPS-denied/empty prompt asking the
+    // user to zoom in or pick a city. The anchor stays in storage so the
+    // moment they zoom to a usable view, manual mode resumes.
     if (this._manualAnchor && this._manualAnchor.lat != null && this._manualAnchor.lng != null) {
-      // Radius derives from the map viewport when possible — a zoomed-out
-      // view searches a wider area, a zoomed-in view stays tight. This is
-      // why the Google Maps comparison felt sparse: at the user's typical
-      // zoom level, a fixed 30 mi radius missed campgrounds that were just
-      // off-screen. Cap at 100 mi so Overpass payloads stay reasonable.
       const baseMi = (State.fuelSettings && State.fuelSettings.backupRadius) || 30;
       let radiusMi = baseMi;
+      let diagonalMi = 0;
       const map = window.MapModule?.map;
       if (map) {
         try {
           const b = map.getBounds();
           const ne = b.getNorthEast(), sw = b.getSouthWest();
-          const diagonalMi = this._haversine(ne.lat, ne.lng, sw.lat, sw.lng);
-          // Half the diagonal is the radius needed to cover the whole viewport.
-          // Use the larger of (configured base) and (viewport-derived). Cap
-          // at 50 mi: when the map is zoomed all the way out (whole-country
-          // viewport), the previous 100-mi cap fired a useless nationwide
-          // query that 504'd Overpass and returned nothing.
+          diagonalMi = this._haversine(ne.lat, ne.lng, sw.lat, sw.lng);
           radiusMi = Math.min(50, Math.max(baseMi, Math.ceil(diagonalMi / 2)));
         } catch (e) { /* fall back to baseMi */ }
+      }
+      // Viewport too wide to be useful — bail to the prompt rather than
+      // firing a country-wide 50-mi-capped query that 504s Overpass.
+      if (diagonalMi > 100) {
+        return { mode: null, samples: [], signature: '', label: null, journey: null };
       }
       const radiusM = Math.round(radiusMi * 1609);
       // Include radius in the cache key so zoom-out/zoom-in produce distinct
@@ -783,6 +793,13 @@ const Discover = {
           else if (tags.amenity === 'drinking_water') name = 'Water Fill-up';
         }
       }
+      // Hiking-only `ref` fallback: surface unnamed USFS-numbered trails
+      // ("Trail #1234") instead of dropping them. In camping a `ref` is
+      // usually a campsite number, not a thing the user wants to see, so
+      // we gate on category.
+      if (!name && this.category === 'hiking' && tags.ref) {
+        name = `Trail #${tags.ref}`;
+      }
       if (!name) continue;
       // Drop OSM data-quality garbage: 1- or 2-character names (e.g. "A",
       // "B5") and pure-numeric labels are almost always tagging errors.
@@ -827,7 +844,11 @@ const Discover = {
     // result whose name contains common road-type keywords. Cheap (one regex
     // per result) and only applied when the active category is hiking.
     if (this.category === 'hiking') {
-      const URBAN_RX = /\b(avenue|ave|street|st|road|rd|drive|dr|boulevard|blvd|highway|hwy|lane|ln|court|ct|circle|cir|place|pl|parkway|pkwy)\b/i;
+      // Full-word tokens only — earlier 2-letter abbreviations (st, dr, pl,
+      // ct, ln, rd, cir) matched legitimate trail names like "Mt. St. Helens
+      // Trail" and "Dr. Wilson Memorial Trail". The trade-off (a few
+      // abbreviated urban paths slip through) is worth it.
+      const URBAN_RX = /\b(avenue|street|boulevard|parkway|highway|drive|road|lane|court|circle|place)\b/i;
       const beforeCount = pois.length;
       const droppedSample = pois.filter(p => URBAN_RX.test(p.name || '')).slice(0, 5).map(p => p.name);
       pois = pois.filter(p => !URBAN_RX.test(p.name || ''));
@@ -840,8 +861,9 @@ const Discover = {
     } else {
       pois.sort((a, b) => a.distance - b.distance);
     }
-    const sliced = pois.slice(0, this.MAX_RESULTS);
-    this._dbgH('final pois', { afterDedupe: pois.length, returned: sliced.length, sampleNames: sliced.slice(0, 5).map(p => p.name) });
+    const cap = this.category === 'hiking' ? this.MAX_RESULTS_HIKING : this.MAX_RESULTS;
+    const sliced = pois.slice(0, cap);
+    this._dbgH('final pois', { afterDedupe: pois.length, returned: sliced.length, cap, sampleNames: sliced.slice(0, 5).map(p => p.name) });
     return sliced;
   },
 
@@ -858,6 +880,10 @@ const Discover = {
     if (t.information === 'trailhead')     s += 4;
     if (t.leisure === 'park')              s += 3;
     if (t.boundary === 'protected_area')   s += 3;
+    if (t.natural === 'peak')              s += 3;  // named peak — strong destination
+    if (t.natural === 'waterfall')         s += 3;  // named waterfall — strong destination
+    if (t.tourism === 'viewpoint')         s += 2;  // viewpoint — usually trail-end
+    if (t.sport === 'climbing')            s += 2;  // climbing area
     if (t.surface && /ground|dirt|gravel|grass|earth/.test(t.surface)) s += 2;
     if (t.name)                            s += 1;
     // Distance penalty: nearer wins on score ties (0.05 / mile keeps
@@ -1788,7 +1814,15 @@ const Discover = {
     this._mapMoveTimer = setTimeout(() => {
       this._mapMoveTimer = null;
       if (Date.now() - this._lastProgrammaticMove < 1500) return;
+      if (!this._manualAnchor) return;
       const c = map.getCenter();
+      // Suppress re-anchor when the center barely moved — pinch-zoom and
+      // scroll-zoom drift the center by a few hundred meters, which fired
+      // a refresh storm and rate-limited Overpass. 3 mi is below the
+      // useful-update threshold for hiking radii (25–35 mi served disc).
+      const moved = this._haversine(
+        this._manualAnchor.lat, this._manualAnchor.lng, c.lat, c.lng);
+      if (moved < 3) return;
       // Re-anchor: keeps the same label so the pin strip doesn't flicker.
       // User-initiated pan — skip the post-fetch refit so we don't snap
       // the camera back to a wider view than the user just chose.
