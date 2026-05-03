@@ -20,6 +20,7 @@ const MapModule = {
   dragPin: null,
   discoverMarker: null,            // single gold pin for the active POI detail
   discoverResultMarkers: [],       // teal pins for every POI in the current Discover results
+  discoverClusterGroup: null,      // L.markerClusterGroup wrapping the markers when clustering is on
   
   // ═══════════════════════════════════════════════════════════════════════════
   // INITIALIZATION
@@ -586,7 +587,7 @@ const MapModule = {
   // on the map, and clicking the pin opens that POI's detail panel.
   // Existing `discoverMarker` (gold) still shows on top when a detail panel
   // is open — the teal layer is the "all results" backdrop.
-  showDiscoverResultMarkers(results, onMarkerClick) {
+  showDiscoverResultMarkers(results, onMarkerClick, opts = {}) {
     this.hideDiscoverResultMarkers();
     if (!this.map || !results?.length) return;
 
@@ -597,9 +598,30 @@ const MapModule = {
       iconAnchor: [12, 12]
     });
 
+    // Cluster mode: build a markerClusterGroup and add markers to it instead
+    // of directly to the map. Used by the Hiking category, where the broader
+    // OSM query can return ~30 trail/trailhead pins clustered tightly around
+    // a state park. Other categories (Camping, Top Picks) stay flat — their
+    // result counts are low and clustering would just hide a single pin.
+    const useCluster = opts.cluster === true && typeof L.markerClusterGroup === 'function';
+    let clusterGroup = null;
+    if (useCluster) {
+      clusterGroup = L.markerClusterGroup({
+        showCoverageOnHover: false,
+        maxClusterRadius: 50,
+        spiderfyOnMaxZoom: true,
+        iconCreateFunction: (cluster) => L.divIcon({
+          html: `<div class="discover-cluster"><span>${cluster.getChildCount()}</span></div>`,
+          className: 'discover-cluster-wrap',
+          iconSize: [36, 36]
+        })
+      });
+      this.discoverClusterGroup = clusterGroup;
+    }
+
     results.forEach(p => {
       if (p.lat == null || p.lng == null) return;
-      const m = L.marker([p.lat, p.lng], { icon, zIndexOffset: 800 }).addTo(this.map);
+      const m = L.marker([p.lat, p.lng], { icon, zIndexOffset: 800 });
       if (p.name) m.bindTooltip(this.escapeHtml(p.name), { direction: 'top', offset: [0, -8] });
       if (typeof onMarkerClick === 'function') {
         m.on('click', (e) => {
@@ -608,12 +630,21 @@ const MapModule = {
           onMarkerClick(p.xid);
         });
       }
+      if (clusterGroup) clusterGroup.addLayer(m);
+      else m.addTo(this.map);
       this.discoverResultMarkers.push(m);
     });
+
+    if (clusterGroup) clusterGroup.addTo(this.map);
   },
 
   hideDiscoverResultMarkers() {
-    this.discoverResultMarkers.forEach(m => m.remove());
+    if (this.discoverClusterGroup) {
+      this.discoverClusterGroup.clearLayers();
+      this.discoverClusterGroup.removeFrom(this.map);
+      this.discoverClusterGroup = null;
+    }
+    this.discoverResultMarkers.forEach(m => { try { m.remove(); } catch (e) { /* in cluster group */ } });
     this.discoverResultMarkers = [];
   },
 

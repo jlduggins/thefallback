@@ -574,6 +574,25 @@
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
 }
 
+/* Discover marker clusters (Hiking only). Teal-on-white badge with the
+   child count, matching the .discover-result pin palette. The wrap class
+   strips Leaflet.markercluster's default styling so our pill stands alone. */
+.discover-cluster-wrap { background: transparent; border: none; }
+.discover-cluster {
+  width: 36px; height: 36px;
+  background: #7FC3A5;
+  color: white;
+  border: 2px solid white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: 600 12px/1 var(--font-display, 'Poppins', sans-serif);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  transition: transform 0.15s ease;
+}
+.leaflet-marker-icon:hover .discover-cluster { transform: scale(1.1); }
+
 /* Custom popup styles */
 .custom-popup .leaflet-popup-content-wrapper {
   border-radius: var(--radius-lg) !important;

@@ -50,10 +50,22 @@ const Discover = {
       ['tourism','caravan_site']
     ],
     hiking: [
+      // Trail relations (curated multi-way trails — highest signal)
       ['route','hiking'],
       ['route','foot'],
+      ['route','walking'],
+      // Trailhead points
       ['information','trailhead'],
-      ['highway','trailhead']
+      // Named footpaths — the bulk of what Google shows. Combined with the
+      // URBAN_RX client filter below, this catches "Misery Ridge Trail"
+      // without dragging in "Maple Avenue Path".
+      '["highway"="path"]["name"]',
+      // State / county parks and protected areas — surfaces destinations
+      // like "Smith Rock State Park" that aren't tagged as routes.
+      '["leisure"="park"]["name"]',
+      '["boundary"="protected_area"]["name"]',
+      // Hiking-specific tourist attractions
+      '["tourism"="attraction"]["sport"="hiking"]'
     ]
   },
 
@@ -126,6 +138,19 @@ const Discover = {
   // localStorage key for the user-picked manual search anchor.
   MANUAL_ANCHOR_KEY: 'fb-disc-manual-anchor',
 
+  // ── Buffered served-area cache ─────────────────────────────────────────
+  // Per-category × per-mode "served area" — the geographic disc we have
+  // results for. Panning within `radiusMi - viewportRadius` of `lat,lng`
+  // reuses the cached results; panning outside triggers a fresh fetch with
+  // a wider disc centered on the new viewport. Cuts redundant Overpass
+  // calls during normal browsing by ~80%.
+  _servedAreas: {},                    // `${mode}:${category}` → { lat, lng, radiusMi, _key, ts }
+  SERVED_KEY: 'fb-disc-served-v1',     // localStorage key
+  SERVED_BUFFER_MI: 15,                // pad around the visible viewport
+  SERVED_MIN_MI:    25,                // floor — don't waste a call on tiny areas
+  SERVED_MAX_MI:    75,                // ceiling — Overpass payload safety
+  SERVED_REUSE_SAFETY_MI: 2,           // shrink reuse window so edges stay valid
+
   // ── Init ───────────────────────────────────────────────────────────────
   init() {
     // One-shot cleanup of localStorage keys written by older cache schemas.
@@ -144,6 +169,9 @@ const Discover = {
 
     // Restore the user-picked manual search anchor (if any) before first render.
     this._loadManualAnchor();
+    // Restore the served-area registry so the very first Hiking open after
+    // a reload can hit cache instead of re-fetching.
+    this._loadServedAreas();
 
     // Discover does NOT auto-fire any more. The Explore page just shows the
     // category tile grid; results are only fetched when the user opens the
@@ -355,6 +383,58 @@ const Discover = {
     } catch (e) { /* ignore */ }
   },
 
+  // ── Served-area helpers ────────────────────────────────────────────────
+  // Compute the radius (miles) of the visible map viewport — half its
+  // diagonal. Falls back to a sensible default when the map isn't ready
+  // (very early in the boot sequence).
+  _viewportRadiusMi() {
+    const map = window.MapModule?.map;
+    if (!map) return 10; // default before first paint
+    try {
+      const b = map.getBounds();
+      const ne = b.getNorthEast(), sw = b.getSouthWest();
+      return Math.max(1, this._haversine(ne.lat, ne.lng, sw.lat, sw.lng) / 2);
+    } catch (e) { return 10; }
+  },
+
+  // Build the persistent cache key for a served-area record. Center is
+  // rounded to 0.1° (≈7 mi) and radius to 5-mi steps so two near-identical
+  // opens collapse to the same key, maximizing cache reuse.
+  _servedKeyFor(mode, category, lat, lng, radiusMi) {
+    const rl = lat.toFixed(1);
+    const rg = lng.toFixed(1);
+    const rr = Math.round(radiusMi / 5) * 5;
+    return `${mode}:srv${rl},${rg},${rr}:${category}`;
+  },
+
+  _persistServedAreas() {
+    try {
+      // Drop expired entries before writing so localStorage doesn't grow.
+      const now = Date.now();
+      const out = {};
+      for (const [k, v] of Object.entries(this._servedAreas)) {
+        if (v && v.ts && (now - v.ts) < this.CACHE_TTL_MS) out[k] = v;
+      }
+      localStorage.setItem(this.SERVED_KEY, JSON.stringify(out));
+    } catch (e) { /* quota — ignore */ }
+  },
+
+  _loadServedAreas() {
+    try {
+      const raw = localStorage.getItem(this.SERVED_KEY);
+      if (!raw) return;
+      const obj = JSON.parse(raw);
+      if (!obj || typeof obj !== 'object') return;
+      const now = Date.now();
+      for (const [k, v] of Object.entries(obj)) {
+        if (v && v.ts && (now - v.ts) < this.CACHE_TTL_MS
+            && v.lat != null && v.lng != null && v.radiusMi != null) {
+          this._servedAreas[k] = v;
+        }
+      }
+    } catch (e) { /* ignore */ }
+  },
+
   // routeGeometry is GeoJSON [[lng,lat], ...]. Sample one point every
   // ~stepMi miles so the API search blanket covers the route uniformly.
   _sampleAlong(coords, stepMi) {
@@ -411,13 +491,64 @@ const Discover = {
     }
 
     const cacheNs = this.OTM_CATEGORIES.includes(this.category) ? 'otm' : 'osm';
-    const key = `${cacheNs}:${a.mode}:${a.signature}:${this.category}`;
 
     // Re-anchors triggered by the user panning/zooming the map should NOT
     // refit the camera — that would fight the gesture. _onMapMove sets this
     // flag before calling _setManualAnchor; consumed once here.
     const skipFit = this._skipFitOnce === true;
     this._skipFitOnce = false;
+
+    // ── Served-area cache (Phase A) ────────────────────────────────────
+    // For single-point OSM modes (near, manual) on Overpass categories
+    // (Camping, Hiking), check whether a previously-fetched served disc
+    // covers the visible viewport. If yes → reuse cached results. If no →
+    // fetch a new wider disc centered on the current anchor and remember
+    // it. Route mode's per-sample windows already give it free coverage,
+    // and OTM has its own list endpoint with different shape — both skip
+    // this path.
+    const servedEligible = cacheNs === 'osm' && (a.mode === 'near' || a.mode === 'manual');
+    let servedSlot = null;
+    if (servedEligible) {
+      servedSlot = `${a.mode}:${this.category}`;
+      const served = this._servedAreas[servedSlot];
+      const visMi = this._viewportRadiusMi();
+      if (!force && served) {
+        const distFromCtr = this._haversine(served.lat, served.lng, a.samples[0].lat, a.samples[0].lng);
+        const reuseR = served.radiusMi - visMi - this.SERVED_REUSE_SAFETY_MI;
+        if (reuseR > 0 && distFromCtr <= reuseR) {
+          // Visible viewport sits fully inside the served buffer — reuse.
+          const cached = this._cache[served._key] || this._persistRead(served._key);
+          if (cached) {
+            this._cache[served._key] = cached;
+            this.results = cached;
+            this.loading = false;
+            this.error = null;
+            this.render();
+            this._showResultMarkers(/*fit*/ !skipFit);
+            if (cached.some(p => p._approx)) this._refreshDrivingDistances(a, cached);
+            return;
+          }
+        }
+      }
+    }
+
+    // Cache key. For served-area-eligible requests, use the wider served
+    // center + radius so the same key is hit by neighboring viewports. For
+    // everything else (route, OTM), use the anchor's natural signature.
+    let key, fetchAnchor = a, servedRecord = null;
+    if (servedEligible) {
+      const visMi = this._viewportRadiusMi();
+      const wantR = Math.min(this.SERVED_MAX_MI,
+                             Math.max(this.SERVED_MIN_MI, visMi + this.SERVED_BUFFER_MI));
+      const sLat = a.samples[0].lat, sLng = a.samples[0].lng;
+      key = `${cacheNs}:${this._servedKeyFor(a.mode, this.category, sLat, sLng, wantR)}`;
+      // Override the anchor that gets handed to _fetchOverpass: same center,
+      // wider radius. Original anchor.label/journey are preserved for the UI.
+      fetchAnchor = { ...a, radiusM: Math.round(wantR * 1609) };
+      servedRecord = { lat: sLat, lng: sLng, radiusMi: wantR, _key: key, ts: Date.now() };
+    } else {
+      key = `${cacheNs}:${a.mode}:${a.signature}:${this.category}`;
+    }
 
     // Force-refresh (↻ button) bypasses both caches so the user can recover
     // from a stale or empty cache hit and re-attempt a failed fetch.
@@ -430,10 +561,16 @@ const Discover = {
     }
 
     // In-memory cache (fastest) → localStorage cache (survives reload).
+    // On cache hit we don't re-write _servedAreas — _loadServedAreas
+    // already restored it at init, and the served-area lookup above
+    // would have used it. This path is only reached when the served-
+    // area buffer was a miss (e.g. user opened a new spot) but the
+    // exact key happens to be cached from a prior session.
     if (!force && this._cache[key]) {
       this.results = this._cache[key];
       this.loading = false;
       this.error = null;
+      if (servedRecord) this._servedAreas[servedSlot] = servedRecord;
       this.render();
       this._showResultMarkers(/*fit*/ !skipFit);
       if (this.results.some(p => p._approx)) this._refreshDrivingDistances(a, this.results);
@@ -445,6 +582,10 @@ const Discover = {
       this.results = persisted;
       this.loading = false;
       this.error = null;
+      if (servedRecord) {
+        this._servedAreas[servedSlot] = servedRecord;
+        this._persistServedAreas();
+      }
       this.render();
       this._showResultMarkers(/*fit*/ !skipFit);
       if (this.results.some(p => p._approx)) this._refreshDrivingDistances(a, this.results);
@@ -460,13 +601,18 @@ const Discover = {
     this.render();
 
     try {
-      const pois = await this._fetchPOIs(a);
+      const pois = await this._fetchPOIs(fetchAnchor);
       this._cache[key] = pois;
       // Don't poison the persistent cache with empty results — Overpass and
       // OTM occasionally return [] for transient reasons (timeout, mirror
       // hiccup, rate-limit-without-error), and a 7-day-cached empty would
       // mask the real data on every reload until TTL.
       if (pois && pois.length) this._persistWrite(key, pois);
+      // Register the served area only on a successful, non-empty fetch.
+      if (servedRecord && pois && pois.length) {
+        this._servedAreas[servedSlot] = servedRecord;
+        this._persistServedAreas();
+      }
       this.results = pois;
       this.error = null;
       this.errorType = null;
@@ -520,7 +666,12 @@ const Discover = {
         body += `nwr${filter}(around:${anchor.radiusM},${s.lat},${s.lng});\n`;
       }
     }
-    body += ');\nout center tags 250;';
+    // Tighter server-side cap for hiking — broader selectors mean a wider
+    // potential payload, but we only ever render up to MAX_RESULTS=30 after
+    // ranking, so 80 leaves plenty of headroom for the relevance filter
+    // without dragging the wire.
+    const outCap = this.category === 'hiking' ? 80 : 250;
+    body += `);\nout center tags ${outCap};`;
 
     const data = await this._overpassQuery(body);
 
@@ -602,9 +753,44 @@ const Discover = {
       const existing = byName.get(key);
       if (!existing || p.distance < existing.distance) byName.set(key, p);
     }
-    return [...byName.values()]
-      .sort((a, b) => a.distance - b.distance)
-      .slice(0, this.MAX_RESULTS);
+    let pois = [...byName.values()];
+
+    // Hiking-specific noise filter: the broadened `["highway"="path"]["name"]`
+    // selector picks up named urban footpaths that aren't trails. Drop any
+    // result whose name contains common road-type keywords. Cheap (one regex
+    // per result) and only applied when the active category is hiking.
+    if (this.category === 'hiking') {
+      const URBAN_RX = /\b(avenue|ave|street|st|road|rd|drive|dr|boulevard|blvd|highway|hwy|lane|ln|court|ct|circle|cir|place|pl|parkway|pkwy)\b/i;
+      pois = pois.filter(p => !URBAN_RX.test(p.name || ''));
+      // Relevance ranking: prefer explicitly hiking-classed entries (sac_scale,
+      // route=hiking, trailhead) and natural-surface trails over generic named
+      // paths. With distance as a tiebreaker, the best 30 surface first.
+      pois.forEach(p => { p._score = this._hikingScore(p); });
+      pois.sort((a, b) => (b._score - a._score) || (a.distance - b.distance));
+    } else {
+      pois.sort((a, b) => a.distance - b.distance);
+    }
+    return pois.slice(0, this.MAX_RESULTS);
+  },
+
+  // Score a hiking POI by how strong a "real trail" signal we have. Higher =
+  // more likely to be an actual hiking destination vs. a generic named path.
+  // Used only for hiking, where the broadened OSM selectors mean we rely on
+  // tags to distinguish a curated trailhead from a backyard footpath.
+  _hikingScore(p) {
+    const t = p.tags || {};
+    let s = 0;
+    if (t.sac_scale)                       s += 5;  // formally hiking-classed
+    if (t.trail_visibility)                s += 3;
+    if (t.route === 'hiking')              s += 4;
+    if (t.information === 'trailhead')     s += 4;
+    if (t.leisure === 'park')              s += 3;
+    if (t.boundary === 'protected_area')   s += 3;
+    if (t.surface && /ground|dirt|gravel|grass|earth/.test(t.surface)) s += 2;
+    if (t.name)                            s += 1;
+    // Distance penalty: nearer wins on score ties (0.05 / mile keeps
+    // distance from dominating until very far away).
+    return s - (p.distance || 0) * 0.05;
   },
 
   // ── Overpass with mirror fallback + typed errors ───────────────────────
@@ -1532,9 +1718,13 @@ const Discover = {
   // Called whenever results land (fresh fetch or cache hit) and on close.
   _showResultMarkers(fitBounds) {
     if (!window.MapModule?.showDiscoverResultMarkers) return;
+    // Cluster only for Hiking — its broadened OSM query can return tightly
+    // packed trail/trailhead pins around a state park. Other categories are
+    // capped at <10 typical and read better as flat individual pins.
     MapModule.showDiscoverResultMarkers(
       this.results || [],
-      (xid) => Discover.openDetail(xid)
+      (xid) => Discover.openDetail(xid),
+      { cluster: this.category === 'hiking' }
     );
     if (fitBounds && MapModule.fitDiscoverResultsBounds) {
       // Defer one frame so any concurrent panel-resize finishes first;
