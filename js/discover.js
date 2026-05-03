@@ -151,6 +151,11 @@ const Discover = {
   SERVED_MAX_MI:    75,                // ceiling — Overpass payload safety
   SERVED_REUSE_SAFETY_MI: 2,           // shrink reuse window so edges stay valid
 
+  // Diagnostic logging for hiking flow. Flip to false once the regression is
+  // resolved. Logs appear under the `[Discover:hiking]` prefix.
+  DEBUG_HIKING: true,
+  _dbgH(...args) { if (this.DEBUG_HIKING && this.category === 'hiking') console.log('[Discover:hiking]', ...args); },
+
   // ── Init ───────────────────────────────────────────────────────────────
   init() {
     // One-shot cleanup of localStorage keys written by older cache schemas.
@@ -474,6 +479,7 @@ const Discover = {
     const a = this._resolveAnchor();
     this.mode = a.mode;
     this.anchorLabel = a.label;
+    this._dbgH('refresh() entry', { force, category: this.category, mode: a.mode, modalOpen: this._modalOpen, samples: a.samples?.length, anchorRadiusM: a.radiusM, sample0: a.samples?.[0], viewportMi: this._viewportRadiusMi() });
 
     // Always re-render so the modal header and tile-grid badges reflect the
     // current anchor — even if we're not going to fetch.
@@ -515,9 +521,11 @@ const Discover = {
       if (!force && served) {
         const distFromCtr = this._haversine(served.lat, served.lng, a.samples[0].lat, a.samples[0].lng);
         const reuseR = served.radiusMi - visMi - this.SERVED_REUSE_SAFETY_MI;
+        this._dbgH('served-area lookup', { servedSlot, served, distFromCtr, visMi, reuseR, willReuse: reuseR > 0 && distFromCtr <= reuseR });
         if (reuseR > 0 && distFromCtr <= reuseR) {
           // Visible viewport sits fully inside the served buffer — reuse.
           const cached = this._cache[served._key] || this._persistRead(served._key);
+          this._dbgH('served-area reuse cached?', { hasCached: !!cached, cachedLen: cached?.length });
           if (cached) {
             this._cache[served._key] = cached;
             this.results = cached;
@@ -546,8 +554,10 @@ const Discover = {
       // wider radius. Original anchor.label/journey are preserved for the UI.
       fetchAnchor = { ...a, radiusM: Math.round(wantR * 1609) };
       servedRecord = { lat: sLat, lng: sLng, radiusMi: wantR, _key: key, ts: Date.now() };
+      this._dbgH('served-area fetch plan', { wantR, fetchRadiusM: fetchAnchor.radiusM, key });
     } else {
       key = `${cacheNs}:${a.mode}:${a.signature}:${this.category}`;
+      this._dbgH('non-served fetch plan', { key });
     }
 
     // Force-refresh (↻ button) bypasses both caches so the user can recover
@@ -620,6 +630,7 @@ const Discover = {
       this._refreshDrivingDistances(a, pois);
     } catch (e) {
       console.error('[Discover] fetch failed:', e);
+      this._dbgH('refresh() caught', { msg: e?.message, type: e?.type, stack: e?.stack?.split('\n').slice(0, 3).join(' | ') });
       // Typed errors from _overpassQuery — render() shows different UI per type.
       this.errorType = e.type || 'network';
       this.error = e.message || 'Fetch failed';
@@ -673,7 +684,10 @@ const Discover = {
     const outCap = this.category === 'hiking' ? 80 : 250;
     body += `);\nout center tags ${outCap};`;
 
+    this._dbgH('Overpass body', { selectors: tagSelectors.length, samples: samples.length, radiusM: anchor.radiusM, timeout, outCap, bodyLen: body.length, bodyPreview: body.slice(0, 600) });
+
     const data = await this._overpassQuery(body);
+    this._dbgH('Overpass parsed', { elementCount: data?.elements?.length });
 
     const seen = new Map();
     // Reference point for distance + sort. In manual (Map Area) and route
@@ -761,7 +775,10 @@ const Discover = {
     // per result) and only applied when the active category is hiking.
     if (this.category === 'hiking') {
       const URBAN_RX = /\b(avenue|ave|street|st|road|rd|drive|dr|boulevard|blvd|highway|hwy|lane|ln|court|ct|circle|cir|place|pl|parkway|pkwy)\b/i;
+      const beforeCount = pois.length;
+      const droppedSample = pois.filter(p => URBAN_RX.test(p.name || '')).slice(0, 5).map(p => p.name);
       pois = pois.filter(p => !URBAN_RX.test(p.name || ''));
+      this._dbgH('URBAN_RX filter', { before: beforeCount, after: pois.length, droppedSample });
       // Relevance ranking: prefer explicitly hiking-classed entries (sac_scale,
       // route=hiking, trailhead) and natural-surface trails over generic named
       // paths. With distance as a tiebreaker, the best 30 surface first.
@@ -770,7 +787,9 @@ const Discover = {
     } else {
       pois.sort((a, b) => a.distance - b.distance);
     }
-    return pois.slice(0, this.MAX_RESULTS);
+    const sliced = pois.slice(0, this.MAX_RESULTS);
+    this._dbgH('final pois', { afterDedupe: pois.length, returned: sliced.length, sampleNames: sliced.slice(0, 5).map(p => p.name) });
+    return sliced;
   },
 
   // Score a hiking POI by how strong a "real trail" signal we have. Higher =
@@ -800,12 +819,16 @@ const Discover = {
   async _overpassQuery(body) {
     let lastErr;
     for (const url of this.OVERPASS_MIRRORS) {
+      const t0 = performance.now();
       try {
+        this._dbgH('mirror try', { url });
         const r = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: 'data=' + encodeURIComponent(body)
         });
+        const dt = Math.round(performance.now() - t0);
+        this._dbgH('mirror response', { url, status: r.status, ok: r.ok, ms: dt });
         if (r.status === 429 || r.status === 504) {
           lastErr = Object.assign(new Error('Overpass busy ' + r.status), { type: 'busy' });
           continue;
@@ -816,15 +839,20 @@ const Discover = {
         }
         const data = await r.json();
         if (!Array.isArray(data.elements)) {
+          this._dbgH('mirror: non-array elements', { url, dataKeys: Object.keys(data || {}) });
           lastErr = Object.assign(new Error('Overpass: unexpected response'), { type: 'network' });
           continue;
         }
+        this._dbgH('mirror success', { url, elementCount: data.elements.length, ms: dt });
         return data;
       } catch (e) {
+        const dt = Math.round(performance.now() - t0);
+        this._dbgH('mirror threw', { url, err: e?.message, ms: dt });
         lastErr = e;
         if (!lastErr.type) lastErr.type = navigator.onLine ? 'network' : 'offline';
       }
     }
+    this._dbgH('all mirrors failed', { lastErr: lastErr?.message, type: lastErr?.type });
     throw lastErr || Object.assign(new Error('All Overpass mirrors failed'), { type: 'network' });
   },
 
