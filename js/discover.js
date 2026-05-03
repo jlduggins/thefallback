@@ -50,32 +50,24 @@ const Discover = {
       ['tourism','caravan_site']
     ],
     hiking: [
-      // Trail relations (curated multi-way trails — highest signal)
+      // High Signal: Trail relations
       ['route','hiking'],
       ['route','foot'],
       ['route','walking'],
-      // Trailhead points
+      // High Signal: Trailheads
       ['information','trailhead'],
-      // Named footpaths — the bulk of what Google shows. Combined with the
-      // URBAN_RX client filter below, this catches "Misery Ridge Trail"
-      // without dragging in "Maple Avenue Path".
-      '["highway"="path"]["name"]',
-      // Protected areas — surfaces destinations like "Smith Rock State Park"
-      // (which carries `boundary=protected_area` alongside `leisure=park`).
-      // We deliberately do NOT include `leisure=park` on its own: it brings
-      // in every named urban park (Quince Park, American Legion Park, etc.)
-      // which scored higher than named-path trails and crowded the list.
-      '["boundary"="protected_area"]["name"]',
-      // Hiking-specific tourist attractions
-      '["tourism"="attraction"]["sport"="hiking"]',
-      // Destination tags — peaks/waterfalls/viewpoints/climbing crags are
-      // what Google's hiking layer surfaces heavily. Smith Rock is tagged
-      // both as `natural=peak` and `sport=climbing`; Steelhead Falls as
-      // `natural=waterfall`; trail-end overlooks as `tourism=viewpoint`.
+      // High Signal: Destinations
       '["natural"="peak"]["name"]',
       '["natural"="waterfall"]["name"]',
       '["tourism"="viewpoint"]["name"]',
-      '["sport"="climbing"]["name"]'
+      '["sport"="climbing"]["name"]',
+      // High Signal: Attractions
+      '["tourism"="attraction"]["sport"="hiking"]',
+      // Medium Signal: Protected Areas
+      '["boundary"="protected_area"]["name"]',
+      // Lower Signal: Paths (huge volume, put at end so they don't crowd out trailheads if outCap is hit)
+      '["highway"="path"]["name"]',
+      '["highway"="path"]["ref"]'
     ]
   },
 
@@ -282,7 +274,9 @@ const Discover = {
           const b = map.getBounds();
           const ne = b.getNorthEast(), sw = b.getSouthWest();
           diagonalMi = this._haversine(ne.lat, ne.lng, sw.lat, sw.lng);
-          radiusMi = Math.min(50, Math.max(baseMi, Math.ceil(diagonalMi / 2)));
+          // Discovery radius: cover the viewport plus a 25% buffer so small pans
+          // don't force a network refresh.
+          radiusMi = Math.min(60, Math.max(baseMi, Math.ceil((diagonalMi / 2) * 1.25)));
         } catch (e) { /* fall back to baseMi */ }
       }
       // Viewport too wide to be useful — bail to the prompt rather than
@@ -744,7 +738,7 @@ const Discover = {
     // cap was getting truncated by Overpass before useful trail relations
     // returned. 200 leaves headroom for the relevance ranking to pick the
     // top 30 without losing real trails to the wire cap.
-    const outCap = this.category === 'hiking' ? 200 : 250;
+    const outCap = this.category === 'hiking' ? 500 : 250;
     body += `);\nout center tags ${outCap};`;
 
     this._dbgH('Overpass body', { selectors: tagSelectors.length, samples: samples.length, radiusM: anchor.radiusM, timeout, outCap, bodyLen: body.length, bodyPreview: body.slice(0, 600) });
@@ -848,7 +842,7 @@ const Discover = {
       // ct, ln, rd, cir) matched legitimate trail names like "Mt. St. Helens
       // Trail" and "Dr. Wilson Memorial Trail". The trade-off (a few
       // abbreviated urban paths slip through) is worth it.
-      const URBAN_RX = /\b(avenue|street|boulevard|parkway|highway|drive|road|lane|court|circle|place)\b/i;
+      const URBAN_RX = /\b(avenue|street|boulevard|parkway|highway|court|circle)\b/i;
       const beforeCount = pois.length;
       const droppedSample = pois.filter(p => URBAN_RX.test(p.name || '')).slice(0, 5).map(p => p.name);
       pois = pois.filter(p => !URBAN_RX.test(p.name || ''));
@@ -876,10 +870,10 @@ const Discover = {
     let s = 0;
     if (t.sac_scale)                       s += 5;  // formally hiking-classed
     if (t.trail_visibility)                s += 3;
-    if (t.route === 'hiking')              s += 4;
-    if (t.information === 'trailhead')     s += 4;
-    if (t.leisure === 'park')              s += 3;
-    if (t.boundary === 'protected_area')   s += 3;
+    if (t.route === 'hiking')              s += 6;
+    if (t.information === 'trailhead')     s += 6;
+    if (t.leisure === 'park')              s += 1;
+    if (t.boundary === 'protected_area')   s += 2;
     if (t.natural === 'peak')              s += 3;  // named peak — strong destination
     if (t.natural === 'waterfall')         s += 3;  // named waterfall — strong destination
     if (t.tourism === 'viewpoint')         s += 2;  // viewpoint — usually trail-end
