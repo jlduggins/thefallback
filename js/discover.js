@@ -276,13 +276,13 @@ const Discover = {
           diagonalMi = this._haversine(ne.lat, ne.lng, sw.lat, sw.lng);
           // Discovery radius: cover the viewport plus a 25% buffer so small pans
           // don't force a network refresh.
-          const maxAllowed = this.category === 'hiking' ? (this.SERVED_MAX_MI_HIKING || 35) : 60;
+          const maxAllowed = this.category === 'hiking' ? 15 : 35;
           radiusMi = Math.min(maxAllowed, Math.max(baseMi, Math.ceil((diagonalMi / 2) * 1.25)));
         } catch (e) { /* fall back to baseMi */ }
       }
       // Viewport too wide to be useful — bail to the prompt rather than
-      // firing a country-wide 50-mi-capped query that 504s Overpass.
-      if (diagonalMi > 100) {
+      // firing a confusing query at the exact center of a state/country view.
+      if (diagonalMi > 250) {
         return { mode: null, samples: [], signature: '', label: null, journey: null };
       }
       const radiusM = Math.round(radiusMi * 1609);
@@ -545,6 +545,7 @@ const Discover = {
       this.results = [];
       this.error = null;
       this.loading = false;
+      this._showResultMarkers(false);
       this.render();
       return;
     }
@@ -690,6 +691,7 @@ const Discover = {
       this.error = e.message || 'Fetch failed';
       this._lastFailedKey = key;
       this.results = [];
+      this._showResultMarkers(false);
     } finally {
       this.loading = false;
       delete this._inflight[key];
