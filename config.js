@@ -26,7 +26,7 @@ const CONFIG = {
   // Get yours at: https://opentripmap.io/product
   // Used by Discover for Natural, Cultural, Quirky, Historical, and Top Picks.
   // Camping and Hiking remain on Overpass (OSM amenity tags + trail data).
-  OPENTRIPMAP_KEY: 'YOUR_OPENTRIPMAP_KEY',
+  OPENTRIPMAP_KEY: '5ae2e3f221c38a28845f05b6d9112cf0ed3b6eb491477e6a147e910c',
 
   // RIDB API Key (Recreation.gov) — official federal data for US Forest Service,
   // BLM, and National Parks. Used to find remote campgrounds and trailheads
