@@ -6,7 +6,7 @@ const CONFIG = {
   // Geocod.io API Key - for address geocoding
   // Get yours at: https://www.geocod.io/
   GEOCODIO_KEY: '9019b6c968e5677bc69e0b796e8b0618c6149bb',
-  
+
   // OpenRouteService API Key - for driving directions and distances
   // Get yours at: https://openrouteservice.org/ (free, 2000 requests/day)
   ORS_API_KEY: 'eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjZjNzVhMGIyZTg4NDQ1OTQ5M2FiYmE2MTZmNWFkMGEyIiwiaCI6Im11cm11cjY0In0=',
@@ -26,5 +26,11 @@ const CONFIG = {
   // Get yours at: https://opentripmap.io/product
   // Used by Discover for Natural, Cultural, Quirky, Historical, and Top Picks.
   // Camping and Hiking remain on Overpass (OSM amenity tags + trail data).
-  OPENTRIPMAP_KEY: '5ae2e3f221c38a28845f05b6d9112cf0ed3b6eb491477e6a147e910c'
+  OPENTRIPMAP_KEY: 'YOUR_OPENTRIPMAP_KEY',
+
+  // RIDB API Key (Recreation.gov) — official federal data for US Forest Service,
+  // BLM, and National Parks. Used to find remote campgrounds and trailheads
+  // that are often missing from OpenStreetMap.
+  // Get yours at: https://ridb.recreation.gov/profile
+  RIDB_API_KEY: 'bc1017fc-f906-4a4d-ab50-84b874831ae3'
 };

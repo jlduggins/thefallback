@@ -99,6 +99,11 @@ const Discover = {
     { key: 'historical', label: 'Historical', icon: 'historical' }
   ],
 
+  // RIDB (Recreation.gov) — official federal data for US Forest Service,
+  // BLM, and National Parks. Used to find remote campgrounds and trailheads
+  // that are often missing from OpenStreetMap.
+  RIDB_BASE: 'https://ridb.recreation.gov/api/v1',
+
   // Approx point sampling along a route. Smaller = denser sampling = more
   // POIs found along windy roads, but bigger query payload.
   SAMPLE_EVERY_MI: 12,
@@ -699,14 +704,107 @@ const Discover = {
     }
   },
 
-  // Top-level dispatcher: routes Camping/Hiking to Overpass and the rest to
-  // OpenTripMap. Both paths return the same normalized POI shape so the rest
-  // of the module (cache, render, detail panel, save flow) doesn't care.
   async _fetchPOIs(anchor) {
     if (this.OTM_CATEGORIES.includes(this.category)) {
       return this._fetchOTM(anchor);
     }
+    
+    // For Camping and Hiking, merge Overpass (OSM) results with RIDB (Federal) data.
+    if (this.category === 'camping' || this.category === 'hiking') {
+      const ridbP = this._fetchRIDB(anchor);
+      const osmP = this._fetchOverpass(anchor);
+      const [ridb, osm] = await Promise.all([ridbP, osmP]);
+      
+      // Combine and deduplicate by name + approximate location
+      const combined = [...osm, ...ridb];
+      const seen = new Set();
+      const final = [];
+      
+      for (const p of combined) {
+        // Build a deduping key: normalized name + truncated coords (~100m grid)
+        const nameKey = (p.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const gridKey = `${p.lat.toFixed(3)},${p.lng.toFixed(3)}`;
+        const key = `${nameKey}:${gridKey}`;
+        
+        if (seen.has(key)) continue;
+        seen.add(key);
+        final.push(p);
+      }
+      
+      // Sort by distance (since both sets are already haversine-calculated)
+      return final.sort((a, b) => a.distance - b.distance);
+    }
+    
     return this._fetchOverpass(anchor);
+  },
+
+  async _fetchRIDB(anchor) {
+    if (!window.CONFIG?.RIDB_API_KEY || CONFIG.RIDB_API_KEY === 'YOUR_RIDB_API_KEY') {
+      return [];
+    }
+
+    const s = anchor.samples[0];
+    const radiusMi = anchor.radiusM / 1609;
+    const isHiking = this.category === 'hiking';
+    
+    // RIDB endpoint: /recareas
+    // We filter by Activity (Camping=9, Hiking=14) if possible, but the recarea
+    // search is usually better filtered by kinds in our code.
+    const url = new URL(`${this.RIDB_BASE}/recareas`);
+    url.searchParams.set('latitude', s.lat.toFixed(5));
+    url.searchParams.set('longitude', s.lng.toFixed(5));
+    url.searchParams.set('radius', radiusMi.toFixed(1));
+    url.searchParams.set('full', 'true');
+    
+    try {
+      const r = await fetch(url, {
+        headers: { 'apikey': CONFIG.RIDB_API_KEY }
+      });
+      if (!r.ok) return [];
+      const data = await r.json();
+      if (!data?.RECDATA) return [];
+
+      const results = [];
+      for (const item of data.RECDATA) {
+        // Filter by relevance to category
+        const acts = (item.ACTIVITY || []).map(a => a.ActivityName?.toLowerCase());
+        const desc = (item.RecAreaDescription || '').toLowerCase();
+        
+        let match = false;
+        if (isHiking) {
+          match = acts.includes('hiking') || acts.includes('walking') || desc.includes('trail') || desc.includes('hiking');
+        } else {
+          match = acts.includes('camping') || desc.includes('campground') || desc.includes('campsite');
+        }
+        if (!match) continue;
+
+        results.push({
+          xid: `ridb/${item.RecAreaID}`,
+          name: item.RecAreaName,
+          lat: item.RecAreaLatitude,
+          lng: item.RecAreaLongitude,
+          distance: this._haversine(s.lat, s.lng, item.RecAreaLatitude, item.RecAreaLongitude),
+          category: isHiking ? 'Trailhead' : 'Campground',
+          description: this._stripHtml(item.RecAreaDescription),
+          _approx: true,
+          _ridb: true,
+          tags: {
+            website: item.RecAreaWebsiteURL,
+            phone: item.RecAreaPhone,
+            description: this._stripHtml(item.RecAreaDescription)
+          }
+        });
+      }
+      return results;
+    } catch (e) {
+      console.error('[Discover] RIDB fetch failed:', e);
+      return [];
+    }
+  },
+
+  _stripHtml(html) {
+    if (!html) return '';
+    return html.replace(/<[^>]*>?/gm, ' ').replace(/\s+/g, ' ').trim();
   },
 
   // Build one Overpass QL query that unions every tag selector × every
@@ -721,7 +819,15 @@ const Discover = {
     const samples = anchor.samples.slice(0, sampleCap);
     const timeout = this.category === 'hiking' ? this.OVERPASS_TIMEOUT_HIKING : 60;
 
-    let body = `[out:json][timeout:${timeout}];(\n`;
+    const isSingle = samples.length === 1;
+    let globalBbox = '';
+    if (isSingle) {
+      const s = samples[0];
+      const latD = anchor.radiusM / 111320;
+      const lngD = anchor.radiusM / (111320 * Math.cos(s.lat * Math.PI / 180));
+      globalBbox = `[bbox:${(s.lat - latD).toFixed(5)},${(s.lng - lngD).toFixed(5)},${(s.lat + latD).toFixed(5)},${(s.lng + lngD).toFixed(5)}]`;
+    }
+    let body = `[out:json][timeout:${timeout}]${globalBbox};\n(\n`;
     for (const s of samples) {
       // Overpass native bounding box is computationally much cheaper than `around:`
       // especially for dense selectors like highway=path over 30+ mile radii.
@@ -743,7 +849,8 @@ const Discover = {
         else if (filter.includes('"route"=')) prefix = 'relation';
         else if (filter.includes('"information"="trailhead"')) prefix = 'node';
 
-        body += `${prefix}${filter}(${bbox});\n`;
+        const suffix = isSingle ? '' : `(${bbox})`;
+        body += `${prefix}${filter}${suffix};\n`;
       }
     }
     // Tighter server-side cap for hiking — broader selectors mean a wider
@@ -2417,6 +2524,7 @@ const Discover = {
       ${factsHtml}
       ${badgesHtml}
       ${rowsHtml}
+      ${poi._ridb ? `<div class="dd-ridb-credit">Data source: ridb.recreation.gov</div>` : ''}
     `;
   },
 

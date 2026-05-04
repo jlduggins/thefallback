@@ -808,6 +808,14 @@
   font-style: italic;
   padding: 8px 0 16px;
 }
+.dd-ridb-credit {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  font-style: italic;
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 0.5px solid var(--color-border);
+}
 
 /* Footer "Look up" row — Google + Wikipedia search launchers. Sits above
    the action buttons. Each pill is 1 tap → external browser. */
