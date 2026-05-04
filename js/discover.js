@@ -64,10 +64,7 @@ const Discover = {
       // High Signal: Attractions
       '["tourism"="attraction"]["sport"="hiking"]',
       // Medium Signal: Protected Areas
-      '["boundary"="protected_area"]["name"]',
-      // Lower Signal: Paths (huge volume, put at end so they don't crowd out trailheads if outCap is hit)
-      '["highway"="path"]["name"]',
-      '["highway"="path"]["ref"]'
+      '["boundary"="protected_area"]["name"]'
     ]
   },
 
@@ -157,10 +154,9 @@ const Discover = {
   SERVED_BUFFER_MI: 15,                // pad around the visible viewport
   SERVED_MIN_MI:    25,                // floor — don't waste a call on tiny areas
   SERVED_MAX_MI:    75,                // ceiling — Overpass payload safety (camping)
-  // Hiking has 7 broad selectors fanning across the disc; a 75-mi radius
-  // reliably 504s the third Overpass mirror. 35 mi covers Smith Rock from
-  // a Redmond viewport with headroom and keeps the wire query fast.
-  SERVED_MAX_MI_HIKING: 35,
+  // Hiking has broad selectors; keeping radius smaller (15mi) prevents
+  // the Overpass server from timing out on dense wilderness areas.
+  SERVED_MAX_MI_HIKING: 15,
   SERVED_REUSE_SAFETY_MI: 2,           // shrink reuse window so edges stay valid
 
   // Diagnostic logging for hiking flow. Flip to false once the regression is
@@ -747,14 +743,15 @@ const Discover = {
     const radiusMi = anchor.radiusM / 1609;
     const isHiking = this.category === 'hiking';
     
-    // RIDB endpoint: /recareas
-    // We filter by Activity (Camping=9, Hiking=14) if possible, but the recarea
-    // search is usually better filtered by kinds in our code.
-    const url = new URL(`${this.RIDB_BASE}/recareas`);
+    // RIDB endpoint: /facilities
+    // Facilities contain the actual campgrounds and trailheads.
+    const url = new URL(`${this.RIDB_BASE}/facilities`);
     url.searchParams.set('latitude', s.lat.toFixed(5));
     url.searchParams.set('longitude', s.lng.toFixed(5));
     url.searchParams.set('radius', radiusMi.toFixed(1));
     url.searchParams.set('full', 'true');
+    // Request up to 50 results (the API limit per page)
+    url.searchParams.set('limit', '50');
     
     try {
       const r = await fetch(url, {
@@ -767,31 +764,33 @@ const Discover = {
       const results = [];
       for (const item of data.RECDATA) {
         // Filter by relevance to category
-        const acts = (item.ACTIVITY || []).map(a => a.ActivityName?.toLowerCase());
-        const desc = (item.RecAreaDescription || '').toLowerCase();
+        // In the /facilities endpoint, we check FacilityTypeDescription and FacilityName
+        const type = (item.FacilityTypeDescription || '').toLowerCase();
+        const name = (item.FacilityName || '').toLowerCase();
+        const desc = (item.FacilityDescription || '').toLowerCase();
         
         let match = false;
         if (isHiking) {
-          match = acts.includes('hiking') || acts.includes('walking') || desc.includes('trail') || desc.includes('hiking');
+          match = type.includes('trailhead') || name.includes('trail') || desc.includes('hiking') || desc.includes('trail');
         } else {
-          match = acts.includes('camping') || desc.includes('campground') || desc.includes('campsite');
+          match = type.includes('campground') || type.includes('camping') || name.includes('camp') || desc.includes('campsite');
         }
         if (!match) continue;
 
         results.push({
-          xid: `ridb/${item.RecAreaID}`,
-          name: item.RecAreaName,
-          lat: item.RecAreaLatitude,
-          lng: item.RecAreaLongitude,
-          distance: this._haversine(s.lat, s.lng, item.RecAreaLatitude, item.RecAreaLongitude),
+          xid: `ridb/f/${item.FacilityID}`,
+          name: item.FacilityName,
+          lat: item.FacilityLatitude,
+          lng: item.FacilityLongitude,
+          distance: this._haversine(s.lat, s.lng, item.FacilityLatitude, item.FacilityLongitude),
           category: isHiking ? 'Trailhead' : 'Campground',
-          description: this._stripHtml(item.RecAreaDescription),
+          description: this._stripHtml(item.FacilityDescription),
           _approx: true,
           _ridb: true,
           tags: {
-            website: item.RecAreaWebsiteURL,
-            phone: item.RecAreaPhone,
-            description: this._stripHtml(item.RecAreaDescription)
+            website: item.FacilityReservationURL || '',
+            phone: item.FacilityPhone || '',
+            description: this._stripHtml(item.FacilityDescription)
           }
         });
       }
@@ -1970,7 +1969,9 @@ const Discover = {
     // markers — fitBounds on those zooms the user's viewport way out and
     // undoes whatever they were looking at. Skip auto-fit for hiking; the
     // marker cluster handles density and the user keeps their zoom.
-    if (fitBounds && this.category !== 'hiking' && MapModule.fitDiscoverResultsBounds) {
+    // Also skip if we are in manual mode (the user manually panned there).
+    const isManual = this._manualAnchor != null;
+    if (fitBounds && this.category !== 'hiking' && !isManual && MapModule.fitDiscoverResultsBounds) {
       // Defer one frame so any concurrent panel-resize finishes first;
       // otherwise fitBounds runs against stale viewport dimensions and
       // the camera lands off-target.
