@@ -777,6 +777,8 @@ const Discover = {
     url.searchParams.set('full', 'true');
     // Request up to 50 results (the API limit per page)
     url.searchParams.set('limit', '50');
+    // Filter by activity directly in the API to prevent wasting our 50-limit on picnic tables
+    url.searchParams.set('activity', isHiking ? '14' : '9');
     
     try {
       const r = await fetch(url, {
@@ -788,19 +790,7 @@ const Discover = {
 
       const results = [];
       for (const item of data.RECDATA) {
-        // Filter by relevance to category
-        // In the /facilities endpoint, we check FacilityTypeDescription and FacilityName
-        const type = (item.FacilityTypeDescription || '').toLowerCase();
-        const name = (item.FacilityName || '').toLowerCase();
-        const desc = (item.FacilityDescription || '').toLowerCase();
-        
-        let match = false;
-        if (isHiking) {
-          match = type.includes('trailhead') || name.includes('trail') || desc.includes('hiking') || desc.includes('trail');
-        } else {
-          match = type.includes('campground') || type.includes('camping') || name.includes('camp') || desc.includes('campsite');
-        }
-        if (!match) continue;
+        if (!item.FacilityLatitude || !item.FacilityLongitude) continue;
 
         results.push({
           xid: `ridb/f/${item.FacilityID}`,
@@ -1663,15 +1653,7 @@ const Discover = {
     }
 
     // ── Pin strip ──────────────────────────────────────────────────────
-    const pinStrip = modal.querySelector('#disc-pin-strip');
-    const pinText  = modal.querySelector('#disc-pin-text');
-    if (pinStrip) {
-      const isPin = !!this._manualAnchor;
-      pinStrip.style.display = isPin ? 'flex' : 'none';
-      if (isPin && pinText) {
-        pinText.innerHTML = `<strong>${this._esc(this._manualAnchor.label || 'Map area')}</strong> · Click to refresh map`;
-      }
-    }
+    // (Removed as part of Search This Area paradigm)
 
     // ── Distance badge ─────────────────────────────────────────────────
     // Hidden in Map Area (pin) mode: the search radius is derived from the
@@ -1942,68 +1924,97 @@ const Discover = {
   // before each programmatic move and ignore moveend events that fire
   // within ~1.5s after — that's the cleanest way to distinguish them
   // since Leaflet doesn't expose a "user-initiated" flag on moveend.
-  _mapMoveTimer: null,
+  // ── Search This Area & Map Move Logic ─────────────────────────────────
+  
+  _lastSearchCenter: null,
+  _lastSearchZoom: null,
   _boundMapMove: null,
-  _lastProgrammaticMove: 0,
+
+  searchThisArea() {
+    const map = window.MapModule?.map;
+    if (!map) return;
+    
+    const zoom = map.getZoom();
+    // Prevent fetching the entire continent and crashing Overpass
+    if (zoom < 8) {
+      alert("Please zoom in closer to search this area.");
+      return;
+    }
+
+    const btn = document.getElementById('search-this-area-btn');
+    if (btn) {
+      btn.style.display = 'none';
+      btn.textContent = 'Searching...';
+      btn.disabled = true;
+    }
+    
+    this._lastSearchCenter = map.getCenter();
+    this._lastSearchZoom = zoom;
+
+    // The query needs an anchor. In "Map Area" mode, we'll set manual anchor to center
+    // but the fetch logic will pull everything in a padded bounding box.
+    this._setMode('pin');
+    
+    // Pass bounds in the manual anchor object so `_resolveAnchor` calculates radius from it
+    this._manualAnchor = {
+      lat: map.getCenter().lat,
+      lng: map.getCenter().lng,
+      label: 'Map Area',
+      bounds: map.getBounds()
+    };
+    
+    this.refresh({ force: true }).then(() => {
+      if (btn) {
+        btn.textContent = 'Search this area';
+        btn.disabled = false;
+      }
+    });
+  },
 
   _attachMapMoveListener() {
     const map = window.MapModule?.map;
     if (!map) return;
     if (!this._boundMapMove) {
-      this._boundMapMove = () => this._onMapMove();
+      this._boundMapMove = () => {
+        if (!this._modalOpen) return;
+        
+        // Always re-render list when map moves to apply bounds filtering dynamically
+        if (this.mode === 'manual' || this.mode === 'pin') {
+          this.render();
+        }
+
+        // Show 'Search this area' button if bounds drifted from last search
+        if (this._lastSearchCenter && (this.mode === 'manual' || this.mode === 'pin')) {
+          const c = map.getCenter();
+          const moved = this._haversine(
+            this._lastSearchCenter.lat, this._lastSearchCenter.lng, c.lat, c.lng);
+          const zoomDiff = Math.abs(map.getZoom() - this._lastSearchZoom);
+          
+          if (moved > 3 || zoomDiff >= 1) {
+            const btn = document.getElementById('search-this-area-btn');
+            if (btn && !btn.disabled) {
+              btn.style.display = 'block';
+              if (map.getZoom() < 8) {
+                btn.textContent = 'Zoom in to search';
+              } else {
+                btn.textContent = 'Search this area';
+              }
+            }
+          }
+        }
+      };
     }
-    // Use `dragend` (fires only on actual user pan) instead of `moveend`
-    // (which also fires on every zoom step and animated flyTo, including
-    // mouse-wheel zoom which shifts the center toward the cursor by miles
-    // per click — looking like a pan and triggering unwanted re-fetches
-    // that hit the Overpass rate limit). Touch-pan also fires `dragend`.
-    map.off('dragend', this._boundMapMove);
-    map.on('dragend', this._boundMapMove);
+    map.off('moveend', this._boundMapMove);
+    map.on('moveend', this._boundMapMove);
   },
 
   _detachMapMoveListener() {
     const map = window.MapModule?.map;
-    if (map && this._boundMapMove) map.off('dragend', this._boundMapMove);
-    if (this._mapMoveTimer) {
-      clearTimeout(this._mapMoveTimer);
-      this._mapMoveTimer = null;
-    }
+    if (map && this._boundMapMove) map.off('moveend', this._boundMapMove);
   },
 
-  // Mark that we're about to programmatically move the map — call this
-  // immediately before any map.flyTo / map.fitBounds we kick off ourselves.
   _markProgrammaticMove() {
-    this._lastProgrammaticMove = Date.now();
-  },
-
-  _onMapMove() {
-    if (!this._modalOpen) return;
-    if (!this._manualAnchor) return; // only auto-refresh in manual mode
-    const map = window.MapModule?.map;
-    if (!map) return;
-    // Ignore drags that finished right after our own flyTo/fitBounds — the
-    // momentum from a programmatic move can otherwise look like a user pan.
-    if (Date.now() - this._lastProgrammaticMove < 1500) return;
-
-    if (this._mapMoveTimer) clearTimeout(this._mapMoveTimer);
-    this._mapMoveTimer = setTimeout(() => {
-      this._mapMoveTimer = null;
-      if (Date.now() - this._lastProgrammaticMove < 1500) return;
-      if (!this._manualAnchor) return;
-      const c = map.getCenter();
-      // Suppress re-anchor when the center barely moved — pinch-zoom and
-      // scroll-zoom drift the center by a few hundred meters, which fired
-      // a refresh storm and rate-limited Overpass. 3 mi is below the
-      // useful-update threshold for hiking radii (25–35 mi served disc).
-      const moved = this._haversine(
-        this._manualAnchor.lat, this._manualAnchor.lng, c.lat, c.lng);
-      if (moved < 3) return;
-      // Re-anchor: keeps the same label so the pin strip doesn't flicker.
-      // User-initiated pan — skip the post-fetch refit so we don't snap
-      // the camera back to a wider view than the user just chose.
-      this._skipFitOnce = true;
-      this._setManualAnchor(c.lat, c.lng, this._manualAnchor.label || 'Map area');
-    }, 800);
+    // Legacy stub
   },
 
   // ── Result markers on the map ───────────────────────────────────────
@@ -2065,7 +2076,8 @@ const Discover = {
     // Render the panel scaffolding once before the fetch so the user sees
     // the loading state instead of an empty list.
     this._renderModalContents();
-    this.refresh();
+    // Default to Map Area search instead of auto/nearby
+    this.searchThisArea();
     if (window.matchMedia('(max-width: 767px)').matches && window.UI?.initMobileDrawers) {
       UI.initMobileDrawers();
       UI._applySnap('full');

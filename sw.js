@@ -3,7 +3,7 @@
  * Handles caching for offline support
  */
 
-const CACHE_NAME = 'fallback-v2-cache-v72';
+const CACHE_NAME = 'fallback-v2-cache-v73';
 
 const STATIC_ASSETS = [
   './',
@@ -45,10 +45,6 @@ const EXTERNAL_ASSETS = [
 ];
 
 // Install event - cache static assets
-// Uses per-asset adds (instead of cache.addAll) so a single missing optional
-// asset (e.g. category icons that haven't been cropped from the design files
-// yet) doesn't fail the entire install and leave the app uncached. Critical
-// assets are still attempted and any failure logs to console for diagnosis.
 self.addEventListener('install', event => {
   console.log('[SW] Installing...');
 
@@ -57,10 +53,14 @@ self.addEventListener('install', event => {
       console.log('[SW] Caching static assets');
       const all = [...STATIC_ASSETS, ...EXTERNAL_ASSETS];
       const results = await Promise.allSettled(
-        all.map(url => cache.add(url).catch(err => {
-          console.warn('[SW] Failed to cache:', url, err.message);
-          throw err;
-        }))
+        all.map(url => {
+          // Bypass HTTP cache completely during SW install so we get the fresh files!
+          const req = new Request(url, { cache: 'no-store' });
+          return fetch(req).then(res => {
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            return cache.put(req, res);
+          });
+        })
       );
       const failed = results.filter(r => r.status === 'rejected').length;
       if (failed) console.warn(`[SW] ${failed} asset(s) failed to cache (continuing)`);
