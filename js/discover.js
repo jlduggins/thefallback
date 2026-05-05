@@ -165,6 +165,7 @@ const Discover = {
   _dbgH(...args) { if (this.DEBUG_HIKING && this.category === 'hiking') console.log('[Discover:hiking]', ...args); },
 
   // ── Init ───────────────────────────────────────────────────────────────
+  init() {
     // One-shot cleanup of localStorage keys written by older cache schemas.
     // Cheap (string scan, no parsing). Runs once on app boot per session.
     // Step 6: Fixing the RIDB Bug (Cache Invalidation) - Clears legacy caches so RIDB runs fresh.
