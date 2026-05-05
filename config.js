@@ -32,5 +32,5 @@ const CONFIG = {
   // BLM, and National Parks. Used to find remote campgrounds and trailheads
   // that are often missing from OpenStreetMap.
   // Get yours at: https://ridb.recreation.gov/profile
-  RIDB_API_KEY: 'bc1017fc-f906-4a4d-ab50-84b874831ae3'
+  RIDB_API_KEY: '37c54f34-3322-4ead-b8cb-e2a44d92062e'
 };
