@@ -165,15 +165,15 @@ const Discover = {
   _dbgH(...args) { if (this.DEBUG_HIKING && this.category === 'hiking') console.log('[Discover:hiking]', ...args); },
 
   // ── Init ───────────────────────────────────────────────────────────────
-  init() {
     // One-shot cleanup of localStorage keys written by older cache schemas.
     // Cheap (string scan, no parsing). Runs once on app boot per session.
+    // Step 6: Fixing the RIDB Bug (Cache Invalidation) - Clears legacy caches so RIDB runs fresh.
     try {
       const drop = [];
-      const keep = [this.CACHE_PREFIX, this.OTM_CACHE_PREFIX, this.MANUAL_ANCHOR_KEY];
+      const keep = [this.MANUAL_ANCHOR_KEY];
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
-        if (k && this.CACHE_OLD_PREFIXES.some(p => k.startsWith(p) && !keep.some(kp => k.startsWith(kp)))) {
+        if (k && k.startsWith('fb-disc-')) {
           drop.push(k);
         }
       }
@@ -269,16 +269,34 @@ const Discover = {
       const baseMi = (State.fuelSettings && State.fuelSettings.backupRadius) || 30;
       let radiusMi = baseMi;
       let diagonalMi = 0;
+      let bounds = null;
+      let paddedBounds = null;
       const map = window.MapModule?.map;
-      if (map) {
+      
+      if (this._manualAnchor.bounds) {
+        bounds = this._manualAnchor.bounds;
+      } else if (map) {
+        bounds = map.getBounds();
+      }
+
+      if (bounds) {
         try {
-          const b = map.getBounds();
-          const ne = b.getNorthEast(), sw = b.getSouthWest();
+          const ne = bounds.getNorthEast(), sw = bounds.getSouthWest();
           diagonalMi = this._haversine(ne.lat, ne.lng, sw.lat, sw.lng);
-          // Discovery radius: cover the viewport plus a 25% buffer so small pans
-          // don't force a network refresh.
-          const maxAllowed = this.category === 'hiking' ? 15 : 35;
-          radiusMi = Math.min(maxAllowed, Math.max(baseMi, Math.ceil((diagonalMi / 2) * 1.25)));
+          
+          // Step 2: Transition from "Radius" to "Bounding Box" Queries
+          // Pad the map bounds perfectly by 15 miles
+          const padMi = 15;
+          const latPad = padMi / 69;
+          const lngPad = padMi / (69 * Math.cos(this._manualAnchor.lat * Math.PI / 180));
+          paddedBounds = window.L?.latLngBounds(
+            [sw.lat - latPad, sw.lng - lngPad],
+            [ne.lat + latPad, ne.lng + lngPad]
+          ) || bounds;
+
+          // For Overpass legacy checks, treat radius as half the padded diagonal
+          const pNe = paddedBounds.getNorthEast(), pSw = paddedBounds.getSouthWest();
+          radiusMi = this._haversine(pNe.lat, pNe.lng, pSw.lat, pSw.lng) / 2;
         } catch (e) { /* fall back to baseMi */ }
       }
       // Viewport too wide to be useful — bail to the prompt rather than
@@ -294,6 +312,7 @@ const Discover = {
         mode: 'manual',
         samples: [{ lat: this._manualAnchor.lat, lng: this._manualAnchor.lng }],
         radiusM,
+        bounds: paddedBounds,
         signature: sig,
         label: this._manualAnchor.label
           ? `From ${this._manualAnchor.label}`
@@ -626,13 +645,18 @@ const Discover = {
       } catch (e) { /* ignore */ }
     }
 
+    // ── Bypass cache for "pin" (Search this area) mode ─────────────────────
+    // For Map Area searches, we fetch fresh every time the user clicks "Search this area"
+    // to guarantee we get the padding and RIDB hits without stale radius boundaries.
+    const isPinMode = a.mode === 'manual' || a.mode === 'pin';
+
     // In-memory cache (fastest) → localStorage cache (survives reload).
     // On cache hit we don't re-write _servedAreas — _loadServedAreas
     // already restored it at init, and the served-area lookup above
     // would have used it. This path is only reached when the served-
     // area buffer was a miss (e.g. user opened a new spot) but the
     // exact key happens to be cached from a prior session.
-    if (!force && this._cache[key]) {
+    if (!force && !isPinMode && this._cache[key]) {
       this.results = this._cache[key];
       this.loading = false;
       this.error = null;
@@ -642,7 +666,7 @@ const Discover = {
       if (this.results.some(p => p._approx)) this._refreshDrivingDistances(a, this.results);
       return;
     }
-    const persisted = force ? null : this._persistRead(key);
+    const persisted = force || isPinMode ? null : this._persistRead(key);
     if (persisted) {
       this._cache[key] = persisted;
       this.results = persisted;
@@ -820,19 +844,31 @@ const Discover = {
 
     const isSingle = samples.length === 1;
     let globalBbox = '';
-    if (isSingle) {
+    
+    if (anchor.bounds) {
+      const sw = anchor.bounds.getSouthWest();
+      const ne = anchor.bounds.getNorthEast();
+      globalBbox = `[bbox:${sw.lat.toFixed(5)},${sw.lng.toFixed(5)},${ne.lat.toFixed(5)},${ne.lng.toFixed(5)}]`;
+    } else if (isSingle) {
       const s = samples[0];
       const latD = anchor.radiusM / 111320;
       const lngD = anchor.radiusM / (111320 * Math.cos(s.lat * Math.PI / 180));
       globalBbox = `[bbox:${(s.lat - latD).toFixed(5)},${(s.lng - lngD).toFixed(5)},${(s.lat + latD).toFixed(5)},${(s.lng + lngD).toFixed(5)}]`;
     }
+    
     let body = `[out:json][timeout:${timeout}]${globalBbox};\n(\n`;
     for (const s of samples) {
       // Overpass native bounding box is computationally much cheaper than `around:`
-      // especially for dense selectors like highway=path over 30+ mile radii.
-      const latD = anchor.radiusM / 111320;
-      const lngD = anchor.radiusM / (111320 * Math.cos(s.lat * Math.PI / 180));
-      const bbox = `${(s.lat - latD).toFixed(5)},${(s.lng - lngD).toFixed(5)},${(s.lat + latD).toFixed(5)},${(s.lng + lngD).toFixed(5)}`;
+      let bbox = '';
+      if (anchor.bounds) {
+        const sw = anchor.bounds.getSouthWest();
+        const ne = anchor.bounds.getNorthEast();
+        bbox = `${sw.lat.toFixed(5)},${sw.lng.toFixed(5)},${ne.lat.toFixed(5)},${ne.lng.toFixed(5)}`;
+      } else {
+        const latD = anchor.radiusM / 111320;
+        const lngD = anchor.radiusM / (111320 * Math.cos(s.lat * Math.PI / 180));
+        bbox = `${(s.lat - latD).toFixed(5)},${(s.lng - lngD).toFixed(5)},${(s.lat + latD).toFixed(5)},${(s.lng + lngD).toFixed(5)}`;
+      }
       
       for (const sel of tagSelectors) {
         // sel can be: raw Overpass string (e.g. '["highway"="path"]["name"]'),
@@ -1655,17 +1691,12 @@ const Discover = {
     if (!list) return;
 
     // No anchor: CTA to set one. We reach here when GPS is denied and the
-    // user has no active route + no saved manual anchor — the only sensible
-    // path is to ask them to pick a Map Area or enter a city. No fetch fires
-    // until they do (refresh() short-circuits on mode == null).
+    // user has no active route + no saved manual anchor.
     if (this.mode == null) {
       list.innerHTML = this._emptyHtml(
         '📍',
-        "We can't find your location. Pan or zoom the map to where you want to look, then set Map Area — or enter a city.",
-        `<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
-           <button class="btn btn-primary btn-sm" onclick="Discover._anchorAtMapCenter()">📍 Use Map Area</button>
-           <button class="btn btn-outline btn-sm" onclick="Discover._openAnchorPicker(true)">Enter a city</button>
-         </div>`
+        "Pan the map to where you want to look, then click 'Search this area'.",
+        `<button class="btn btn-primary btn-sm" onclick="Discover.searchThisArea()">📍 Search Map Area</button>`
       );
       if (moreBtn) moreBtn.style.display = 'none';
       return;
@@ -1692,11 +1723,33 @@ const Discover = {
       return;
     }
 
-    // Filter by search query
+    // Filter by search query and bounds
+    const map = window.MapModule?.map;
     const q = (this._searchQuery || '').toLowerCase();
-    const filtered = q
-      ? this.results.filter(p => (p.name || '').toLowerCase().includes(q))
-      : this.results;
+    
+    // In pin/manual mode, filter by viewport bounds instantly as the user drags
+    let filtered = this.results;
+    if (this._manualAnchor && map && filtered?.length > 0) {
+      const b = map.getBounds();
+      // Pad bounds slightly to avoid popping elements right at the edge
+      const padMi = 2; // 2 miles padding
+      const sw = b.getSouthWest();
+      const ne = b.getNorthEast();
+      // Approx 1 deg lat = 69 miles, 1 deg lng = ~45-69 miles
+      const latPad = padMi / 69;
+      const lngPad = padMi / 45;
+      
+      const pB = window.L?.latLngBounds(
+        [sw.lat - latPad, sw.lng - lngPad],
+        [ne.lat + latPad, ne.lng + lngPad]
+      ) || b;
+      
+      filtered = filtered.filter(p => pB.contains([p.lat, p.lng]));
+    }
+    
+    if (q) {
+      filtered = filtered.filter(p => (p.name || '').toLowerCase().includes(q));
+    }
 
     // Update hero count
     const countEl = modal.querySelector('#disc-hero-count');
