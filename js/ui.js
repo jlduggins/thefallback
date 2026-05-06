@@ -345,6 +345,17 @@ const UI = {
   // HELPERS
   // ═══════════════════════════════════════════════════════════════════════════
   
+  toggleSideDrawer() {
+    const isCollapsing = !document.body.classList.contains('sidebar-collapsed');
+    document.body.classList.toggle('sidebar-collapsed');
+    // Invalidate map size so it fills the newly available space.
+    // Fire once immediately and again after the CSS transition completes.
+    if (MapModule.map) {
+      MapModule.map.invalidateSize();
+      setTimeout(() => MapModule.map.invalidateSize(), 350);
+    }
+  },
+  
   $(selector) {
     return document.querySelector(selector);
   },

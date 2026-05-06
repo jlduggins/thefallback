@@ -769,49 +769,142 @@ const Discover = {
     const s = anchor.samples[0];
     const radiusMi = anchor.radiusM / 1609;
     const isHiking = this.category === 'hiking';
-    
-    // RIDB endpoint: /facilities
-    // Facilities contain the actual campgrounds and trailheads.
-    const url = new URL(`${this.RIDB_BASE}/facilities`);
-    url.searchParams.set('latitude', s.lat.toFixed(5));
-    url.searchParams.set('longitude', s.lng.toFixed(5));
-    url.searchParams.set('radius', radiusMi.toFixed(1));
-    url.searchParams.set('full', 'true');
-    // Request up to 50 results (the API limit per page)
-    url.searchParams.set('limit', '50');
-    // Filter by activity directly in the API to prevent wasting our 50-limit on picnic tables
-    url.searchParams.set('activity', isHiking ? '14' : '9');
-    
-    try {
-      console.log(`[Discover] Executing RIDB API fetch for ${isHiking ? 'Hiking' : 'Camping'}...`);
-      console.log(`[Discover] RIDB URL: ${url.toString()}`);
-      
-      const r = await fetch(url, {
-        headers: { 'apikey': key }
-      });
-      
-      console.log(`[Discover] RIDB API Response Status: ${r.status} ${r.statusText}`);
-      
-      if (!r.ok) {
-        console.error(`[Discover] RIDB API Error: ${await r.text()}`);
-        return [];
-      }
-      
-      const data = await r.json();
-      console.log(`[Discover] RIDB API returned ${data?.RECDATA?.length || 0} raw facilities.`);
-      
-      if (!data?.RECDATA) return [];
+    const headers = { 'apikey': key };
 
+    // ── Strategy ────────────────────────────────────────────────────────
+    // Many RIDB facilities have FacilityLatitude=0 / FacilityLongitude=0
+    // even though Recreation.gov shows real coordinates on its website.
+    // The radius search only finds geo-located facilities, so we
+    // supplement it with a RecArea-based search:
+    //   1) Radius search  → catches facilities with valid coordinates
+    //   2) RecArea search → finds the National Forest / BLM district
+    //      covering the viewport, then fetches ALL facilities under it.
+    //      For (0,0) facilities we attempt geocoding from their address.
+    // Results from both prongs are deduped by FacilityID.
+
+    try {
+      // ── Prong 1: Radius search (existing) ────────────────────────────
+      const radiusUrl = new URL(`${this.RIDB_BASE}/facilities`);
+      radiusUrl.searchParams.set('latitude', s.lat.toFixed(5));
+      radiusUrl.searchParams.set('longitude', s.lng.toFixed(5));
+      radiusUrl.searchParams.set('radius', radiusMi.toFixed(1));
+      radiusUrl.searchParams.set('full', 'true');
+      radiusUrl.searchParams.set('limit', '50');
+
+      console.log(`[Discover] RIDB radius search for ${isHiking ? 'Hiking' : 'Camping'}...`);
+      console.log(`[Discover] RIDB URL: ${radiusUrl.toString()}`);
+
+      const radiusResp = await fetch(radiusUrl, { headers });
+      let radiusFacilities = [];
+      if (radiusResp.ok) {
+        const d = await radiusResp.json();
+        radiusFacilities = d?.RECDATA || [];
+        console.log(`[Discover] RIDB radius returned ${radiusFacilities.length} facilities.`);
+      } else {
+        console.error(`[Discover] RIDB radius error: ${radiusResp.status}`);
+      }
+
+      // ── Prong 2: RecArea search ──────────────────────────────────────
+      // Find RecAreas (National Forests, BLM districts, etc.) near the viewport,
+      // then pull all their child facilities. This catches (0,0)-coord campgrounds
+      // that the radius search misses entirely.
+      const recAreaUrl = new URL(`${this.RIDB_BASE}/recareas`);
+      recAreaUrl.searchParams.set('latitude', s.lat.toFixed(5));
+      recAreaUrl.searchParams.set('longitude', s.lng.toFixed(5));
+      recAreaUrl.searchParams.set('radius', Math.max(radiusMi, 50).toFixed(0));
+      recAreaUrl.searchParams.set('limit', '10');
+
+      let recAreaFacilities = [];
+      try {
+        const raResp = await fetch(recAreaUrl, { headers });
+        if (raResp.ok) {
+          const raData = await raResp.json();
+          const recAreas = raData?.RECDATA || [];
+          console.log(`[Discover] RIDB found ${recAreas.length} RecAreas nearby.`);
+
+          // For each RecArea, fetch its child facilities
+          const childFetches = recAreas.map(async (ra) => {
+            const childUrl = new URL(`${this.RIDB_BASE}/recareas/${ra.RecAreaID}/facilities`);
+            childUrl.searchParams.set('full', 'true');
+            childUrl.searchParams.set('limit', '50');
+            try {
+              const cr = await fetch(childUrl, { headers });
+              if (!cr.ok) return [];
+              const cd = await cr.json();
+              return cd?.RECDATA || [];
+            } catch { return []; }
+          });
+          const childArrays = await Promise.all(childFetches);
+          recAreaFacilities = childArrays.flat();
+          console.log(`[Discover] RIDB RecArea children: ${recAreaFacilities.length} facilities total.`);
+        }
+      } catch (e) {
+        console.warn('[Discover] RIDB RecArea search failed:', e);
+      }
+
+      // ── Merge & deduplicate by FacilityID ────────────────────────────
+      const seen = new Set();
+      const allFacilities = [];
+      for (const f of [...radiusFacilities, ...recAreaFacilities]) {
+        if (seen.has(f.FacilityID)) continue;
+        seen.add(f.FacilityID);
+        allFacilities.push(f);
+      }
+      console.log(`[Discover] RIDB merged: ${allFacilities.length} unique facilities.`);
+
+      // ── Filter by category & build results ───────────────────────────
       const results = [];
-      for (const item of data.RECDATA) {
-        if (!item.FacilityLatitude || !item.FacilityLongitude) continue;
+      for (const item of allFacilities) {
+        // Client-side category filter — catches facilities with or without
+        // activity tags. Check type, name, and description.
+        const type = (item.FacilityTypeDescription || '').toLowerCase();
+        const name = (item.FacilityName || '').toLowerCase();
+        const desc = (item.FacilityDescription || '').toLowerCase();
+        const activities = (item.ACTIVITY || []).map(a => (a.ActivityName || '').toLowerCase());
+
+        let match = false;
+        if (isHiking) {
+          match = type.includes('trailhead') || name.includes('trail')
+               || desc.includes('hiking') || desc.includes('trail')
+               || activities.some(a => a.includes('hiking'));
+        } else {
+          match = type.includes('campground') || type.includes('camping')
+               || name.includes('camp') || name.includes('campground')
+               || desc.includes('campsite') || desc.includes('campground')
+               || activities.some(a => a.includes('camping'));
+        }
+        if (!match) continue;
+
+        let lat = item.FacilityLatitude;
+        let lng = item.FacilityLongitude;
+
+        // Skip facilities with no usable coordinates (0,0 = null island).
+        // Attempt geocoding from address as a fallback.
+        if (!lat || !lng || (lat === 0 && lng === 0)) {
+          const addr = item.FACILITYADDRESS?.[0];
+          const geocoded = await this._geocodeFacilityAddress(addr, item.FacilityName, item.FacilityID);
+          if (geocoded) {
+            lat = geocoded.lat;
+            lng = geocoded.lng;
+            console.log(`[Discover] RIDB geocoded "${item.FacilityName}" → ${lat.toFixed(4)}, ${lng.toFixed(4)}`);
+          } else {
+            console.log(`[Discover] RIDB skipping "${item.FacilityName}" — no coordinates and geocode failed.`);
+            continue;
+          }
+        }
+
+        // Final bounds check: only include if the facility is within the
+        // search viewport (important for RecArea children that may be
+        // hundreds of miles away from the map center).
+        const distMi = this._haversine(s.lat, s.lng, lat, lng) / 1609;
+        if (distMi > radiusMi * 1.5) continue;
 
         results.push({
           xid: `ridb/f/${item.FacilityID}`,
           name: item.FacilityName,
-          lat: item.FacilityLatitude,
-          lng: item.FacilityLongitude,
-          distance: this._haversine(s.lat, s.lng, item.FacilityLatitude, item.FacilityLongitude),
+          lat,
+          lng,
+          distance: this._haversine(s.lat, s.lng, lat, lng),
           category: isHiking ? 'Trailhead' : 'Campground',
           description: this._stripHtml(item.FacilityDescription),
           _approx: true,
@@ -823,10 +916,56 @@ const Discover = {
           }
         });
       }
+
+      console.log(`[Discover] RIDB final results: ${results.length} ${isHiking ? 'trails' : 'campgrounds'}.`);
       return results;
     } catch (e) {
       console.error('[Discover] RIDB fetch failed:', e);
       return [];
+    }
+  },
+
+  // Attempt to get real coordinates for an RIDB facility that has (0,0).
+  // Recreation.gov's internal campground API often has coordinates even when
+  // the public RIDB API returns FacilityLatitude=0. Falls back to Nominatim.
+  async _geocodeFacilityAddress(addr, facilityName, facilityId) {
+    // ── Primary: Recreation.gov internal campgrounds API ────────────────
+    if (facilityId) {
+      try {
+        const url = `https://www.recreation.gov/api/camps/campgrounds/${facilityId}`;
+        const r = await fetch(url, {
+          headers: { 'User-Agent': 'TheFallback/2.0' }
+        });
+        if (r.ok) {
+          const d = await r.json();
+          const cg = d.campground || d;
+          const lat = cg.facility_latitude;
+          const lng = cg.facility_longitude;
+          if (lat && lng && !(lat === 0 && lng === 0)) {
+            return { lat, lng };
+          }
+        }
+      } catch { /* fall through to Nominatim */ }
+    }
+
+    // ── Fallback: Nominatim geocoding from name + address ──────────────
+    if (!addr && !facilityName) return null;
+    try {
+      const parts = [];
+      if (facilityName) parts.push(facilityName);
+      if (addr?.City) parts.push(addr.City);
+      if (addr?.AddressStateCode) parts.push(addr.AddressStateCode);
+      const q = parts.join(', ');
+      if (!q) return null;
+
+      const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1`;
+      const r = await fetch(url);
+      if (!r.ok) return null;
+      const results = await r.json();
+      if (results.length === 0) return null;
+      return { lat: parseFloat(results[0].lat), lng: parseFloat(results[0].lon) };
+    } catch {
+      return null;
     }
   },
 

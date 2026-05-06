@@ -543,6 +543,14 @@ body.sidebar-collapsed .explore-left {
   position: absolute;
   height: 100%;
   z-index: 20;
+  pointer-events: none;
+}
+/* Keep the collapse button clickable even when the panel is hidden */
+body.sidebar-collapsed .explore-left .drawer-collapse-btn {
+  transform: translateX(calc(100% + 340px));
+  pointer-events: auto;
+  background: var(--color-surface);
+  box-shadow: 2px 0 8px rgba(0,0,0,0.12);
 }
 body.sidebar-collapsed .drawer-collapse-btn svg {
   transform: rotate(180deg);
@@ -551,6 +559,13 @@ body.sidebar-collapsed .drawer-collapse-btn svg {
 /* Also apply collapse logic to modal-discover if open */
 body.sidebar-collapsed .discover-list-panel {
   transform: translateX(-100%);
+  pointer-events: none;
+}
+body.sidebar-collapsed .discover-list-panel .drawer-collapse-btn {
+  transform: translateX(calc(100% + 340px));
+  pointer-events: auto;
+  background: var(--color-surface);
+  box-shadow: 2px 0 8px rgba(0,0,0,0.12);
 }
 
 @media (max-width: 767px) {
