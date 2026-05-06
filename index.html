@@ -86,6 +86,10 @@
       <!-- ═══ GLOBAL MAP — shared between saved + trips views ═══ -->
       <div id="map-global">
         <div id="map"></div>
+        <!-- Search This Area Floating Button -->
+        <button id="search-this-area-btn" class="search-area-btn" style="display:none" onclick="Discover.searchThisArea()">
+          Search this area
+        </button>
       </div>
 
       <!-- Floating map controls (bottom-right tray) — relocated per-view by ui.js -->
@@ -145,6 +149,9 @@
       <section id="view-explore" class="view">
         <!-- Left column: brand, summary, nearby list -->
         <div class="explore-left">
+          <button class="drawer-collapse-btn desktop-only" onclick="UI.toggleSideDrawer()" aria-label="Toggle Side Drawer">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
           <header class="explore-brand">
             <img src="./icons/logo.png" alt="" class="brand-logo">
             <div class="brand-text"><span class="the">The</span> <span class="fallback">Fallback</span></div>
@@ -201,8 +208,10 @@
              Closing returns to the Explore panel (explore-left is restored). -->
         <aside id="modal-discover" class="discover-list-panel" style="display:none">
 
-          <!-- Dark hero header: back btn, category icon+title, mode selector -->
           <div class="disc-hero" id="disc-hero">
+            <button class="drawer-collapse-btn desktop-only" onclick="UI.toggleSideDrawer()" aria-label="Toggle Side Drawer">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
             <div class="disc-hero-top">
               <button class="disc-back-btn" onclick="Discover.closeModal()">
                 <span class="disc-back-arr">
@@ -210,11 +219,6 @@
                 </span>
                 Back to Explore
               </button>
-              <!-- Always-visible refresh: forces a fresh fetch (bypasses the
-                   in-memory + persistent caches) for the current category +
-                   mode. Useful when results look stale or a previous fetch
-                   returned empty due to a transient API hiccup. -->
-              <button class="disc-refresh-btn" onclick="Discover._forceRefresh()" title="Refresh results" aria-label="Refresh results">↻</button>
             </div>
             <div class="disc-hero-row">
               <div class="disc-hero-icon" id="disc-hero-icon">
@@ -239,18 +243,8 @@
             <div class="disc-cat-pills" id="disc-cat-pills"></div>
           </div>
 
-          <!-- Amber strip: shown when a manual (pin) anchor is active.
-               Tapping the strip itself re-anchors at the current map center
-               (handy if the auto-refresh-on-pan didn't trigger or if the
-               user wants to confirm a new view). -->
-          <div class="disc-pin-strip" id="disc-pin-strip" style="display:none">
-            <div class="disc-pin-dot" onclick="Discover._anchorAtMapCenter()" style="cursor:pointer">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#1a1f1e" stroke-width="2.5" stroke-linecap="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-            </div>
-            <div class="disc-pin-text" id="disc-pin-text" onclick="Discover._anchorAtMapCenter()" style="cursor:pointer"><strong>Map area</strong> · Click to refresh map</div>
-            <button class="disc-pin-refresh" onclick="Discover._forceRefresh()" aria-label="Refresh results for current map area" title="Refresh for current map area">↻</button>
-            <button class="disc-pin-clear" onclick="Discover._clearManualAnchor()" aria-label="Clear pin">✕</button>
-          </div>
+          <!-- Amber strip removed as part of Search This Area paradigm -->
+
 
           <!-- City entry sub-panel (shown when Drop pin is clicked without a map) -->
           <div id="discover-anchor-picker" style="display:none"></div>

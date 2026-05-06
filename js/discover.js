@@ -760,7 +760,9 @@ const Discover = {
   },
 
   async _fetchRIDB(anchor) {
-    if (!window.CONFIG?.RIDB_API_KEY || CONFIG.RIDB_API_KEY === 'YOUR_RIDB_API_KEY') {
+    const key = typeof CONFIG !== 'undefined' ? CONFIG.RIDB_API_KEY : null;
+    if (!key || key === 'YOUR_RIDB_API_KEY') {
+      console.warn('[Discover] RIDB_API_KEY is missing or invalid. Skipping RIDB fetch.');
       return [];
     }
 
@@ -781,11 +783,23 @@ const Discover = {
     url.searchParams.set('activity', isHiking ? '14' : '9');
     
     try {
+      console.log(`[Discover] Executing RIDB API fetch for ${isHiking ? 'Hiking' : 'Camping'}...`);
+      console.log(`[Discover] RIDB URL: ${url.toString()}`);
+      
       const r = await fetch(url, {
-        headers: { 'apikey': CONFIG.RIDB_API_KEY }
+        headers: { 'apikey': key }
       });
-      if (!r.ok) return [];
+      
+      console.log(`[Discover] RIDB API Response Status: ${r.status} ${r.statusText}`);
+      
+      if (!r.ok) {
+        console.error(`[Discover] RIDB API Error: ${await r.text()}`);
+        return [];
+      }
+      
       const data = await r.json();
+      console.log(`[Discover] RIDB API returned ${data?.RECDATA?.length || 0} raw facilities.`);
+      
       if (!data?.RECDATA) return [];
 
       const results = [];
@@ -1953,7 +1967,7 @@ const Discover = {
 
     // The query needs an anchor. In "Map Area" mode, we'll set manual anchor to center
     // but the fetch logic will pull everything in a padded bounding box.
-    this._setMode('pin');
+    this.modeChoice = 'pin';
     
     // Pass bounds in the manual anchor object so `_resolveAnchor` calculates radius from it
     this._manualAnchor = {
@@ -1963,10 +1977,14 @@ const Discover = {
       bounds: map.getBounds()
     };
     
+    this._syncJourneyOnMap();
+    this._renderModalContents();
+    
     this.refresh({ force: true }).then(() => {
       if (btn) {
         btn.textContent = 'Search this area';
         btn.disabled = false;
+        btn.style.display = 'none'; // hide when search finishes
       }
     });
   },

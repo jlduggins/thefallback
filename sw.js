@@ -3,7 +3,7 @@
  * Handles caching for offline support
  */
 
-const CACHE_NAME = 'fallback-v2-cache-v73';
+const CACHE_NAME = 'fallback-v2-cache-v77';
 
 const STATIC_ASSETS = [
   './',
@@ -100,16 +100,11 @@ self.addEventListener('fetch', event => {
   // Skip non-GET requests
   if (request.method !== 'GET') return;
   
-  // Skip Firebase/Firestore API calls (these need to be fresh)
-  if (url.hostname.includes('firestore.googleapis.com') ||
-      url.hostname.includes('firebase') ||
-      url.hostname.includes('identitytoolkit')) {
-    return;
-  }
-  
-  // Skip external API calls (geocoding, routing)
-  if (url.hostname.includes('geocod.io') ||
-      url.hostname.includes('openrouteservice.org')) {
+  // Skip ALL cross-origin requests.
+  // The service worker should only intercept and cache requests for our own app assets.
+  // This prevents it from swallowing Firebase, RIDB, Overpass, and OpenTripMap requests
+  // which causes mysterious (failed) fetch errors in the Network tab.
+  if (url.origin !== location.origin) {
     return;
   }
   
