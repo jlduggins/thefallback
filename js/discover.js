@@ -174,7 +174,7 @@ const Discover = {
       const keep = [this.MANUAL_ANCHOR_KEY];
       for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
-        if (k && k.startsWith('fb-disc-')) {
+        if (k && k.startsWith('fb-disc-') && !keep.includes(k)) {
           drop.push(k);
         }
       }
@@ -896,7 +896,7 @@ const Discover = {
         // Final bounds check: only include if the facility is within the
         // search viewport (important for RecArea children that may be
         // hundreds of miles away from the map center).
-        const distMi = this._haversine(s.lat, s.lng, lat, lng) / 1609;
+        const distMi = this._haversine(s.lat, s.lng, lat, lng);
         if (distMi > radiusMi * 1.5) continue;
 
         results.push({
