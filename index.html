@@ -92,6 +92,13 @@
         </button>
       </div>
 
+      <!-- Re-open button: shown (fixed, at map left edge) whenever the side
+           drawer is collapsed via UI.toggleSideDrawer(). Lives outside all
+           panels so it is never clipped by overflow:hidden ancestors. -->
+      <button id="panel-reopen-btn" class="panel-reopen-btn desktop-only" onclick="UI.toggleSideDrawer()" aria-label="Reopen panel">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
+
       <!-- Floating map controls (bottom-right tray) — relocated per-view by ui.js -->
       <div id="map-controls" class="map-controls-global">
         <button class="map-control-btn" onclick="MapModule.zoomIn()" title="Zoom in">

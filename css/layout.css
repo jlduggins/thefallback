@@ -559,13 +559,51 @@ body.sidebar-collapsed .drawer-collapse-btn svg {
 /* Also apply collapse logic to modal-discover if open */
 body.sidebar-collapsed .discover-list-panel {
   transform: translateX(-100%);
+  position: absolute;   /* take out of flex flow so the map fills the vacated space */
+  height: 100%;
+  z-index: 20;
   pointer-events: none;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
+/* The in-panel collapse button is clipped by disc-hero's overflow:hidden when
+   translated, so we suppress it and rely on the dedicated #panel-reopen-btn. */
 body.sidebar-collapsed .discover-list-panel .drawer-collapse-btn {
-  transform: translateX(calc(100% + 340px));
-  pointer-events: auto;
+  display: none;
+}
+
+/* Dedicated re-open chevron — lives outside any clipping ancestor, positioned
+   fixed at the left edge of the map area so it's always reachable. Shown
+   whenever sidebar-collapsed is active (covers both explore-left and discover
+   panel collapse). Hidden on mobile (drawer uses snap, not this toggle). */
+.panel-reopen-btn {
+  display: none;
+  position: fixed;
+  left: calc(var(--sidebar-width) + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
   background: var(--color-surface);
-  box-shadow: 2px 0 8px rgba(0,0,0,0.12);
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  z-index: 600;
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.15);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.panel-reopen-btn:hover {
+  background: var(--color-surface-alt);
+  color: var(--color-primary);
+}
+.panel-reopen-btn svg {
+  width: 16px;
+  height: 16px;
+}
+body.sidebar-collapsed .panel-reopen-btn {
+  display: flex;
 }
 
 @media (max-width: 767px) {
