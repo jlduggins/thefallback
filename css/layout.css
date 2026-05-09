@@ -511,58 +511,15 @@
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* ── Pill-tab resize handle for Explore and Discover panels ────────────────
-   A zero-width flex sibling that carries an absolutely-positioned pill
-   protruding into the map area. Because the tab is a sibling (not a child)
-   of the panel, it is never clipped by the panel's overflow:hidden/auto.
-   Desktop only — mobile uses the drawer-snap system instead. */
-.explore-resize-tab {
-  width: 0;
-  flex-shrink: 0;
-  position: relative;
-  overflow: visible;
-  z-index: 50;
-}
-
-.ert-pill {
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 16px;
-  height: 48px;
-  background: var(--color-surface);
-  border-radius: 0 10px 10px 0;
-  box-shadow: 2px 2px 8px rgba(0, 0, 0, 0.13);
-  cursor: col-resize;
-  transition: background var(--transition-fast), box-shadow var(--transition-fast);
-}
-.ert-pill::before {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  width: 2px;
-  height: 22px;
-  background: var(--color-text-muted);
-  border-radius: 1px;
-  opacity: 0.45;
-}
-.explore-resize-tab.dragging .ert-pill,
-.ert-pill:hover {
-  background: var(--color-surface-alt);
-  box-shadow: 3px 2px 12px rgba(0, 0, 0, 0.2);
-}
-
-/* Discover tab hidden until the discover panel is open */
-.explore-resize-tab[data-panel="modal-discover"] { display: none; }
-body.discover-list-open .explore-resize-tab[data-panel="modal-discover"] { display: block; }
-/* Explore tab hidden while discover panel is taking its place */
-body.discover-list-open .explore-resize-tab[data-panel="explore-left"] { display: none; }
+/* Discover resize handle hidden until the discover panel is open;
+   Explore resize handle hidden while discover takes its place. */
+.resize-handle[data-resize="modal-discover"] { display: none; }
+body.discover-list-open .resize-handle[data-resize="modal-discover"] { display: block; }
+body.discover-list-open .resize-handle[data-resize="explore-left"]   { display: none; }
 
 @media (max-width: 767px) {
-  .explore-resize-tab { display: none !important; }
+  .resize-handle[data-resize="explore-left"],
+  .resize-handle[data-resize="modal-discover"] { display: none !important; }
 }
 
 @media (max-width: 767px) {

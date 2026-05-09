@@ -2228,7 +2228,13 @@ const Discover = {
     this._searchQuery = '';          // clear search on new category open
     this._modalOpen = true;
     const panel = document.getElementById('modal-discover');
-    if (panel) panel.style.display = 'flex';
+    if (panel) {
+      panel.style.display = 'flex';
+      // Reset any inline width set by the resize handle so the panel reopens at its CSS default.
+      panel.style.width = '';
+      panel.style.minWidth = '';
+      panel.style.maxWidth = '';
+    }
     document.body.classList.add('discover-list-open');
     // Render the panel scaffolding once before the fetch so the user sees
     // the loading state instead of an empty list.

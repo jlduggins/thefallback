@@ -148,7 +148,7 @@
       <!-- ═══ EXPLORE VIEW ═══ -->
       <section id="view-explore" class="view">
         <!-- Left column: brand, summary, nearby list -->
-        <div class="explore-left">
+        <div id="explore-left" class="explore-left">
           <header class="explore-brand">
             <img src="./icons/logo.png" alt="" class="brand-logo">
             <div class="brand-text"><span class="the">The</span> <span class="fallback">Fallback</span></div>
@@ -199,8 +199,7 @@
 
           </div><!-- /.explore-content-scroll -->
         </div>
-        <!-- Pill-tab resize handle for the Explore left panel (desktop only) -->
-        <div class="explore-resize-tab" data-panel="explore-left"><div class="ert-pill"></div></div>
+        <div class="resize-handle" data-resize="explore-left"></div>
 
         <!-- Discover list panel — slides in covering .explore-left when a tile is tapped.
              Map stays fully visible and interactive to the right.
@@ -269,8 +268,7 @@
           </div>
 
         </aside>
-        <!-- Pill-tab resize handle for the Discover panel (desktop only, shown when discover is open) -->
-        <div class="explore-resize-tab" data-panel="modal-discover"><div class="ert-pill"></div></div>
+        <div class="resize-handle" data-resize="modal-discover"></div>
 
         <!-- Discover POI detail panel — third flex column when a Discover card is tapped -->
         <aside id="discover-detail-panel" class="explore-backup-panel" style="display:none">
