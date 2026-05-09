@@ -36,6 +36,9 @@ const UI = {
     document.addEventListener('keydown', e => {
       if (e.key === 'Escape') this.closeAllModals();
     });
+
+    // Pill-tab resize handles for Explore and Discover panels
+    this.initExplorePanelResize();
   },
   
   // ═══════════════════════════════════════════════════════════════════════════
@@ -345,6 +348,63 @@ const UI = {
   // HELPERS
   // ═══════════════════════════════════════════════════════════════════════════
   
+  // ═══════════════════════════════════════════════════════════════════════════
+  // EXPLORE / DISCOVER PANEL RESIZE (pill-tab drag handle, desktop only)
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  initExplorePanelResize() {
+    const MAX_W = 520;
+    const SNAP_CLOSED_PX = 60; // release below this → snap to 0
+
+    document.querySelectorAll('.explore-resize-tab[data-panel]').forEach(handle => {
+      const pill = handle.querySelector('.ert-pill');
+      if (!pill) return;
+      const panelId = handle.dataset.panel;
+
+      const getPanel = () => panelId === 'explore-left'
+        ? document.querySelector('#view-explore .explore-left')
+        : document.getElementById(panelId);
+
+      let startX, startW;
+
+      const onMove = e => {
+        const panel = getPanel();
+        if (!panel) return;
+        const w = Math.max(0, Math.min(MAX_W, startW + (e.clientX - startX)));
+        panel.style.width    = w + 'px';
+        panel.style.minWidth = w + 'px';
+        panel.style.maxWidth = w + 'px';
+        if (window.MapModule?.map) MapModule.map.invalidateSize();
+      };
+
+      const onUp = () => {
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup', onUp);
+        handle.classList.remove('dragging');
+        const panel = getPanel();
+        if (panel) {
+          if (panel.offsetWidth < SNAP_CLOSED_PX) {
+            panel.style.width    = '0px';
+            panel.style.minWidth = '0px';
+            panel.style.maxWidth = '0px';
+          }
+          if (window.MapModule?.map) MapModule.map.invalidateSize();
+        }
+      };
+
+      pill.addEventListener('mousedown', e => {
+        const panel = getPanel();
+        if (!panel) return;
+        startX = e.clientX;
+        startW = panel.offsetWidth;
+        handle.classList.add('dragging');
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+        e.preventDefault();
+      });
+    });
+  },
+
   toggleSideDrawer() {
     const isCollapsing = !document.body.classList.contains('sidebar-collapsed');
     document.body.classList.toggle('sidebar-collapsed');

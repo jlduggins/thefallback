@@ -511,99 +511,58 @@
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.drawer-collapse-btn {
+/* ── Pill-tab resize handle for Explore and Discover panels ────────────────
+   A zero-width flex sibling that carries an absolutely-positioned pill
+   protruding into the map area. Because the tab is a sibling (not a child)
+   of the panel, it is never clipped by the panel's overflow:hidden/auto.
+   Desktop only — mobile uses the drawer-snap system instead. */
+.explore-resize-tab {
+  width: 0;
+  flex-shrink: 0;
+  position: relative;
+  overflow: visible;
+  z-index: 50;
+}
+
+.ert-pill {
   position: absolute;
-  top: 16px;
-  right: 16px;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: 50%;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  z-index: 10;
-  transition: all 0.2s ease;
-}
-.drawer-collapse-btn:hover {
-  color: var(--color-primary);
-  background: var(--color-surface-alt);
-}
-.drawer-collapse-btn svg {
-  width: 16px;
-  height: 16px;
-  transition: transform 0.3s ease;
-}
-
-body.sidebar-collapsed .explore-left {
-  transform: translateX(-100%);
-  position: absolute;
-  height: 100%;
-  z-index: 20;
-  pointer-events: none;
-}
-/* Keep the collapse button clickable even when the panel is hidden */
-body.sidebar-collapsed .explore-left .drawer-collapse-btn {
-  transform: translateX(calc(100% + 340px));
-  pointer-events: auto;
-  background: var(--color-surface);
-  box-shadow: 2px 0 8px rgba(0,0,0,0.12);
-}
-body.sidebar-collapsed .drawer-collapse-btn svg {
-  transform: rotate(180deg);
-}
-
-/* Also apply collapse logic to modal-discover if open */
-body.sidebar-collapsed .discover-list-panel {
-  transform: translateX(-100%);
-  position: absolute;   /* take out of flex flow so the map fills the vacated space */
-  height: 100%;
-  z-index: 20;
-  pointer-events: none;
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-/* The in-panel collapse button is clipped by disc-hero's overflow:hidden when
-   translated, so we suppress it and rely on the dedicated #panel-reopen-btn. */
-body.sidebar-collapsed .discover-list-panel .drawer-collapse-btn {
-  display: none;
-}
-
-/* Dedicated re-open chevron — lives outside any clipping ancestor, positioned
-   fixed at the left edge of the map area so it's always reachable. Shown
-   whenever sidebar-collapsed is active (covers both explore-left and discover
-   panel collapse). Hidden on mobile (drawer uses snap, not this toggle). */
-.panel-reopen-btn {
-  display: none;
-  position: fixed;
-  left: calc(var(--sidebar-width) + 8px);
+  left: 0;
   top: 50%;
   transform: translateY(-50%);
-  width: 32px;
-  height: 32px;
-  align-items: center;
-  justify-content: center;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: 50%;
-  color: var(--color-text-muted);
-  cursor: pointer;
-  z-index: 600;
-  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.15);
-  transition: background 0.15s ease, color 0.15s ease;
-}
-.panel-reopen-btn:hover {
-  background: var(--color-surface-alt);
-  color: var(--color-primary);
-}
-.panel-reopen-btn svg {
   width: 16px;
-  height: 16px;
+  height: 48px;
+  background: var(--color-surface);
+  border-radius: 0 10px 10px 0;
+  box-shadow: 2px 2px 8px rgba(0, 0, 0, 0.13);
+  cursor: col-resize;
+  transition: background var(--transition-fast), box-shadow var(--transition-fast);
 }
-body.sidebar-collapsed .panel-reopen-btn {
-  display: flex;
+.ert-pill::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 2px;
+  height: 22px;
+  background: var(--color-text-muted);
+  border-radius: 1px;
+  opacity: 0.45;
+}
+.explore-resize-tab.dragging .ert-pill,
+.ert-pill:hover {
+  background: var(--color-surface-alt);
+  box-shadow: 3px 2px 12px rgba(0, 0, 0, 0.2);
+}
+
+/* Discover tab hidden until the discover panel is open */
+.explore-resize-tab[data-panel="modal-discover"] { display: none; }
+body.discover-list-open .explore-resize-tab[data-panel="modal-discover"] { display: block; }
+/* Explore tab hidden while discover panel is taking its place */
+body.discover-list-open .explore-resize-tab[data-panel="explore-left"] { display: none; }
+
+@media (max-width: 767px) {
+  .explore-resize-tab { display: none !important; }
 }
 
 @media (max-width: 767px) {

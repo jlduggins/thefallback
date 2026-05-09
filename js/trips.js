@@ -74,8 +74,9 @@ const Trips = {
         startX = e.clientX;
         startWidth = panel.offsetWidth;
         handle.classList.add('dragging');
+        const SNAP_CLOSED_PX = 60;
         const onMove = e => {
-          const w = Math.max(220, Math.min(520, startWidth + (e.clientX - startX)));
+          const w = Math.max(0, Math.min(520, startWidth + (e.clientX - startX)));
           panel.style.width = w + 'px';
           panel.style.minWidth = w + 'px';
           if (MapModule.map) MapModule.map.invalidateSize();
@@ -84,6 +85,10 @@ const Trips = {
           handle.classList.remove('dragging');
           document.removeEventListener('mousemove', onMove);
           document.removeEventListener('mouseup', onUp);
+          if (panel.offsetWidth < SNAP_CLOSED_PX) {
+            panel.style.width = '0px';
+            panel.style.minWidth = '0px';
+          }
           if (MapModule.map) MapModule.map.invalidateSize();
         };
         document.addEventListener('mousemove', onMove);
