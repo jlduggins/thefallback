@@ -74,7 +74,7 @@ const Trips = {
         startX = e.clientX;
         startWidth = panel.offsetWidth;
         handle.classList.add('dragging');
-        const SNAP_CLOSED_PX = 60;
+        const SNAP_CLOSED_PX = 160;
         const onMove = e => {
           const w = Math.max(0, Math.min(520, startWidth + (e.clientX - startX)));
           panel.style.width = w + 'px';

@@ -2375,7 +2375,7 @@ body.add-location-drawer-open .leaflet-popup-pane { display: none !important; }
 .discover-list-panel {
   width: 380px;
   max-width: 40vw;
-  min-width: 320px;
+  min-width: 0;
   flex-shrink: 0;
   background: #fff;
   display: flex;

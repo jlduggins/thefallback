@@ -498,7 +498,7 @@
 .explore-left {
   width: 380px;
   max-width: 40vw;
-  min-width: 320px;
+  min-width: 0;
   flex-shrink: 0;
   background: var(--color-base);
   display: flex;
