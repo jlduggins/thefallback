@@ -497,7 +497,7 @@
 
 .explore-left {
   width: 380px;
-  max-width: 40vw;
+  max-width: 500px;
   min-width: 0;
   flex-shrink: 0;
   background: var(--color-base);
