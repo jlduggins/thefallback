@@ -728,8 +728,14 @@ const Trips = {
 
   async reorderLegs(journeyId,fromIdx,toIdx) {
     const j=State.getJourney(journeyId); if(!j?.legs)return;
+    // Capture scroll BEFORE re-render so the user isn't jumped to the top of the list
+    // after dragging a leg near the bottom (same fix as refreshAllRoutes).
+    const scrollEl=document.querySelector('.journey-detail-scroll');
+    const savedScroll=scrollEl?scrollEl.scrollTop:0;
     const legs=[...j.legs]; const[moved]=legs.splice(fromIdx,1); legs.splice(toIdx,0,moved);
     await Firebase.saveJourney({...j,legs}); this.openJourneyDetail(journeyId);
+    const restore=()=>{const el=document.querySelector('.journey-detail-scroll');if(el)el.scrollTop=savedScroll;};
+    requestAnimationFrame(()=>{restore();requestAnimationFrame(restore);setTimeout(restore,80);});
   },
 
   // ─── Leg Modal ────────────────────────────────────────────────────────────
