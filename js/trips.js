@@ -74,7 +74,7 @@ const Trips = {
         startX = e.clientX;
         startWidth = panel.offsetWidth;
         handle.classList.add('dragging');
-        const SNAP_CLOSED_PX = 60;
+        const SNAP_CLOSED_PX = 160;
         const onMove = e => {
           const w = Math.max(0, Math.min(520, startWidth + (e.clientX - startX)));
           panel.style.width = w + 'px';
@@ -492,13 +492,27 @@ const Trips = {
             <div class="leg-stop-dates">${atStart?'📍 Currently here':'Starting point'}</div>
             <div class="leg-drive-info">🚐 ${legs[0].distance||'--'} mi · ${legs[0].duration?Math.floor(legs[0].duration/60)+'h '+Math.round(legs[0].duration%60)+'m':'--'} · $${Math.round(this._legFuel(legs[0]))} fuel</div>
           </div>`:''}
+        <div class="leg-list">
         ${legs.map((l,i)=>{
           const isPast=l.departDate&&l.departDate<today;
           const isCurrent=i===curIdx;
           const entry=State.getEntry(l.destId);
           const nights=l.arriveDate&&l.departDate?Math.max(0,Math.round((new Date(l.departDate)-new Date(l.arriveDate))/86400000)):0;
           let lc=entry?(entry.cost||0)*nights:0; if(entry?.discountPercent&&entry?.discountType)lc=lc*(1-entry.discountPercent/100);
-          const nextLegFuel = i<legs.length-1 ? Math.round(this._legFuel(legs[i+1])) : 0;
+          // Stale detection: leg's `from*` should match the previous leg's destination (or the journey's
+          // configured starting point for leg 0). Reordering legs leaves these mismatched until the user
+          // clicks the Recalculate routes badge (which calls refreshAllRoutes).
+          const nextLeg = i<legs.length-1 ? legs[i+1] : null;
+          let nextLegStale = false;
+          if (nextLeg) {
+            const expLat = l.destLat, expLng = l.destLng;
+            if (nextLeg.fromLat == null || nextLeg.fromLng == null
+                || Math.abs(nextLeg.fromLat - expLat) > 1e-4
+                || Math.abs(nextLeg.fromLng - expLng) > 1e-4) {
+              nextLegStale = true;
+            }
+          }
+          const nextLegFuel = nextLeg ? Math.round(this._legFuel(nextLeg)) : 0;
           return `<div class="leg-swipe-row" data-journey-id="${journey.id}" data-leg-index="${i}">
             <button class="leg-swipe-edit" onclick="event.stopPropagation();Trips.editLeg('${journey.id}',${i})" aria-label="Edit leg">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
@@ -510,7 +524,7 @@ const Trips = {
             </button>
             <div class="leg-item leg-stop" data-leg-index="${i}" style="${isPast?'opacity:0.5':''}${isCurrent?'background:var(--color-primary-muted);border-radius:var(--radius-md);':''}">
               ${i<legs.length-1?`<div class="leg-stop-line" style="${isPast?'opacity:0.2':''}"></div>`:''}
-              <div class="drag-handle">⋮⋮</div>
+              <div class="drag-handle" title="Drag to reorder">⋮⋮</div>
               <div class="leg-stop-dot${isCurrent?' here':''}"></div>
               <div class="leg-stop-actions">
                 ${lc>0?`<div class="leg-stop-cost">$${Math.round(lc)}</div>`:`<div class="leg-stop-cost free">Free</div>`}
@@ -523,10 +537,11 @@ const Trips = {
               ${isCurrent?`<div class="leg-stop-here">📍 Currently here</div>`:''}
               <div class="leg-stop-dates">${l.arriveDate?new Date(l.arriveDate+'T12:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}):''} ${l.departDate?' – '+new Date(l.departDate+'T12:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}):''} ${nights>0?' · '+nights+' night'+(nights>1?'s':''):''}</div>
               ${l.notes?`<div style="font-size:11px;color:var(--color-text-muted);margin-top:2px;font-style:italic">${this.esc(l.notes)}</div>`:''}
-              ${i<legs.length-1?`<div class="leg-drive-info">🚐 ${legs[i+1].distance||'--'} mi · ${legs[i+1].duration?Math.floor(legs[i+1].duration/60)+'h '+Math.round(legs[i+1].duration%60)+'m':'--'} · $${nextLegFuel} fuel</div>`:''}
+              ${nextLeg?`<div class="leg-drive-info${nextLegStale?' stale':''}">🚐 ${nextLeg.distance||'--'} mi · ${nextLeg.duration?Math.floor(nextLeg.duration/60)+'h '+Math.round(nextLeg.duration%60)+'m':'--'} · $${nextLegFuel} fuel${nextLegStale?` <span class="stale-badge" onclick="event.stopPropagation();Trips.refreshAllRoutes('${journey.id}')">Recalculate routes</span>`:''}</div>`:''}
             </div>
           </div>`;
         }).join('')}
+        </div>
       </div>
       <div class="detail-panel-footer">
         <button class="add-stop-btn" onclick="Trips.openAddLegModal('${journey.id}')">+ Add next destination</button>
@@ -691,16 +706,23 @@ const Trips = {
   // ─── Leg drag/drop ────────────────────────────────────────────────────────
 
   setupLegDragDrop(journeyId) {
-    if (window.matchMedia('(max-width: 767px)').matches) return; // drag-drop is desktop-only
-    const items = document.querySelectorAll('.leg-item');
-    let dragged = null;
-    items.forEach(item => {
-      item.setAttribute('draggable', 'true');
-      item.addEventListener('dragstart', e => { dragged=item; item.style.opacity='0.5'; e.dataTransfer.effectAllowed='move'; });
-      item.addEventListener('dragend', () => { item.style.opacity=''; dragged=null; items.forEach(i=>i.style.background=''); });
-      item.addEventListener('dragover', e => { e.preventDefault(); if(item!==dragged) item.style.background='var(--color-primary-muted)'; });
-      item.addEventListener('dragleave', () => { item.style.background=''; });
-      item.addEventListener('drop', async e => { e.preventDefault(); item.style.background=''; if(!dragged||item===dragged)return; await this.reorderLegs(journeyId,parseInt(dragged.dataset.legIndex),parseInt(item.dataset.legIndex)); });
+    const list = document.querySelector('.leg-list');
+    if (!list || !window.Sortable) return;
+    // Re-render replaces the DOM each time; tear down any prior instance to be safe.
+    if (list._sortable) { try { list._sortable.destroy(); } catch (e) { /* ignore */ } }
+    list._sortable = Sortable.create(list, {
+      handle: '.drag-handle',
+      animation: 180,
+      ghostClass: 'leg-sort-ghost',
+      chosenClass: 'leg-sort-chosen',
+      dragClass: 'leg-sort-drag',
+      delay: 150,                 // long-press delay so a tap doesn't start drag on touch devices
+      delayOnTouchOnly: true,     // mouse drag is instant; touch waits 150ms
+      touchStartThreshold: 5,
+      onEnd: (evt) => {
+        if (evt.oldIndex === evt.newIndex) return;
+        this.reorderLegs(journeyId, evt.oldIndex, evt.newIndex);
+      }
     });
   },
 

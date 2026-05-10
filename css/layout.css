@@ -1874,13 +1874,60 @@ body[data-view="login"] .map-layers-panel { display: none !important; }
 
 .drag-handle {
   position: absolute;
-  left: 2px;
-  top: 2px;
-  font-size: 10px;
+  left: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 16px;
+  line-height: 1;
+  padding: 4px 6px;
   color: var(--color-text-muted);
   cursor: grab;
-  line-height: 1;
+  opacity: 0;
+  transition: opacity 150ms ease;
+  user-select: none;
+  touch-action: none;
+  z-index: 2;
 }
+.drag-handle:active { cursor: grabbing; }
+.leg-item:hover .drag-handle,
+.leg-item.leg-sort-chosen .drag-handle { opacity: 1; }
+
+@media (max-width: 767px) {
+  /* No hover state on touch devices — keep the handle visible so reorder is discoverable */
+  .drag-handle { opacity: 0.6; }
+}
+
+/* Sortable.js drag visuals */
+.leg-item.leg-sort-ghost {
+  opacity: 0.35;
+  background: var(--color-primary-muted);
+  border-radius: var(--radius-md);
+}
+.leg-item.leg-sort-chosen {
+  background: var(--color-surface);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.14);
+  border-radius: var(--radius-md);
+}
+.leg-item.leg-sort-drag { cursor: grabbing; }
+
+/* Stale-route nudge after reorder */
+.leg-drive-info.stale {
+  font-style: italic;
+  color: var(--color-text-muted);
+}
+.stale-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--color-warning);
+  background: var(--color-warning-light);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.stale-badge:hover { filter: brightness(0.95); }
 
 .leg-stop-name {
   font-size: 13px;
