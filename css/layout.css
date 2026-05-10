@@ -505,8 +505,6 @@
   flex-direction: column;
   overflow-y: auto;          /* whole column scrolls */
   -webkit-overflow-scrolling: touch;
-  padding: var(--space-5) var(--space-4);
-  gap: var(--space-4);
   position: relative;
   transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -537,6 +535,7 @@ body.discover-list-open .resize-handle[data-resize="explore-left"]   { display: 
   flex-direction: column;
   gap: var(--space-4);
   min-width: 0;
+  padding: var(--space-4) var(--space-4) var(--space-5);
 }
 
 /* Sections size to their own content (no forced 50/50 split). When the
@@ -776,7 +775,10 @@ body.discover-list-open .resize-handle[data-resize="explore-left"]   { display: 
   display: flex;
   align-items: center;
   gap: var(--space-3);
-  padding: 0 var(--space-1);
+  padding: var(--space-5) calc(var(--space-4) + var(--space-1)) 0;
+  min-width: 0;
+  flex-shrink: 0;
+  overflow: hidden;
 }
 .explore-brand .brand-logo {
   height: 40px;
