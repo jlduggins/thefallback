@@ -84,7 +84,30 @@ const MapModule = {
     
     // Map events
     this.map.on('click', e => this.handleMapClick(e));
-    
+
+    // Trackpad pinch-to-zoom on Safari (and some macOS Chrome configurations)
+    // arrives as non-standard GestureEvents, which Leaflet does not handle.
+    // Translate the gesture's `scale` factor into a zoom delta so pinch feels
+    // smooth instead of doing nothing. Browsers that don't fire these events
+    // (Firefox, most Chrome) ignore these listeners and continue using the
+    // wheel-zoom path tuned by wheelPxPerZoomLevel above.
+    const mapEl = this.map.getContainer();
+    let _gestureStartZoom = null;
+    mapEl.addEventListener('gesturestart', e => {
+      e.preventDefault();
+      _gestureStartZoom = this.map.getZoom();
+    });
+    mapEl.addEventListener('gesturechange', e => {
+      e.preventDefault();
+      if (_gestureStartZoom == null) return;
+      const z = _gestureStartZoom + Math.log2(e.scale);
+      this.map.setZoom(Math.max(this.map.getMinZoom(), Math.min(this.map.getMaxZoom(), z)));
+    });
+    mapEl.addEventListener('gestureend', e => {
+      e.preventDefault();
+      _gestureStartZoom = null;
+    });
+
     State.mapReady = true;
     State.emit('map:ready');
   },
