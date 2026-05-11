@@ -35,19 +35,16 @@ const MapModule = {
       return;
     }
     
-    // Create map
+    // Create map. scrollWheelZoom is disabled here because we replace it with
+    // a custom wheel + gesture handler below — Leaflet's built-in smoothing
+    // collapses tiny trackpad-pinch deltas (deltaY 1-10) to imperceptible
+    // zoom changes regardless of wheelPxPerZoomLevel.
     this.map = L.map(containerId, {
       center: [39.5, -98.35],
       zoom: 4,
       zoomControl: false,
       attributionControl: true,
-      // Smoother trackpad pinch-to-zoom on desktop. Default 60 makes a single
-      // pinch gesture barely move; 20 is enough delta per gesture to feel
-      // responsive without overshooting. zoomSnap:0 enables fractional zoom
-      // levels so the wheel feels continuous instead of stepped.
-      // Touch pinch on mobile uses a separate code path (touchZoom) and is
-      // unaffected by either option.
-      wheelPxPerZoomLevel: 20,
+      scrollWheelZoom: false,
       zoomSnap: 0
     });
     
@@ -85,27 +82,47 @@ const MapModule = {
     // Map events
     this.map.on('click', e => this.handleMapClick(e));
 
-    // Trackpad pinch-to-zoom on Safari (and some macOS Chrome configurations)
-    // arrives as non-standard GestureEvents, which Leaflet does not handle.
-    // Translate the gesture's `scale` factor into a zoom delta so pinch feels
-    // smooth instead of doing nothing. Browsers that don't fire these events
-    // (Firefox, most Chrome) ignore these listeners and continue using the
-    // wheel-zoom path tuned by wheelPxPerZoomLevel above.
+    // ── Custom wheel + gesture zoom (replaces Leaflet's scrollWheelZoom) ────
+    // Leaflet's wheel handler runs deltaY through an easing function whose
+    // output for tiny trackpad-pinch deltas (1-10) collapses to ~0. We map
+    // deltaY to zoom linearly with separate sensitivity for pinch vs mouse
+    // wheel, animate:false for instant response, and zoom toward the cursor
+    // so the user keeps their reference point. Mobile touch pinch uses
+    // Leaflet's touchZoom (still enabled, separate code path).
     const mapEl = this.map.getContainer();
-    let _gestureStartZoom = null;
+    const clampZoom = z => Math.max(this.map.getMinZoom(), Math.min(this.map.getMaxZoom(), z));
+    const cursorLatLng = e => {
+      const r = mapEl.getBoundingClientRect();
+      return this.map.containerPointToLatLng([e.clientX - r.left, e.clientY - r.top]);
+    };
+
+    mapEl.addEventListener('wheel', e => {
+      e.preventDefault();
+      // Trackpad pinch on macOS Chrome arrives as Ctrl+wheel with deltaY
+      // values of ~1-10 per event. A regular mouse-wheel detent is usually
+      // ~100. Different sensitivity per source so each feels natural.
+      const factor = e.ctrlKey ? -0.02 : -0.005;
+      const dz = e.deltaY * factor;
+      if (Math.abs(dz) < 1e-3) return;
+      this.map.setZoomAround(cursorLatLng(e), clampZoom(this.map.getZoom() + dz), { animate: false });
+    }, { passive: false });
+
+    // Safari trackpad pinch arrives as non-standard GestureEvents. Other
+    // browsers don't fire these and ignore the listeners.
+    let _gZoom = null;
     mapEl.addEventListener('gesturestart', e => {
       e.preventDefault();
-      _gestureStartZoom = this.map.getZoom();
+      _gZoom = this.map.getZoom();
     });
     mapEl.addEventListener('gesturechange', e => {
       e.preventDefault();
-      if (_gestureStartZoom == null) return;
-      const z = _gestureStartZoom + Math.log2(e.scale);
-      this.map.setZoom(Math.max(this.map.getMinZoom(), Math.min(this.map.getMaxZoom(), z)));
+      if (_gZoom == null) return;
+      const target = cursorLatLng(e);
+      this.map.setZoomAround(target, clampZoom(_gZoom + Math.log2(e.scale)), { animate: false });
     });
     mapEl.addEventListener('gestureend', e => {
       e.preventDefault();
-      _gestureStartZoom = null;
+      _gZoom = null;
     });
 
     State.mapReady = true;
