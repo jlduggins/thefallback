@@ -41,14 +41,19 @@ const MapModule = {
       zoom: 4,
       zoomControl: false,
       attributionControl: true,
-      zoomSnap: 0.1,
-      zoomDelta: 0.5,
-      wheelPxPerZoomLevel: 100
+      // Smoother trackpad pinch-to-zoom on desktop. Default 60 makes a single
+      // pinch gesture barely move; 20 is enough delta per gesture to feel
+      // responsive without overshooting. zoomSnap:0 enables fractional zoom
+      // levels so the wheel feels continuous instead of stepped.
+      // Touch pinch on mobile uses a separate code path (touchZoom) and is
+      // unaffected by either option.
+      wheelPxPerZoomLevel: 20,
+      zoomSnap: 0
     });
     
     // Street layer (default)
-    this.streetLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
+    this.streetLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
       maxZoom: 19
     }).addTo(this.map);
     
