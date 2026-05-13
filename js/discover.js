@@ -62,9 +62,11 @@ const Discover = {
       '["tourism"="viewpoint"]["name"]',
       '["sport"="climbing"]["name"]',
       // High Signal: Attractions
-      '["tourism"="attraction"]["sport"="hiking"]',
-      // Medium Signal: Protected Areas
-      '["boundary"="protected_area"]["name"]'
+      '["tourism"="attraction"]["sport"="hiking"]'
+      // Note: ["boundary"="protected_area"]["name"] previously here. Dropped because
+      // its huge polygons fan queries across enormous geometries and time out the
+      // server. RIDB covers federal protected lands far better; the hiking-relevance
+      // ranking only awards +2 for the tag anyway, so the loss is minimal.
     ]
   },
 
@@ -731,27 +733,39 @@ const Discover = {
     }
     
     // For Camping and Hiking, merge Overpass (OSM) results with RIDB (Federal) data.
+    // Uses Promise.allSettled so a failure in one source does NOT discard the other —
+    // previously Promise.all was killing successful RIDB results whenever the slow
+    // Overpass hiking query timed out (the common case in the U.S.), leaving the
+    // user with an empty error state.
     if (this.category === 'camping' || this.category === 'hiking') {
-      const ridbP = this._fetchRIDB(anchor);
-      const osmP = this._fetchOverpass(anchor);
-      const [ridb, osm] = await Promise.all([ridbP, osmP]);
-      
-      // Combine and deduplicate by name + approximate location
+      const [ridbR, osmR] = await Promise.allSettled([
+        this._fetchRIDB(anchor),
+        this._fetchOverpass(anchor)
+      ]);
+      const ridb = ridbR.status === 'fulfilled' ? (ridbR.value || []) : [];
+      const osm  = osmR.status  === 'fulfilled' ? (osmR.value  || []) : [];
+
+      // Both sources failed → bubble up a busy error so the existing error UI fires.
+      if (ridbR.status === 'rejected' && osmR.status === 'rejected') {
+        const err = ridbR.reason || osmR.reason || new Error('All discovery sources unavailable');
+        if (!err.type) err.type = 'busy';
+        throw err;
+      }
+
+      // At least one source returned something (or returned an empty array, which is
+      // still a "no results" success rather than a failure). Combine + dedupe + sort.
       const combined = [...osm, ...ridb];
       const seen = new Set();
       const final = [];
-      
       for (const p of combined) {
         // Build a deduping key: normalized name + truncated coords (~100m grid)
         const nameKey = (p.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
         const gridKey = `${p.lat.toFixed(3)},${p.lng.toFixed(3)}`;
         const key = `${nameKey}:${gridKey}`;
-        
         if (seen.has(key)) continue;
         seen.add(key);
         final.push(p);
       }
-      
       // Sort by distance (since both sets are already haversine-calculated)
       return final.sort((a, b) => a.distance - b.distance);
     }
@@ -1032,15 +1046,11 @@ const Discover = {
         body += `${prefix}${filter}${suffix};\n`;
       }
     }
-    // Tighter server-side cap for hiking — broader selectors mean a wider
-    // potential payload, but we only ever render up to MAX_RESULTS=30 after
-    // ranking, so 80 leaves plenty of headroom for the relevance filter
-    // without dragging the wire.
-    // Hiking has 7 broad selectors fanning across the served disc — an 80
-    // cap was getting truncated by Overpass before useful trail relations
-    // returned. 200 leaves headroom for the relevance ranking to pick the
-    // top 30 without losing real trails to the wire cap.
-    const outCap = this.category === 'hiking' ? 500 : 250;
+    // Output cap. Final post-rank cap is MAX_RESULTS_HIKING = 30, so 200
+    // is ample headroom for the relevance filter while shrinking the wire
+    // payload (was 500 — half the responses got truncated server-side
+    // anyway when the query was timing out).
+    const outCap = this.category === 'hiking' ? 200 : 250;
     body += `);\nout center tags ${outCap};`;
 
     this._dbgH('Overpass body', { selectors: tagSelectors.length, samples: samples.length, radiusM: anchor.radiusM, timeout, outCap, bodyLen: body.length, bodyPreview: body.slice(0, 600) });
@@ -1189,19 +1199,27 @@ const Discover = {
 
   // ── Overpass with mirror fallback + typed errors ───────────────────────
   // Tries each mirror in order. 429/504 → next mirror (rate-limited). Network
-  // errors → next mirror. If all mirrors fail, throws an error tagged with
-  // .type so render() can show appropriate UI ('busy' vs 'network').
+  // errors → next mirror. Each mirror is also wrapped in a 15s client-side
+  // AbortController so a stuck mirror doesn't burn the whole budget — without
+  // it, three back-to-back server-side timeouts (38s each) total ~120s wall.
+  // If all mirrors fail, throws an error tagged with .type so render() can
+  // show appropriate UI ('busy' vs 'network').
+  OVERPASS_CLIENT_TIMEOUT_MS: 15000,
   async _overpassQuery(body) {
     let lastErr;
     for (const url of this.OVERPASS_MIRRORS) {
       const t0 = performance.now();
+      const ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+      const abortTimer = ctrl ? setTimeout(() => ctrl.abort(), this.OVERPASS_CLIENT_TIMEOUT_MS) : null;
       try {
         this._dbgH('mirror try', { url });
         const r = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: 'data=' + encodeURIComponent(body)
+          body: 'data=' + encodeURIComponent(body),
+          signal: ctrl ? ctrl.signal : undefined
         });
+        if (abortTimer) clearTimeout(abortTimer);
         const dt = Math.round(performance.now() - t0);
         this._dbgH('mirror response', { url, status: r.status, ok: r.ok, ms: dt });
         if (r.status === 429 || r.status === 504) {
@@ -1226,10 +1244,16 @@ const Discover = {
         this._dbgH('mirror success', { url, elementCount: data.elements.length, ms: dt });
         return data;
       } catch (e) {
+        if (abortTimer) clearTimeout(abortTimer);
         const dt = Math.round(performance.now() - t0);
-        this._dbgH('mirror threw', { url, err: e?.message, ms: dt });
-        lastErr = e;
-        if (!lastErr.type) lastErr.type = navigator.onLine ? 'network' : 'offline';
+        this._dbgH('mirror threw', { url, err: e?.message, name: e?.name, ms: dt });
+        // AbortError → treat as a busy timeout so the next mirror is tried.
+        if (e && e.name === 'AbortError') {
+          lastErr = Object.assign(new Error('Overpass aborted (client timeout) ' + url), { type: 'busy' });
+        } else {
+          lastErr = e;
+          if (!lastErr.type) lastErr.type = navigator.onLine ? 'network' : 'offline';
+        }
       }
     }
     this._dbgH('all mirrors failed', { lastErr: lastErr?.message, type: lastErr?.type });
