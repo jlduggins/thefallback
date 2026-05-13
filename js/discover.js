@@ -797,13 +797,18 @@ const Discover = {
     // Results from both prongs are deduped by FacilityID.
 
     try {
-      // ── Prong 1: Radius search (existing) ────────────────────────────
+      // ── Prong 1: Radius search ───────────────────────────────────────
       const radiusUrl = new URL(`${this.RIDB_BASE}/facilities`);
       radiusUrl.searchParams.set('latitude', s.lat.toFixed(5));
       radiusUrl.searchParams.set('longitude', s.lng.toFixed(5));
       radiusUrl.searchParams.set('radius', radiusMi.toFixed(1));
       radiusUrl.searchParams.set('full', 'true');
       radiusUrl.searchParams.set('limit', '50');
+      // Server-side activity filter — much higher hit rate than the
+      // client-side type/name/description match alone, especially in
+      // areas where Overpass is timing out and RIDB is the only source.
+      if (isHiking)         radiusUrl.searchParams.set('activity', 'HIKING');
+      else /* camping */    radiusUrl.searchParams.set('activity', 'CAMPING');
 
       console.log(`[Discover] RIDB radius search for ${isHiking ? 'Hiking' : 'Camping'}...`);
       console.log(`[Discover] RIDB URL: ${radiusUrl.toString()}`);
@@ -836,11 +841,15 @@ const Discover = {
           const recAreas = raData?.RECDATA || [];
           console.log(`[Discover] RIDB found ${recAreas.length} RecAreas nearby.`);
 
-          // For each RecArea, fetch its child facilities
+          // For each RecArea, fetch its child facilities (filtered by
+          // activity server-side so we get more relevant trailheads /
+          // campgrounds and fewer noise facilities like visitor centers).
           const childFetches = recAreas.map(async (ra) => {
             const childUrl = new URL(`${this.RIDB_BASE}/recareas/${ra.RecAreaID}/facilities`);
             childUrl.searchParams.set('full', 'true');
             childUrl.searchParams.set('limit', '50');
+            if (isHiking)      childUrl.searchParams.set('activity', 'HIKING');
+            else /* camping */ childUrl.searchParams.set('activity', 'CAMPING');
             try {
               const cr = await fetch(childUrl, { headers });
               if (!cr.ok) return [];
