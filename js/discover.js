@@ -2119,11 +2119,22 @@ const Discover = {
   searchThisArea() {
     const map = window.MapModule?.map;
     if (!map) return;
-    
+
     const zoom = map.getZoom();
     // Prevent fetching the entire continent and crashing Overpass
     if (zoom < 8) {
       alert("Please zoom in closer to search this area.");
+      return;
+    }
+
+    // If the modal isn't currently open (e.g. user closed it then clicked
+    // the floating "Search this area" button on the map), reopen it with
+    // the current category — otherwise refresh() exits at its !_modalOpen
+    // guard and no fetch fires. openModal calls searchThisArea recursively
+    // after _modalOpen=true is set, so the search still happens.
+    if (!this._modalOpen) {
+      const cat = (this.category && this.category !== 'all') ? this.category : 'hiking';
+      this.openModal(cat);
       return;
     }
 
