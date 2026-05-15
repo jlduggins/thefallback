@@ -65,7 +65,15 @@ const Discover = {
       '["sport"="climbing"]["name"]',
       // Designated hiking areas / parks (distinct from `route=hiking` which
       // tags trail relations — `sport=hiking` tags the area itself).
-      '["sport"="hiking"]["name"]'
+      '["sport"="hiking"]["name"]',
+      // Named trail SEGMENTS — the most common way real wilderness trails
+      // are tagged in OSM (way + highway=path + surface=dirt|ground|gravel).
+      // The surface AND-clause excludes paved/concrete urban paths from the
+      // start; the URBAN_RX post-filter further drops named urban footpaths
+      // (Avenue/Street/Boulevard/etc.). Without this selector we miss almost
+      // every real trail in remote BLM/USFS areas (Juniper Gulch Trail,
+      // Oregon Desert Trail, etc.) and only return peaks/buttes.
+      '["highway"="path"]["surface"~"^(dirt|ground|gravel)$"]["name"]'
       // Dropped (cost > value):
       //   - `["boundary"="protected_area"]["name"]` — huge polygons; RIDB
       //     covers federal protected lands more reliably anyway
