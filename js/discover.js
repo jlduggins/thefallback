@@ -2582,7 +2582,11 @@ const Discover = {
     panel.style.display = 'flex';
 
     // Mobile: open at full snap so the user sees the description without dragging.
+    // Capture the list drawer's prior snap so closeDetail can restore it —
+    // dismissing details shouldn't yank the list to a different position than
+    // the user left it (e.g. they were peeking, tapped a pin, then closed).
     if (window.matchMedia('(max-width: 767px)').matches && window.UI) {
+      this._preDetailSnap = document.body.getAttribute('data-drawer-snap') || 'half';
       UI.initMobileDrawers();
       UI._applySnap('full');
     }
@@ -2642,11 +2646,13 @@ const Discover = {
       const listPanel = document.getElementById('modal-discover');
       if (listPanel) listPanel.style.display = 'flex';
     }
-    // Mobile: snap the Discover list back to full so the user lands where
-    // they were browsing — leaving it at peek/half after dismissing the
-    // detail panel is disorienting.
+    // Mobile: restore whichever snap the list drawer was at before the user
+    // opened this detail (peek / half / full). Falls back to 'full' if we
+    // never captured one (e.g. detail opened directly from a map pin tap
+    // without the list drawer having been positioned).
     if (window.matchMedia('(max-width: 767px)').matches && window.UI) {
-      UI._applySnap('full');
+      UI._applySnap(this._preDetailSnap || 'full');
+      this._preDetailSnap = null;
     }
     setTimeout(() => { if (MapModule?.map) MapModule.map.invalidateSize(); }, 50);
   },
