@@ -59,7 +59,8 @@ const Discover = {
       // Trailheads
       ['information','trailhead'],
       // Destinations
-      '["natural"="peak"]["name"]',
+      // (peaks intentionally excluded from hiking — too many named summits in
+      // OSM are not actually hikeable trailheads and were polluting results)
       '["natural"="waterfall"]["name"]',
       '["tourism"="viewpoint"]["name"]',
       '["sport"="climbing"]["name"]',
