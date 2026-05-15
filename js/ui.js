@@ -82,6 +82,23 @@ const UI = {
   },
   
   showView(viewName) {
+    // If we're leaving the Explore view, any Discover-modal state must be
+    // torn down. body.discover-list-open / discover-detail-open carry
+    // `display: none !important` rules onto #locations-panel and
+    // #trips-list-panel — leaving them set when the user jumps to Trips or
+    // Saved via the bottom nav makes those drawers vanish entirely until a
+    // full page reload. Close the modal cleanly when possible, then strip
+    // the body classes unconditionally as a safety net in case some other
+    // path added them without going through openModal/openDetail.
+    if (viewName !== 'explore') {
+      if (window.Discover?._modalOpen && window.Discover?.closeModal) {
+        Discover.closeModal();
+      }
+      document.body.classList.remove('discover-list-open');
+      document.body.classList.remove('discover-detail-open');
+      document.body.classList.remove('add-location-drawer-open');
+    }
+
     // Hide all views
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
     
