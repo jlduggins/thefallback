@@ -1959,13 +1959,10 @@ const Discover = {
 
     // Quirky uses OTM's broad `interesting_places` kind to keep coverage in
     // sparse areas, but that umbrella drags in named peaks, cemeteries,
-    // museums, etc. Drop anything that classifies as Natural / Peak /
-    // Historic / Cultural so only true oddities (amusements, unclassified)
-    // remain. Items with no per-result classification (Place) stay in.
-    if (this.category === 'quirky') {
-      const NON_QUIRKY = new Set(['Natural', 'Peak', 'Historic', 'Cultural']);
-      filtered = filtered.filter(p => !NON_QUIRKY.has(p.category));
-    }
+    // museums, etc. _applyCategoryFilter drops Natural/Peak/Historic/Cultural
+    // so only true oddities remain. Same helper drives the map markers — keep
+    // them in lockstep.
+    filtered = this._applyCategoryFilter(filtered);
 
     // Update hero count
     const countEl = modal.querySelector('#disc-hero-count');
@@ -2271,16 +2268,22 @@ const Discover = {
   // ── Result markers on the map ───────────────────────────────────────
   // Drives the teal pins shown for every POI in the current results list.
   // Called whenever results land (fresh fetch or cache hit) and on close.
-  _showResultMarkers(fitBounds) {
-    if (!window.MapModule?.showDiscoverResultMarkers) return;
-    // Apply the same Quirky post-filter used by the list panel so map markers
-    // and the panel agree. Without this the panel can show "no results" while
-    // dozens of dropped Natural/Peak pins still litter the map.
-    let markerSource = this.results || [];
+  // Single source of truth for category-level result filtering. Both the
+  // list panel and the map markers must call this so the two stay in sync —
+  // otherwise the map can show pins that the panel has dropped (or vice
+  // versa). Quirky is currently the only category that needs post-filtering.
+  _applyCategoryFilter(items) {
+    if (!Array.isArray(items)) return [];
     if (this.category === 'quirky') {
       const NON_QUIRKY = new Set(['Natural', 'Peak', 'Historic', 'Cultural']);
-      markerSource = markerSource.filter(p => !NON_QUIRKY.has(p.category));
+      return items.filter(p => !NON_QUIRKY.has(p.category));
     }
+    return items;
+  },
+
+  _showResultMarkers(fitBounds) {
+    if (!window.MapModule?.showDiscoverResultMarkers) return;
+    const markerSource = this._applyCategoryFilter(this.results || []);
     // Cluster only for Hiking — its broadened OSM query can return tightly
     // packed trail/trailhead pins around a state park. Other categories are
     // capped at <10 typical and read better as flat individual pins.
