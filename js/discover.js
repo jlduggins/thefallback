@@ -1449,7 +1449,8 @@ const Discover = {
     if (has('historic') || has('archaeology') || has('history')) return 'Historic';
     if (has('museums') || has('cultural') || has('theatres_and_entertainments')) return 'Cultural';
     if (has('amusements') || has('unclassified_objects')) return 'Quirky';
-    if (has('natural') || has('geological_formations') || has('mountain_peaks')
+    if (has('mountain_peaks')) return 'Peak';
+    if (has('natural') || has('geological_formations')
         || has('waterfalls') || has('caves') || has('glaciers')
         || has('nature_reserves')) return 'Natural';
     if (has('interesting_places')) return 'Place';
@@ -1956,6 +1957,16 @@ const Discover = {
       filtered = filtered.filter(p => (p.name || '').toLowerCase().includes(q));
     }
 
+    // Quirky uses OTM's broad `interesting_places` kind to keep coverage in
+    // sparse areas, but that umbrella drags in named peaks, cemeteries,
+    // museums, etc. Drop anything that classifies as Natural / Peak /
+    // Historic / Cultural so only true oddities (amusements, unclassified)
+    // remain. Items with no per-result classification (Place) stay in.
+    if (this.category === 'quirky') {
+      const NON_QUIRKY = new Set(['Natural', 'Peak', 'Historic', 'Cultural']);
+      filtered = filtered.filter(p => !NON_QUIRKY.has(p.category));
+    }
+
     // Update hero count
     const countEl = modal.querySelector('#disc-hero-count');
     if (countEl) {
@@ -1974,7 +1985,10 @@ const Discover = {
     }
 
     if (!filtered.length) {
-      list.innerHTML = this._emptyHtml('🔭', 'Nothing found in this category yet.');
+      const msg = this.category === 'quirky'
+        ? 'No quirky spots found in this area. Try expanding your search area or panning to a different spot.'
+        : 'Nothing found in this category yet.';
+      list.innerHTML = this._emptyHtml('🔭', msg);
       if (moreBtn) moreBtn.style.display = 'none';
       return;
     }
@@ -2983,6 +2997,7 @@ const Discover = {
       'Historic':   'historical',
       'Historical': 'historical',
       'Natural':    'natural',
+      'Peak':       'natural',
       'Cultural':   'cultural',
       'Quirky':     'quirky',
       'Camping':    'camping',
@@ -3060,7 +3075,7 @@ const Discover = {
     const stars = this._renderStars(p.stars);
     // Map OTM category → tile icon for the gradient fallback hero.
     const iconMap = {
-      'Natural': 'natural', 'Cultural': 'cultural', 'Quirky': 'quirky',
+      'Natural': 'natural', 'Peak': 'natural', 'Cultural': 'cultural', 'Quirky': 'quirky',
       'Historic': 'historical', 'Place': 'top-picks'
     };
     const iconFile = iconMap[p.category] || 'top-picks';
