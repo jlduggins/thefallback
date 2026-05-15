@@ -2273,11 +2273,19 @@ const Discover = {
   // Called whenever results land (fresh fetch or cache hit) and on close.
   _showResultMarkers(fitBounds) {
     if (!window.MapModule?.showDiscoverResultMarkers) return;
+    // Apply the same Quirky post-filter used by the list panel so map markers
+    // and the panel agree. Without this the panel can show "no results" while
+    // dozens of dropped Natural/Peak pins still litter the map.
+    let markerSource = this.results || [];
+    if (this.category === 'quirky') {
+      const NON_QUIRKY = new Set(['Natural', 'Peak', 'Historic', 'Cultural']);
+      markerSource = markerSource.filter(p => !NON_QUIRKY.has(p.category));
+    }
     // Cluster only for Hiking — its broadened OSM query can return tightly
     // packed trail/trailhead pins around a state park. Other categories are
     // capped at <10 typical and read better as flat individual pins.
     MapModule.showDiscoverResultMarkers(
-      this.results || [],
+      markerSource,
       (xid) => Discover.openDetail(xid),
       { cluster: this.category === 'hiking' }
     );
