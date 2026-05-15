@@ -50,23 +50,29 @@ const Discover = {
       ['tourism','caravan_site']
     ],
     hiking: [
-      // High Signal: Trail relations
+      // Trail relations — `route=hiking` is the explicit hiking tag,
+      // but many real trails are tagged with `route=foot` (paths) or
+      // `route=walking` (urban-edge), so all three stay in.
       ['route','hiking'],
       ['route','foot'],
       ['route','walking'],
-      // High Signal: Trailheads
+      // Trailheads
       ['information','trailhead'],
-      // High Signal: Destinations
+      // Destinations
       '["natural"="peak"]["name"]',
       '["natural"="waterfall"]["name"]',
       '["tourism"="viewpoint"]["name"]',
       '["sport"="climbing"]["name"]',
-      // High Signal: Attractions
-      '["tourism"="attraction"]["sport"="hiking"]'
-      // Note: ["boundary"="protected_area"]["name"] previously here. Dropped because
-      // its huge polygons fan queries across enormous geometries and time out the
-      // server. RIDB covers federal protected lands far better; the hiking-relevance
-      // ranking only awards +2 for the tag anyway, so the loss is minimal.
+      // Designated hiking areas / parks (distinct from `route=hiking` which
+      // tags trail relations — `sport=hiking` tags the area itself).
+      '["sport"="hiking"]["name"]'
+      // Dropped (cost > value):
+      //   - `["boundary"="protected_area"]["name"]` — huge polygons; RIDB
+      //     covers federal protected lands more reliably anyway
+      //   - `["tourism"="attraction"]["sport"="hiking"]` — extremely rare,
+      //     and the destinations above plus `sport=hiking` cover the same use case
+      // The 25-mile bbox cap below (vs the user's full map view, which can
+      // be 80mi+) is what gets these queries inside the 15s client abort.
     ]
   },
 
@@ -156,9 +162,11 @@ const Discover = {
   SERVED_BUFFER_MI: 15,                // pad around the visible viewport
   SERVED_MIN_MI:    25,                // floor — don't waste a call on tiny areas
   SERVED_MAX_MI:    75,                // ceiling — Overpass payload safety (camping)
-  // Hiking has broad selectors; keeping radius smaller (15mi) prevents
-  // the Overpass server from timing out on dense wilderness areas.
-  SERVED_MAX_MI_HIKING: 15,
+  // Hiking has broad selectors; keeping radius bounded prevents Overpass
+  // from timing out on dense wilderness areas. 25mi gives reasonable
+  // coverage while still being cheap enough for the reduced 5-selector
+  // hiking query to complete in well under 15s.
+  SERVED_MAX_MI_HIKING: 25,
   SERVED_REUSE_SAFETY_MI: 2,           // shrink reuse window so edges stay valid
 
   // Diagnostic logging for hiking flow. Flip to false once the regression is
@@ -804,11 +812,13 @@ const Discover = {
       radiusUrl.searchParams.set('radius', radiusMi.toFixed(1));
       radiusUrl.searchParams.set('full', 'true');
       radiusUrl.searchParams.set('limit', '50');
-      // Server-side activity filter — much higher hit rate than the
-      // client-side type/name/description match alone, especially in
-      // areas where Overpass is timing out and RIDB is the only source.
-      if (isHiking)         radiusUrl.searchParams.set('activity', 'HIKING');
-      else /* camping */    radiusUrl.searchParams.set('activity', 'CAMPING');
+      // Camping uses `activity=CAMPING` because the API filter is precise
+      // there. Hiking deliberately does NOT use `activity=HIKING` — the
+      // server-side filter excludes facilities tagged "Trailhead" that don't
+      // have an explicit HIKING activity, dropping pure trailheads. The
+      // client-side type/name/description match below picks up trailheads
+      // explicitly and hiking-activity facilities as a fallback.
+      if (!isHiking) radiusUrl.searchParams.set('activity', 'CAMPING');
 
       console.log(`[Discover] RIDB radius search for ${isHiking ? 'Hiking' : 'Camping'}...`);
       console.log(`[Discover] RIDB URL: ${radiusUrl.toString()}`);
@@ -841,15 +851,15 @@ const Discover = {
           const recAreas = raData?.RECDATA || [];
           console.log(`[Discover] RIDB found ${recAreas.length} RecAreas nearby.`);
 
-          // For each RecArea, fetch its child facilities (filtered by
-          // activity server-side so we get more relevant trailheads /
-          // campgrounds and fewer noise facilities like visitor centers).
+          // For each RecArea, fetch its child facilities. Camping filters
+          // server-side; hiking deliberately doesn't (same reason as the
+          // radius prong above — server-side `activity=HIKING` drops pure
+          // trailhead facilities).
           const childFetches = recAreas.map(async (ra) => {
             const childUrl = new URL(`${this.RIDB_BASE}/recareas/${ra.RecAreaID}/facilities`);
             childUrl.searchParams.set('full', 'true');
             childUrl.searchParams.set('limit', '50');
-            if (isHiking)      childUrl.searchParams.set('activity', 'HIKING');
-            else /* camping */ childUrl.searchParams.set('activity', 'CAMPING');
+            if (!isHiking) childUrl.searchParams.set('activity', 'CAMPING');
             try {
               const cr = await fetch(childUrl, { headers });
               if (!cr.ok) return [];
@@ -922,13 +932,25 @@ const Discover = {
         const distMi = this._haversine(s.lat, s.lng, lat, lng);
         if (distMi > radiusMi * 1.5) continue;
 
+        // Categorize honestly based on the facility's actual type rather
+        // than hard-coding by search category. A campground that supports
+        // hiking should still be labeled "Campground", not "Trailhead".
+        const typeLow = (item.FacilityTypeDescription || '').toLowerCase();
+        let displayCategory;
+        if (typeLow.includes('trailhead'))      displayCategory = 'Trailhead';
+        else if (typeLow.includes('campground'))displayCategory = 'Campground';
+        else if (typeLow.includes('camping'))   displayCategory = 'Campground';
+        else if (typeLow.includes('day use'))   displayCategory = 'Day Use Area';
+        else if (typeLow.includes('picnic'))    displayCategory = 'Picnic Area';
+        else                                    displayCategory = isHiking ? 'Hiking Area' : 'Recreation Area';
+
         results.push({
           xid: `ridb/f/${item.FacilityID}`,
           name: item.FacilityName,
           lat,
           lng,
           distance: this._haversine(s.lat, s.lng, lat, lng),
-          category: isHiking ? 'Trailhead' : 'Campground',
+          category: displayCategory,
           description: this._stripHtml(item.FacilityDescription),
           _approx: true,
           _ridb: true,
@@ -1011,8 +1033,13 @@ const Discover = {
 
     const isSingle = samples.length === 1;
     let globalBbox = '';
-    
-    if (anchor.bounds) {
+    // For hiking we deliberately IGNORE anchor.bounds and always derive the
+    // bbox from the (already-capped) anchor.radiusM. Reason: in "Map Area"
+    // mode the user's bounds can be 80×40 mi or larger, which Overpass
+    // cannot complete inside our 15s client-side abort. Capping to the
+    // SERVED_MAX_MI_HIKING-derived radius keeps the bbox compact.
+    const useBoundsBbox = !!anchor.bounds && this.category !== 'hiking';
+    if (useBoundsBbox) {
       const sw = anchor.bounds.getSouthWest();
       const ne = anchor.bounds.getNorthEast();
       globalBbox = `[bbox:${sw.lat.toFixed(5)},${sw.lng.toFixed(5)},${ne.lat.toFixed(5)},${ne.lng.toFixed(5)}]`;
@@ -1022,12 +1049,12 @@ const Discover = {
       const lngD = anchor.radiusM / (111320 * Math.cos(s.lat * Math.PI / 180));
       globalBbox = `[bbox:${(s.lat - latD).toFixed(5)},${(s.lng - lngD).toFixed(5)},${(s.lat + latD).toFixed(5)},${(s.lng + lngD).toFixed(5)}]`;
     }
-    
+
     let body = `[out:json][timeout:${timeout}]${globalBbox};\n(\n`;
     for (const s of samples) {
       // Overpass native bounding box is computationally much cheaper than `around:`
       let bbox = '';
-      if (anchor.bounds) {
+      if (useBoundsBbox) {
         const sw = anchor.bounds.getSouthWest();
         const ne = anchor.bounds.getNorthEast();
         bbox = `${sw.lat.toFixed(5)},${sw.lng.toFixed(5)},${ne.lat.toFixed(5)},${ne.lng.toFixed(5)}`;
