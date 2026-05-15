@@ -2562,18 +2562,14 @@ const Discover = {
     }
 
     // The detail panel pushes the map container narrower on desktop. Leaflet
-    // needs invalidateSize() to recompute its internal viewport BEFORE flyTo,
-    // otherwise the animation runs against the old dimensions and the camera
-    // lands at the wrong coords. Wait one frame for CSS layout to settle, then
-    // resize, then fly. Zoom 15 = ~1.2 km wide so the user sees the actual
-    // POI spot rather than 5 km of context.
+    // needs invalidateSize() to recompute its internal viewport so the
+    // highlighted marker renders in the correct place. Camera is intentionally
+    // left where the user had it — opening details no longer recenters/zooms.
     setTimeout(() => {
       if (!MapModule?.map) return;
       MapModule.map.invalidateSize();
       if (poi.lat && poi.lng) {
         MapModule.showDiscoverMarker(poi.lat, poi.lng, poi.name);
-        this._markProgrammaticMove();
-        MapModule.flyTo(poi.lat, poi.lng, 15);
       }
     }, 60);
 
