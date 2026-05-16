@@ -13,12 +13,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <!-- Marker clustering for the Discover Hiking category, where the broader
-       OSM query can return up to ~30 trail/trailhead pins clustered tightly
-       around a state park. Other categories stay flat (low marker counts). -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
+  <link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/v3.8.0/mapbox-gl.css">
   <link rel="stylesheet" href="./css/tokens.css">
   <link rel="stylesheet" href="./css/base.css">
   <link rel="stylesheet" href="./css/layout.css">
@@ -126,8 +121,9 @@
         </div>
         <div class="map-layers-section">
           <div class="map-layers-label">BASE MAP</div>
-          <label class="map-layers-opt"><input type="radio" name="basemap" value="street" checked onchange="MapModule.setBasemap('street')"><span>Street</span></label>
-          <label class="map-layers-opt"><input type="radio" name="basemap" value="satellite" onchange="MapModule.setBasemap('satellite')"><span>Satellite</span></label>
+          <label class="map-layers-opt"><input type="radio" name="basemap" value="street" checked onchange="MapModule.setBasemap('street')"><span>Streets</span></label>
+          <label class="map-layers-opt"><input type="radio" name="basemap" value="outdoors" onchange="MapModule.setBasemap('outdoors')"><span>Outdoors</span></label>
+          <label class="map-layers-opt"><input type="radio" name="basemap" value="satellite" onchange="MapModule.setBasemap('satellite')"><span>Satellite Streets</span></label>
         </div>
         <div class="map-layers-section">
           <div class="map-layers-label">PUBLIC LANDS</div>
@@ -771,8 +767,7 @@
 
   <!-- Scripts -->
   <script src="./config.js"></script>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.8.0/mapbox-gl.js"></script>
   <script src="https://unpkg.com/sortablejs@1.15.2/Sortable.min.js"></script>
   <script src="./js/state.js"></script>
   <script type="module" src="./js/firebase.js"></script>

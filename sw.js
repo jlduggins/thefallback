@@ -3,7 +3,7 @@
  * Handles caching for offline support
  */
 
-const CACHE_NAME = 'fallback-v2-cache-v107';
+const CACHE_NAME = 'fallback-v2-cache-v108';
 
 const STATIC_ASSETS = [
   './',
@@ -34,11 +34,8 @@ const STATIC_ASSETS = [
 ];
 
 const EXTERNAL_ASSETS = [
-  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',
-  'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
-  'https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css',
-  'https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css',
-  'https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js',
+  'https://api.mapbox.com/mapbox-gl-js/v3.8.0/mapbox-gl.css',
+  'https://api.mapbox.com/mapbox-gl-js/v3.8.0/mapbox-gl.js',
   'https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js',
   'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js',
   'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js'
