@@ -1480,7 +1480,14 @@ body[data-view="login"] .map-controls-global {
 body[data-view="settings"] .map-layers-panel,
 body[data-view="login"] .map-layers-panel { display: none !important; }
 @media (max-width: 767px) {
-  body[data-view="explore"] .map-layers-panel { display: none !important; }
+  /* Lift the panel above the bottom nav (72px + safe-area) and cap its
+     height so the longer 3-style + overlay list scrolls instead of clipping
+     under the nav. */
+  .map-layers-panel {
+    bottom: calc(var(--nav-height-mobile) + var(--space-3));
+    max-height: calc(100vh - var(--nav-height-mobile) - var(--space-6) - 80px);
+    overflow-y: auto;
+  }
 }
 .map-layers-hd {
   display: flex;
