@@ -193,7 +193,6 @@ const MapModule = {
 
   _addPublicLandsLayer() {
     if (!this.map || this._publicLandsAdded) return;
-    if (!this.map.isStyleLoaded()) return; // style.load handler will retry
     if (this.map.getSource('blm-sma')) return;
     this.map.addSource('blm-sma', {
       type: 'raster',
@@ -244,23 +243,26 @@ const MapModule = {
   },
 
   _ensureStateParksLayer() {
-    if (!this.map || !this.map.isStyleLoaded()) return;
+    if (!this.map) return;
     if (this.map.getSource('state-parks')) return;
     this.map.addSource('state-parks', {
       type: 'geojson',
       data: { type: 'FeatureCollection', features: Object.values(this._stateParksFeatures) }
     });
+    // fill-opacity bumped from 0.05 (Leaflet) to 0.12 because Leaflet's SVG
+    // path rendering alpha-stacked overlapping polygons, while Mapbox GL
+    // renders a single-pass fill layer with no per-feature compositing.
     this.map.addLayer({
       id: 'state-parks-fill',
       type: 'fill',
       source: 'state-parks',
-      paint: { 'fill-color': '#3b82f6', 'fill-opacity': 0.05 }
+      paint: { 'fill-color': '#3b82f6', 'fill-opacity': 0.12 }
     });
     this.map.addLayer({
       id: 'state-parks-outline',
       type: 'line',
       source: 'state-parks',
-      paint: { 'line-color': 'rgba(37,99,235,0.3)', 'line-width': 1.5 }
+      paint: { 'line-color': 'rgba(37,99,235,0.55)', 'line-width': 1.5 }
     });
     this.map.on('click', 'state-parks-fill', (e) => {
       const f = e.features?.[0];
@@ -419,11 +421,16 @@ const MapModule = {
     el.className = 'custom-marker';
     el.innerHTML = `<div class="marker-pin ${isSelected ? 'selected' : ''}" style="background: ${this.getMarkerColor(entry)}"></div>`;
 
-    // Stop propagation so the popup opens without the map-click handler also
-    // firing (which would clear selection on Saved view).
+    // Mapbox GL toggles a Marker's popup via a click listener on the MAP
+    // (not the element), checking whether the click target is inside the
+    // marker. stopPropagation kills that path, so we have to toggle the popup
+    // ourselves. We still need stopPropagation here — otherwise the map's own
+    // click handler runs and the Saved-view deselect path clears the selection
+    // we just made.
     el.addEventListener('click', (e) => {
       e.stopPropagation();
       State.selectEntry(entry.id);
+      marker.togglePopup();
     });
 
     const costText = entry.cost === 0 ? 'Free!' : entry.cost ? `$${entry.cost}/night` : '';
