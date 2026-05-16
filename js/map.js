@@ -57,12 +57,15 @@ const MapModule = {
       console.error('Mapbox GL JS not loaded');
       return;
     }
-    if (!window.CONFIG?.MAPBOX_TOKEN) {
+    const token = (typeof CONFIG !== 'undefined' && CONFIG.MAPBOX_TOKEN)
+      || (window.CONFIG && window.CONFIG.MAPBOX_TOKEN)
+      || '';
+    if (!token) {
       console.error('CONFIG.MAPBOX_TOKEN is missing');
       return;
     }
 
-    mapboxgl.accessToken = window.CONFIG.MAPBOX_TOKEN;
+    mapboxgl.accessToken = token;
 
     const initialStyle = (State.currentStyle && this.STYLES[State.currentStyle])
       ? State.currentStyle
