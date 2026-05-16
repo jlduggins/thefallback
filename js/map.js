@@ -179,7 +179,6 @@ const MapModule = {
 
   _addPublicLandsLayer() {
     if (!this.map || this._publicLandsAdded) return;
-    if (State.currentStyle === 'outdoors') return;
     if (!this.map.isStyleLoaded()) return; // style.load handler will retry
     if (this.map.getSource('blm-sma')) return;
     this.map.addSource('blm-sma', {
