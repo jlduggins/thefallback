@@ -593,20 +593,54 @@
 }
 .leaflet-marker-icon:hover .discover-cluster { transform: scale(1.1); }
 
-/* Custom popup styles */
-.custom-popup .leaflet-popup-content-wrapper {
-  border-radius: var(--radius-lg) !important;
-  padding: 0 !important;
+/* Custom popup styles — Mapbox GL JS */
+.custom-popup .mapboxgl-popup-content {
+  border-radius: var(--radius-lg);
+  padding: 0;
   overflow: hidden;
-}
-
-.custom-popup .leaflet-popup-content {
-  margin: 0 !important;
   min-width: 200px;
 }
 
-.custom-popup .leaflet-popup-tip {
-  background: white;
+.custom-popup .mapboxgl-popup-tip {
+  border-top-color: white;
+  border-bottom-color: white;
+}
+
+.custom-popup .mapboxgl-popup-close-button {
+  font-size: 18px;
+  padding: 4px 8px;
+  color: var(--color-text-muted);
+}
+
+/* User-location marker (blue dot + pulsing ring) */
+.user-location-marker {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  pointer-events: none;
+}
+.user-location-dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  background: #3498db;
+  border: 3px solid white;
+  border-radius: 50%;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+}
+.user-location-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 36px;
+  height: 36px;
+  margin: -18px 0 0 -18px;
+  background: rgba(52, 152, 219, 0.18);
+  border: 1px solid rgba(52, 152, 219, 0.6);
+  border-radius: 50%;
 }
 
 .marker-popup {
