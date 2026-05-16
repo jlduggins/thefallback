@@ -152,12 +152,19 @@ const MapModule = {
     const panel = document.getElementById('map-layers-panel');
     if (!panel) return;
     const isOpen = panel.style.display && panel.style.display !== 'none';
-    panel.style.display = isOpen ? 'none' : 'block';
+    // layout.css has `body[data-view="explore"] .map-layers-panel { display:none !important }`
+    // under the mobile media query, so we need !important on the inline style
+    // to win when the user explicitly taps the layers button.
+    if (isOpen) {
+      panel.style.setProperty('display', 'none', 'important');
+    } else {
+      panel.style.setProperty('display', 'flex', 'important');
+    }
   },
 
   closeLayersPanel() {
     const panel = document.getElementById('map-layers-panel');
-    if (panel) panel.style.display = 'none';
+    if (panel) panel.style.setProperty('display', 'none', 'important');
   },
 
   setBasemap(type) {
