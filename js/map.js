@@ -858,14 +858,15 @@ const MapModule = {
         body.classList.contains('discover-detail-open')) return;
     // Only on views where adding makes sense.
     if (State.currentView !== 'saved' && State.currentView !== 'explore') return;
-    State.pendingLat = e.lngLat.lat;
-    State.pendingLng = e.lngLat.lng;
     if (window.UI?.openAddModal) {
       UI.openAddModal();
-      // openAddModal calls showDragPin at the user's GPS location; override
-      // here to place the pin where the user actually tapped, and suppress
-      // the recenter so the camera stays put.
+      // openAddModal calls Entries.resetForm() and sets pendingLat/Lng to the
+      // user's GPS location, so we must override AFTER it returns — both the
+      // pin position and the State coords the save handler will read.
+      State.pendingLat = e.lngLat.lat;
+      State.pendingLng = e.lngLat.lng;
       this.showDragPin(e.lngLat.lat, e.lngLat.lng, { flyTo: false });
+      State.emit('dragpin:moved', { lat: e.lngLat.lat, lng: e.lngLat.lng });
     }
   }
 };
