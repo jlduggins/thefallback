@@ -309,10 +309,12 @@ const Discover = {
           const padMi = 15;
           const latPad = padMi / 69;
           const lngPad = padMi / (69 * Math.cos(this._manualAnchor.lat * Math.PI / 180));
-          paddedBounds = window.L?.latLngBounds(
-            [sw.lat - latPad, sw.lng - lngPad],
-            [ne.lat + latPad, ne.lng + lngPad]
-          ) || bounds;
+          // Mapbox LngLatBounds: SW corner first, NE corner second.
+          // Each corner is [lng, lat] (Mapbox's coord order, not Leaflet's).
+          paddedBounds = new mapboxgl.LngLatBounds(
+            [sw.lng - lngPad, sw.lat - latPad],
+            [ne.lng + lngPad, ne.lat + latPad]
+          );
 
           // For Overpass legacy checks, treat radius as half the padded diagonal
           const pNe = paddedBounds.getNorthEast(), pSw = paddedBounds.getSouthWest();
@@ -1945,12 +1947,17 @@ const Discover = {
       const latPad = padMi / 69;
       const lngPad = padMi / 45;
       
-      const pB = window.L?.latLngBounds(
-        [sw.lat - latPad, sw.lng - lngPad],
-        [ne.lat + latPad, ne.lng + lngPad]
-      ) || b;
-      
-      filtered = filtered.filter(p => pB.contains([p.lat, p.lng]));
+      // Mapbox LngLatBounds: SW corner first, NE corner second; each corner
+      // is [lng, lat]. .contains() also takes [lng, lat] — not Leaflet's
+      // [lat, lng], which Mapbox parses as [lng, lat] and then throws
+      // "Invalid LngLat latitude value" when the real lng (e.g. -116) lands
+      // in the lat slot.
+      const pB = new mapboxgl.LngLatBounds(
+        [sw.lng - lngPad, sw.lat - latPad],
+        [ne.lng + lngPad, ne.lat + latPad]
+      );
+
+      filtered = filtered.filter(p => pB.contains([p.lng, p.lat]));
     }
     
     if (q) {
