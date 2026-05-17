@@ -6,7 +6,8 @@
  *   STAGE 1 ✅ basemap + 3-way style picker + BLM federal-lands overlay
  *   STAGE 2 ✅ saved markers, popups, highlight, drag pin, user-location dot,
  *               State Parks overlay (GeoJSON source + fill/line layers)
- *   STAGE 3 ⏳ Discover single + result markers + Hiking clustering
+ *   STAGE 3 ✅ Discover single gold marker + result markers + Hiking clustering
+ *               (native Mapbox GL cluster source — replaces Leaflet.markercluster)
  *   STAGE 4 ⏳ Trips journey markers + polylines + backup markers
  *
  * Public facade (callers across the app rely on these names being stable):
@@ -30,10 +31,13 @@ const MapModule = {
   userMarker: null,
   dragPin: null,
 
-  // Discover (Stage 3)
+  // Discover
   discoverMarker: null,
-  discoverResultMarkers: [],
-  discoverClusterGroup: null,
+  discoverResultMarkers: [],         // non-cluster mode: mapboxgl.Marker[]
+  _discoverResultsCluster: false,    // true if Hiking-style clustering is active
+  _discoverResultsData: null,        // cached FeatureCollection for cluster re-attach
+  _discoverResultsOnClick: null,     // cached callback for cluster re-attach
+  _discoverClusterHandlersBound: false,
 
   // Overlays
   _publicLandsAdded: false,
@@ -93,6 +97,13 @@ const MapModule = {
       this._publicLandsAdded = false;
       if (State.showPublicLands) this._addPublicLandsLayer();
       this._addStateParksLayerIfEnabled();
+      // Cluster source/layers/handlers all get blown away by setStyle.
+      // Element-based mapboxgl.Marker instances (single gold marker, flat
+      // non-cluster result markers) persist automatically.
+      if (this._discoverResultsCluster && this._discoverResultsData) {
+        this._discoverClusterHandlersBound = false;
+        this._addDiscoverClusterLayers();
+      }
     });
 
     // Subscriptions
@@ -508,7 +519,7 @@ const MapModule = {
   // DRAG PIN (for Add / Edit form)
   // ═══════════════════════════════════════════════════════════════════════════
 
-  showDragPin(lat, lng) {
+  showDragPin(lat, lng, opts = {}) {
     if (this.dragPin) this.dragPin.remove();
     const el = document.createElement('div');
     el.className = 'custom-marker drag-pin';
@@ -525,7 +536,10 @@ const MapModule = {
       State.emit('dragpin:moved', { lat: ll.lat, lng: ll.lng });
     });
 
-    this.flyTo(lat, lng, 14);
+    // Default flyTo for the +Add FAB path (centers the user-location pin in
+    // view). The tap-to-add path passes { flyTo: false } so we don't yank the
+    // camera away from the spot the user just tapped.
+    if (opts.flyTo !== false) this.flyTo(lat, lng, 14);
   },
 
   hideDragPin() {
@@ -536,14 +550,217 @@ const MapModule = {
   },
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // DISCOVER MARKERS (Stage 3 — stubs)
+  // DISCOVER MARKERS
+  //
+  // Two parallel marker layers:
+  //   1. discoverMarker  — single gold pin for the active POI detail panel.
+  //                        Element-based mapboxgl.Marker; survives setStyle.
+  //   2. discoverResultMarkers / discover-results source — the teal "every POI
+  //                        in the current results" backdrop. Two render modes:
+  //        - cluster=false (Camping, Top Picks, Natural, etc.): flat array of
+  //          element-based mapboxgl.Marker.
+  //        - cluster=true  (Hiking): native Mapbox GL clustered GeoJSON source
+  //          with 3 layers (cluster circles, count text, unclustered points).
+  //          Replaces Leaflet.markercluster.
+  //
+  // Per project_discover_decisions.md, openDetail must NOT recenter the map,
+  // so showDiscoverMarker drops a pin but never pans/flies.
   // ═══════════════════════════════════════════════════════════════════════════
 
-  showDiscoverMarker(_lat, _lng, _name) {},
-  hideDiscoverMarker() {},
-  showDiscoverResultMarkers(_results, _onMarkerClick, _opts = {}) {},
-  hideDiscoverResultMarkers() {},
-  fitDiscoverResultsBounds(_padding = 60) {},
+  showDiscoverMarker(lat, lng, name) {
+    if (this.discoverMarker) this.discoverMarker.remove();
+    if (!this.map) return;
+    const el = document.createElement('div');
+    el.className = 'custom-marker';
+    el.innerHTML = '<div class="marker-pin discover"></div>';
+    const marker = new mapboxgl.Marker({ element: el, anchor: 'center' })
+      .setLngLat([lng, lat])
+      .addTo(this.map);
+    if (name) {
+      el.title = name;
+      marker.setPopup(new mapboxgl.Popup({ offset: 18, closeButton: true })
+        .setHTML(this.escapeHtml(name)));
+    }
+    this.discoverMarker = marker;
+  },
+
+  hideDiscoverMarker() {
+    if (this.discoverMarker) {
+      this.discoverMarker.remove();
+      this.discoverMarker = null;
+    }
+  },
+
+  showDiscoverResultMarkers(results, onMarkerClick, opts = {}) {
+    this.hideDiscoverResultMarkers();
+    if (!this.map || !results?.length) return;
+
+    const useCluster = opts.cluster === true;
+    this._discoverResultsCluster = useCluster;
+
+    if (useCluster) {
+      const fc = {
+        type: 'FeatureCollection',
+        features: results
+          .filter(p => p.lat != null && p.lng != null)
+          .map(p => ({
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
+            properties: { xid: p.xid, name: p.name || '' }
+          }))
+      };
+      this._discoverResultsData = fc;
+      this._discoverResultsOnClick = onMarkerClick;
+      this._addDiscoverClusterLayers();
+      return;
+    }
+
+    // Flat (non-cluster) mode — one mapboxgl.Marker per result.
+    results.forEach(p => {
+      if (p.lat == null || p.lng == null) return;
+      const el = document.createElement('div');
+      el.className = 'custom-marker';
+      el.innerHTML = '<div class="marker-pin discover-result"></div>';
+      if (p.name) el.title = p.name;
+      el.addEventListener('click', (e) => {
+        // stopPropagation to keep the map's general click handler from
+        // running; we still trigger detail-open ourselves below.
+        e.stopPropagation();
+        if (typeof onMarkerClick === 'function') onMarkerClick(p.xid);
+      });
+      const m = new mapboxgl.Marker({ element: el, anchor: 'center' })
+        .setLngLat([p.lng, p.lat])
+        .addTo(this.map);
+      this.discoverResultMarkers.push(m);
+    });
+  },
+
+  _addDiscoverClusterLayers() {
+    if (!this.map || !this._discoverResultsData) return;
+    if (!this.map.getSource('discover-results')) {
+      this.map.addSource('discover-results', {
+        type: 'geojson',
+        data: this._discoverResultsData,
+        cluster: true,
+        clusterMaxZoom: 14,
+        clusterRadius: 50
+      });
+    } else {
+      this.map.getSource('discover-results').setData(this._discoverResultsData);
+    }
+    if (!this.map.getLayer('discover-clusters')) {
+      this.map.addLayer({
+        id: 'discover-clusters',
+        type: 'circle',
+        source: 'discover-results',
+        filter: ['has', 'point_count'],
+        paint: {
+          'circle-color': '#7FC3A5',
+          'circle-radius': 18,
+          'circle-stroke-width': 2,
+          'circle-stroke-color': 'white'
+        }
+      });
+    }
+    if (!this.map.getLayer('discover-cluster-count')) {
+      this.map.addLayer({
+        id: 'discover-cluster-count',
+        type: 'symbol',
+        source: 'discover-results',
+        filter: ['has', 'point_count'],
+        layout: {
+          'text-field': ['get', 'point_count_abbreviated'],
+          'text-font': ['Open Sans Semibold', 'Arial Unicode MS Bold'],
+          'text-size': 12,
+          'text-allow-overlap': true
+        },
+        paint: { 'text-color': 'white' }
+      });
+    }
+    if (!this.map.getLayer('discover-unclustered')) {
+      this.map.addLayer({
+        id: 'discover-unclustered',
+        type: 'circle',
+        source: 'discover-results',
+        filter: ['!', ['has', 'point_count']],
+        paint: {
+          'circle-color': '#7FC3A5',
+          'circle-radius': 9,
+          'circle-stroke-width': 2,
+          'circle-stroke-color': 'white'
+        }
+      });
+    }
+    if (!this._discoverClusterHandlersBound) this._bindDiscoverClusterHandlers();
+  },
+
+  _bindDiscoverClusterHandlers() {
+    const map = this.map;
+    if (!map) return;
+    map.on('click', 'discover-clusters', (e) => {
+      const features = map.queryRenderedFeatures(e.point, { layers: ['discover-clusters'] });
+      const clusterId = features[0]?.properties?.cluster_id;
+      const src = map.getSource('discover-results');
+      if (clusterId == null || !src) return;
+      src.getClusterExpansionZoom(clusterId, (err, zoom) => {
+        if (err) return;
+        map.easeTo({ center: features[0].geometry.coordinates, zoom });
+      });
+    });
+    map.on('click', 'discover-unclustered', (e) => {
+      const xid = e.features?.[0]?.properties?.xid;
+      if (xid && typeof this._discoverResultsOnClick === 'function') {
+        this._discoverResultsOnClick(xid);
+      }
+    });
+    ['discover-clusters', 'discover-unclustered'].forEach(layer => {
+      map.on('mouseenter', layer, () => { map.getCanvas().style.cursor = 'pointer'; });
+      map.on('mouseleave', layer, () => { map.getCanvas().style.cursor = ''; });
+    });
+    this._discoverClusterHandlersBound = true;
+  },
+
+  hideDiscoverResultMarkers() {
+    // Flat mode markers
+    this.discoverResultMarkers.forEach(m => { try { m.remove(); } catch (e) {} });
+    this.discoverResultMarkers = [];
+    // Cluster mode source + layers
+    if (this.map) {
+      ['discover-unclustered', 'discover-cluster-count', 'discover-clusters'].forEach(id => {
+        if (this.map.getLayer(id)) this.map.removeLayer(id);
+      });
+      if (this.map.getSource('discover-results')) this.map.removeSource('discover-results');
+    }
+    this._discoverResultsCluster = false;
+    this._discoverResultsData = null;
+    this._discoverResultsOnClick = null;
+    // Layer-scoped click handlers are auto-removed when their layer is gone;
+    // we'll re-bind via _bindDiscoverClusterHandlers on the next show.
+    this._discoverClusterHandlersBound = false;
+  },
+
+  fitDiscoverResultsBounds(padding = 60) {
+    if (!this.map) return;
+    // Collect coords from whichever mode is active.
+    const coords = [];
+    if (this._discoverResultsCluster && this._discoverResultsData) {
+      this._discoverResultsData.features.forEach(f => coords.push(f.geometry.coordinates));
+    } else {
+      this.discoverResultMarkers.forEach(m => {
+        const ll = m.getLngLat();
+        coords.push([ll.lng, ll.lat]);
+      });
+    }
+    if (!coords.length) return;
+    let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
+    coords.forEach(([lng, lat]) => {
+      if (lng < minLng) minLng = lng;
+      if (lat < minLat) minLat = lat;
+      if (lng > maxLng) maxLng = lng;
+      if (lat > maxLat) maxLat = lat;
+    });
+    this.map.fitBounds([[minLng, minLat], [maxLng, maxLat]], { padding, maxZoom: 13 });
+  },
 
   // ═══════════════════════════════════════════════════════════════════════════
   // ROUTING (REST API preserved; map drawing stubbed until Stage 4)
@@ -616,6 +833,7 @@ const MapModule = {
   // ═══════════════════════════════════════════════════════════════════════════
 
   handleMapClick(e) {
+    // Drag pin active (Add/Edit form is open): move it to the tapped point.
     if (this.dragPin) {
       this.dragPin.setLngLat(e.lngLat);
       State.pendingLat = e.lngLat.lat;
@@ -623,9 +841,31 @@ const MapModule = {
       State.emit('dragpin:moved', { lat: e.lngLat.lat, lng: e.lngLat.lng });
       return;
     }
+    // Saved view with an active selection: tap-to-deselect (preserves the
+    // v2 behavior; second tap then triggers tap-to-add below).
     if (State.currentView === 'saved' && State.selectedEntryId) {
       State.selectEntry(null);
       this.fitAllMarkers();
+      return;
+    }
+    // Tap-to-add — restored from index_v1.html:1325. Clicking an empty map
+    // opens the Add Location modal with the drag pin pre-placed at the tap.
+    // Gate on the body-level "drawer open" classes so taps inside Discover or
+    // an already-open Add drawer don't trigger a second Add modal.
+    const body = document.body;
+    if (body.classList.contains('add-location-drawer-open') ||
+        body.classList.contains('discover-list-open') ||
+        body.classList.contains('discover-detail-open')) return;
+    // Only on views where adding makes sense.
+    if (State.currentView !== 'saved' && State.currentView !== 'explore') return;
+    State.pendingLat = e.lngLat.lat;
+    State.pendingLng = e.lngLat.lng;
+    if (window.UI?.openAddModal) {
+      UI.openAddModal();
+      // openAddModal calls showDragPin at the user's GPS location; override
+      // here to place the pin where the user actually tapped, and suppress
+      // the recenter so the camera stays put.
+      this.showDragPin(e.lngLat.lat, e.lngLat.lng, { flyTo: false });
     }
   }
 };
