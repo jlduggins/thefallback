@@ -163,19 +163,36 @@ const MapModule = {
     const panel = document.getElementById('map-layers-panel');
     if (!panel) return;
     const isOpen = panel.style.display && panel.style.display !== 'none';
+    if (isOpen) {
+      this.closeLayersPanel();
+      return;
+    }
     // layout.css has `body[data-view="explore"] .map-layers-panel { display:none !important }`
     // under the mobile media query, so we need !important on the inline style
     // to win when the user explicitly taps the layers button.
-    if (isOpen) {
-      panel.style.setProperty('display', 'none', 'important');
-    } else {
-      panel.style.setProperty('display', 'flex', 'important');
-    }
+    panel.style.setProperty('display', 'flex', 'important');
+    // Bind an outside-click listener so the panel auto-closes when the user
+    // taps elsewhere (including the +Add FAB, a tap-to-add on the map, or
+    // anything that opens a modal over the map). Capture phase + setTimeout(0)
+    // so the click that opened the panel doesn't immediately close it.
+    setTimeout(() => {
+      const btn = document.getElementById('map-layers-btn');
+      this._layersOutsideClickHandler = (e) => {
+        if (panel.contains(e.target)) return;
+        if (btn && btn.contains(e.target)) return; // let the button's own onclick toggle
+        this.closeLayersPanel();
+      };
+      document.addEventListener('click', this._layersOutsideClickHandler, true);
+    }, 0);
   },
 
   closeLayersPanel() {
     const panel = document.getElementById('map-layers-panel');
     if (panel) panel.style.setProperty('display', 'none', 'important');
+    if (this._layersOutsideClickHandler) {
+      document.removeEventListener('click', this._layersOutsideClickHandler, true);
+      this._layersOutsideClickHandler = null;
+    }
   },
 
   setBasemap(type) {
