@@ -91,6 +91,40 @@ const MapModule = {
       attributionControl: true
     });
 
+    // ── Leaflet → Mapbox GL backwards-compat shims ──────────────────────────
+    // Many consumers (discover.js, ui.js, entries.js, trips.js) reach into
+    // MapModule.map directly and call Leaflet methods. Rather than edit every
+    // site, install translation shims on the map instance.
+    //
+    // 1) invalidateSize() → resize()
+    this.map.invalidateSize = () => this.map.resize();
+    //
+    // 2) flyTo([lat, lng], zoom, {duration: seconds})  → Mapbox flyTo(options)
+    //    Leaflet's duration is seconds; Mapbox's is milliseconds.
+    const _origFlyTo = this.map.flyTo.bind(this.map);
+    this.map.flyTo = (a, b, c) => {
+      if (Array.isArray(a)) {
+        const opts = { center: [a[1], a[0]] };
+        if (typeof b === 'number') opts.zoom = b;
+        if (c && typeof c.duration === 'number') opts.duration = c.duration * 1000;
+        return _origFlyTo(opts);
+      }
+      return _origFlyTo(a);
+    };
+    //
+    // 3) fitBounds(L.latLngBounds(...)) — Leaflet bounds objects have
+    //    getNorthEast/getSouthWest/getNorth/etc.; Mapbox's LngLatBounds has
+    //    the same getter names but flipped coord semantics. Detect and adapt.
+    const _origFitBounds = this.map.fitBounds.bind(this.map);
+    this.map.fitBounds = (b, opts) => {
+      if (b && typeof b.getNorthEast === 'function' && typeof b.getSouthWest === 'function') {
+        const ne = b.getNorthEast(), sw = b.getSouthWest();
+        // Leaflet LatLng → [lng, lat]
+        return _origFitBounds([[sw.lng, sw.lat], [ne.lng, ne.lat]], opts);
+      }
+      return _origFitBounds(b, opts);
+    };
+
     // setStyle() preserves mapboxgl.Marker instances but blows away sources/layers.
     // Re-attach overlays + (in Stage 3+) routes + Discover layers on every swap.
     this.map.on('style.load', () => {
