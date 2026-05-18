@@ -773,9 +773,10 @@ const Discover = {
 
       // At least one source returned something (or returned an empty array, which is
       // still a "no results" success rather than a failure). Combine + dedupe + sort.
-      const combined = [...osm, ...ridb];
+      // RIDB first so it wins ties in the proximity pass below
+      const combined = [...ridb, ...osm];
       const seen = new Set();
-      const final = [];
+      const byKey = [];
       for (const p of combined) {
         // Build a deduping key: normalized name + truncated coords (~100m grid)
         const nameKey = (p.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -783,6 +784,18 @@ const Discover = {
         const key = `${nameKey}:${gridKey}`;
         if (seen.has(key)) continue;
         seen.add(key);
+        byKey.push(p);
+      }
+      // Proximity backstop: same place under slightly different names + coords
+      // (e.g. RIDB "FISH CREEK PAVILION" vs OSM "Fish Creek Camp Ground" ~70m
+      // apart) slips past the name+grid key. Drop any later entry within
+      // PROX_MI of an earlier kept one; the combined order above puts RIDB
+      // first so it survives over OSM and we keep the phone/reservation URL.
+      const PROX_MI = 0.1; // ≈ 161 m
+      const final = [];
+      for (const p of byKey) {
+        const near = final.find(q => this._haversine(p.lat, p.lng, q.lat, q.lng) <= PROX_MI);
+        if (near) continue;
         final.push(p);
       }
       // Sort by distance (since both sets are already haversine-calculated)
@@ -912,10 +925,13 @@ const Discover = {
                || desc.includes('hiking') || desc.includes('trail')
                || activities.some(a => a.includes('hiking'));
         } else {
-          match = type.includes('campground') || type.includes('camping')
-               || name.includes('camp') || name.includes('campground')
-               || desc.includes('campsite') || desc.includes('campground')
-               || activities.some(a => a.includes('camping'));
+          // Camping: trust the server-side &activity=CAMPING filter applied
+          // in both RIDB prongs (radius + RecArea children). Any facility
+          // returned has been validated by RIDB itself — keeping a
+          // client-side keyword gate would drop legitimate BLM "Recreation
+          // Site" / type=Facility rows (e.g. Hammer Creek) whose names and
+          // type strings don't contain "camp".
+          match = true;
         }
         if (!match) continue;
 
