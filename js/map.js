@@ -276,7 +276,38 @@ const MapModule = {
       source: 'blm-sma',
       paint: { 'raster-opacity': 0.6 }
     });
+    // Push below any foreground overlays (journey lines, discover pins,
+    // state-park polygons) so they stay readable on top of the raster.
+    this._sendOverlayToBack('blm-sma');
     this._publicLandsAdded = true;
+  },
+
+  // Re-orders an overlay layer so it sits BELOW the app's "always on top"
+  // foreground layers. Mapbox's addLayer() always inserts at the top, so we
+  // call this after adding any raster/fill overlay that would otherwise
+  // cover the route polylines or Discover pins. moveLayer(layerId, beforeId)
+  // re-positions `layerId` immediately before `beforeId` — i.e., beforeId
+  // (and everything above it) ends up rendered on top.
+  _sendOverlayToBack(layerId) {
+    if (!this.map || !this.map.getLayer(layerId)) return;
+    // Order matters: search for the LOWEST stacked foreground layer first so
+    // we move below ALL of them. State-park polygons sit between BLM and the
+    // route lines, so we look for them ahead of journey lines.
+    const foreground = [
+      'state-parks-fill',
+      'state-parks-outline',
+      ...((window.Trips && Trips.journeyLineIds) || []),
+      'discover-clusters',
+      'discover-cluster-count',
+      'discover-unclustered'
+    ];
+    for (const fg of foreground) {
+      if (fg === layerId) continue;
+      if (this.map.getLayer(fg)) {
+        this.map.moveLayer(layerId, fg);
+        return;
+      }
+    }
   },
 
   _removePublicLandsLayer() {
