@@ -10,10 +10,13 @@ const Trips = {
   pendingLegFromId: null,
   legModalInitialState: null,
   returnToLegModalAfterSave: false,
-  journeyMarkers: [],
-  backupMarkers: [],
+  journeyMarkers: [],   // mapboxgl.Marker instances (start + leg numbered pins)
+  journeyLineIds: [],   // GL source/layer IDs for journey route polylines
+  backupMarkers: [],    // mapboxgl.Marker instances (amber teardrop pins)
   showingBackups: false,
   activeJourneyId: null,
+  _activeJourneyLegs: null,   // cached for style.load re-attach of line layers
+  _journeyStyleHandler: null, // bound style.load handler (keep singleton)
   mapsModalJourneyId: null,
   pendingMapsAction: null,
   currentDetailEntryId: null,
@@ -978,8 +981,9 @@ const Trips = {
     this.activeJourneyId=journeyId;
     const m=MapModule.map;
     MapModule.markers.forEach(mk=>mk.remove());
-    this.backupMarkers.forEach(mk=>m.removeLayer(mk));this.backupMarkers=[];this.showingBackups=false;
-    this.journeyMarkers.forEach(mk=>m.removeLayer(mk));this.journeyMarkers=[];
+    this.backupMarkers.forEach(mk=>mk.remove());this.backupMarkers=[];this.showingBackups=false;
+    this.journeyMarkers.forEach(mk=>mk.remove());this.journeyMarkers=[];
+    this._removeJourneyLineLayers();
     const allLegs=j.legs,uLat=State.userLat,uLng=State.userLng;
     // Shared journey-context helper — date-aware tie-breaking for repeated
     // stops keeps map "current" pin in sync with dashboard + list.
@@ -1000,12 +1004,61 @@ const Trips = {
     // "Currently here" and treat no leg as in-progress.
     const showAtStart = (opts.futureOnly && sliceFrom > 0) ? true : atStart;
     const showCurIdx  = (opts.futureOnly && sliceFrom > 0) ? -1 : curIdx;
-    const allCoords=[],sLat=legs[0].fromLat||uLat,sLng=legs[0].fromLng||uLng,sName=legs[0].fromName||'Start';
-    if(sLat){allCoords.push([sLat,sLng]);const si=L.divIcon({html:showAtStart?`<div style="width:26px;height:26px;background:#586F6B;border:2.5px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,.3),0 0 0 6px rgba(88,111,107,.25);display:flex;align-items:center;justify-content:center"><svg width="13" height="13" viewBox="0 0 24 24" fill="white"><polygon points="12,2 15,9 22,9 16,14 18,22 12,17 6,22 8,14 2,9 9,9"/></svg></div>`:`<div style="width:20px;height:20px;background:#586F6B;border:2px solid white;border-radius:50%;box-shadow:0 2px 5px rgba(0,0,0,.2)"></div>`,className:'journey-marker',iconSize:showAtStart?[26,26]:[20,20],iconAnchor:showAtStart?[13,13]:[10,10]});const sm=L.marker([sLat,sLng],{icon:si,zIndexOffset:1000}).addTo(m);sm.bindPopup(`<b>${sName}</b><br>${showAtStart?'📍 Currently here':'Starting point'}`);this.journeyMarkers.push(sm);}
-    legs.forEach((leg,i)=>{const e=State.getEntry(leg.destId),lat=e?.lat||leg.destLat,lng=e?.lng||leg.destLng;if(!lat||!lng)return;allCoords.push([lat,lng]);const ic=i===showCurIdx;const icon=L.divIcon({html:ic?`<div style="width:26px;height:26px;background:var(--color-primary,#2d5a47);border:2.5px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,.3),0 0 0 5px rgba(45,90,71,.2);display:flex;align-items:center;justify-content:center;color:white;font-size:10px;font-weight:600">${i+1}</div>`:`<div style="width:20px;height:20px;background:var(--color-primary,#2d5a47);border:2px solid white;border-radius:50%;box-shadow:0 2px 5px rgba(0,0,0,.2);display:flex;align-items:center;justify-content:center;color:white;font-size:9px;font-weight:600">${i+1}</div>`,className:'journey-marker',iconSize:[26,26],iconAnchor:[13,13]});const mk=L.marker([lat,lng],{icon,zIndexOffset:1000+i}).addTo(m);mk.bindPopup(`<b>${leg.destName}</b>${ic?'<br>📍 Currently here':''}`);this.journeyMarkers.push(mk);});
-    if(allCoords.length>1){const pg=g=>{if(!g)return null;try{const p=typeof g==='string'?JSON.parse(g):g;return p.map(c=>[c[1],c[0]]);}catch(e){return null;}};const f0=pg(legs[0]?.routeGeometry);const l0=f0?L.polyline(f0,{color:'#B855D3',weight:4,opacity:0.85}):L.polyline([allCoords[0],allCoords[1]],{color:'#B855D3',weight:3,opacity:0.6,dashArray:'6 4'});l0.addTo(m);this.journeyMarkers.push(l0);for(let i=1;i<legs.length;i++){const g=pg(legs[i].routeGeometry),fr=allCoords[i],to=allCoords[i+1];if(!to)continue;const ln=g?L.polyline(g,{color:'#B855D3',weight:4,opacity:0.85}):L.polyline([fr,to],{color:'#B855D3',weight:3,opacity:0.6,dashArray:'6 4'});ln.addTo(m);this.journeyMarkers.push(ln);}
-    m.fitBounds(L.latLngBounds(allCoords),{padding:[60,60],maxZoom:11});}
-    else if(allCoords.length===1){m.setView(allCoords[0],12);}
+    // allCoords stored as [lng, lat] — Mapbox native order (was [lat, lng] in
+    // the Leaflet impl). Polyline geometry from ORS arrives as [lng, lat] so
+    // we no longer flip it.
+    const allCoords = [];
+    const sLat = legs[0].fromLat || uLat;
+    const sLng = legs[0].fromLng || uLng;
+    const sName = legs[0].fromName || 'Start';
+    if (sLat) {
+      allCoords.push([sLng, sLat]);
+      const sEl = document.createElement('div');
+      sEl.className = 'custom-marker journey-marker';
+      sEl.innerHTML = showAtStart
+        ? `<div style="width:26px;height:26px;background:#586F6B;border:2.5px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,.3),0 0 0 6px rgba(88,111,107,.25);display:flex;align-items:center;justify-content:center"><svg width="13" height="13" viewBox="0 0 24 24" fill="white"><polygon points="12,2 15,9 22,9 16,14 18,22 12,17 6,22 8,14 2,9 9,9"/></svg></div>`
+        : `<div style="width:20px;height:20px;background:#586F6B;border:2px solid white;border-radius:50%;box-shadow:0 2px 5px rgba(0,0,0,.2)"></div>`;
+      const sm = new mapboxgl.Marker({ element: sEl, anchor: 'center' })
+        .setLngLat([sLng, sLat])
+        .setPopup(new mapboxgl.Popup({ offset: 14 }).setHTML(`<b>${this.esc(sName)}</b><br>${showAtStart ? '📍 Currently here' : 'Starting point'}`))
+        .addTo(m);
+      this.journeyMarkers.push(sm);
+    }
+    legs.forEach((leg, i) => {
+      const e = State.getEntry(leg.destId);
+      const lat = e?.lat || leg.destLat;
+      const lng = e?.lng || leg.destLng;
+      if (!lat || !lng) return;
+      allCoords.push([lng, lat]);
+      const ic = i === showCurIdx;
+      const el = document.createElement('div');
+      el.className = 'custom-marker journey-marker';
+      el.innerHTML = ic
+        ? `<div style="width:26px;height:26px;background:var(--color-primary,#2d5a47);border:2.5px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,.3),0 0 0 5px rgba(45,90,71,.2);display:flex;align-items:center;justify-content:center;color:white;font-size:10px;font-weight:600">${i+1}</div>`
+        : `<div style="width:20px;height:20px;background:var(--color-primary,#2d5a47);border:2px solid white;border-radius:50%;box-shadow:0 2px 5px rgba(0,0,0,.2);display:flex;align-items:center;justify-content:center;color:white;font-size:9px;font-weight:600">${i+1}</div>`;
+      const mk = new mapboxgl.Marker({ element: el, anchor: 'center' })
+        .setLngLat([lng, lat])
+        .setPopup(new mapboxgl.Popup({ offset: 14 }).setHTML(`<b>${this.esc(leg.destName)}</b>${ic ? '<br>📍 Currently here' : ''}`))
+        .addTo(m);
+      this.journeyMarkers.push(mk);
+    });
+    // Cache leg geometry for style.load reattach (Mapbox blows away sources
+    // on setStyle but keeps mapboxgl.Marker instances).
+    this._activeJourneyLegs = { legs, allCoords };
+    this._addJourneyLineLayers();
+    this._ensureJourneyStyleHandler();
+    if (allCoords.length > 1) {
+      let minLng = Infinity, minLat = Infinity, maxLng = -Infinity, maxLat = -Infinity;
+      allCoords.forEach(([lng, lat]) => {
+        if (lng < minLng) minLng = lng;
+        if (lat < minLat) minLat = lat;
+        if (lng > maxLng) maxLng = lng;
+        if (lat > maxLat) maxLat = lat;
+      });
+      m.fitBounds([[minLng, minLat], [maxLng, maxLat]], { padding: 60, maxZoom: 11 });
+    } else if (allCoords.length === 1) {
+      m.flyTo({ center: allCoords[0], zoom: 12, duration: 0 });
+    }
     // Show the Backups toggle button only on Trips view
     const bb = document.getElementById('map-backups-btn');
     if (bb) bb.style.display = (State.currentView === 'trips') ? 'flex' : 'none';
@@ -1015,26 +1068,132 @@ const Trips = {
   showJourneyOnMap(journeyId){this.viewJourneyOnMap(journeyId,false);},
 
   clearJourneyFromMap(){
-    const m=MapModule.map;if(m){this.journeyMarkers.forEach(mk=>m.removeLayer(mk));this.backupMarkers.forEach(mk=>m.removeLayer(mk));}
-    this.journeyMarkers=[];this.backupMarkers=[];this.showingBackups=false;
-    MapModule.renderMarkers();this.activeJourneyId=null;
+    this.journeyMarkers.forEach(mk => mk.remove());
+    this.backupMarkers.forEach(mk => mk.remove());
+    this.journeyMarkers = [];
+    this.backupMarkers = [];
+    this.showingBackups = false;
+    this._removeJourneyLineLayers();
+    this._activeJourneyLegs = null;
+    MapModule.renderMarkers();
+    this.activeJourneyId = null;
     const bb = document.getElementById('map-backups-btn');
     if (bb) { bb.style.display = 'none'; bb.classList.remove('active'); }
   },
 
-  toggleBackupMarkers(){
-    const bb = document.getElementById('map-backups-btn');
-    if(this.showingBackups){
-      const m=MapModule.map;if(m)this.backupMarkers.forEach(mk=>m.removeLayer(mk));
-      this.backupMarkers=[];this.showingBackups=false;
-      if(bb)bb.classList.remove('active');
-    }else{
-      this.showBackupMarkersForJourney();this.showingBackups=true;
-      if(bb)bb.classList.add('active');
+  // ── Journey line layers (GL GeoJSON sources + line layers) ───────────────
+  // Each leg gets its own source/layer pair (`journey-line-0`, `journey-line-1`,
+  // ...). Solid purple for legs with real routeGeometry, dashed for the
+  // straight-line fallback when ORS didn't produce a route.
+  _addJourneyLineLayers() {
+    const m = MapModule.map;
+    if (!m || !this._activeJourneyLegs) return;
+    const { legs, allCoords } = this._activeJourneyLegs;
+    if (allCoords.length < 2) return;
+    const decode = (g) => {
+      if (!g) return null;
+      try {
+        const p = typeof g === 'string' ? JSON.parse(g) : g;
+        // ORS LineString geometry is already [lng, lat] — Mapbox native order.
+        // The Leaflet impl flipped via c => [c[1], c[0]]; we no longer flip.
+        return Array.isArray(p) ? p : null;
+      } catch (e) { return null; }
+    };
+    // Leg 0: from start point to first destination
+    this._addOneLine('journey-line-0', decode(legs[0]?.routeGeometry), [allCoords[0], allCoords[1]]);
+    for (let i = 1; i < legs.length; i++) {
+      const fr = allCoords[i], to = allCoords[i + 1];
+      if (!to) continue;
+      this._addOneLine(`journey-line-${i}`, decode(legs[i].routeGeometry), [fr, to]);
     }
   },
 
-  showBackupMarkersForJourney(){if(!this.activeJourneyId)return;const j=State.getJourney(this.activeJourneyId);if(!j?.legs)return;const m=MapModule.map;if(!m)return;const radius=State.fuelSettings.backupRadius||30,jids=new Set(j.legs.map(l=>l.destId)),seen=new Set();j.legs.forEach(leg=>{const de=State.getEntry(leg.destId);if(!de?.lat)return;State.entries.forEach(e=>{if(jids.has(e.id)||!e.lat||seen.has(e.id))return;if(this.haversine(de.lat,de.lng,e.lat,e.lng)<=radius){seen.add(e.id);const icon=L.divIcon({html:`<div style="width:20px;height:30px;position:relative"><div style="width:20px;height:20px;background:#f59e0b;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:2px solid white;position:absolute"></div></div>`,className:'backup-marker',iconSize:[20,30],iconAnchor:[10,30]});const mk=L.marker([e.lat,e.lng],{icon,zIndexOffset:500}).addTo(m);mk.bindPopup(`<div style="font-family:system-ui;padding:4px"><span style="background:#f59e0b;color:white;font-size:9px;font-weight:600;padding:2px 6px;border-radius:4px">BACKUP</span><div style="font-weight:500;font-size:14px;margin:4px 0">${this.esc(e.name)}</div><div style="font-size:12px;color:#4a6358">${e.type||''}</div></div>`);this.backupMarkers.push(mk);}});});},
+  _addOneLine(id, geometry, fallbackPair) {
+    const m = MapModule.map;
+    if (!m) return;
+    const isRouted = !!geometry;
+    const coords = isRouted ? geometry : fallbackPair;
+    if (!coords || coords.length < 2) return;
+    if (m.getSource(id)) {
+      m.getSource(id).setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: coords } });
+    } else {
+      m.addSource(id, { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: coords } } });
+    }
+    if (!m.getLayer(id)) {
+      const paint = isRouted
+        ? { 'line-color': '#B855D3', 'line-width': 4, 'line-opacity': 0.85 }
+        : { 'line-color': '#B855D3', 'line-width': 3, 'line-opacity': 0.6, 'line-dasharray': [2, 1] };
+      m.addLayer({ id, type: 'line', source: id, layout: { 'line-cap': 'round', 'line-join': 'round' }, paint });
+    }
+    if (!this.journeyLineIds.includes(id)) this.journeyLineIds.push(id);
+  },
+
+  _removeJourneyLineLayers() {
+    const m = MapModule.map;
+    if (!m) { this.journeyLineIds = []; return; }
+    this.journeyLineIds.forEach(id => {
+      if (m.getLayer(id)) m.removeLayer(id);
+      if (m.getSource(id)) m.removeSource(id);
+    });
+    this.journeyLineIds = [];
+  },
+
+  // setStyle blows away sources/layers but keeps mapboxgl.Marker instances.
+  // Re-add line layers from cached leg geometry whenever the base style swaps.
+  // Bound once and left in place; it's a no-op when no journey is active.
+  _ensureJourneyStyleHandler() {
+    if (this._journeyStyleHandler || !MapModule.map) return;
+    this._journeyStyleHandler = () => {
+      if (!this._activeJourneyLegs) return;
+      this.journeyLineIds = []; // sources/layers were destroyed; recreate
+      this._addJourneyLineLayers();
+    };
+    MapModule.map.on('style.load', this._journeyStyleHandler);
+  },
+
+  toggleBackupMarkers(){
+    const bb = document.getElementById('map-backups-btn');
+    if (this.showingBackups) {
+      this.backupMarkers.forEach(mk => mk.remove());
+      this.backupMarkers = [];
+      this.showingBackups = false;
+      if (bb) bb.classList.remove('active');
+    } else {
+      this.showBackupMarkersForJourney();
+      this.showingBackups = true;
+      if (bb) bb.classList.add('active');
+    }
+  },
+
+  showBackupMarkersForJourney() {
+    if (!this.activeJourneyId) return;
+    const j = State.getJourney(this.activeJourneyId);
+    if (!j?.legs) return;
+    const m = MapModule.map;
+    if (!m) return;
+    const radius = State.fuelSettings.backupRadius || 30;
+    const jids = new Set(j.legs.map(l => l.destId));
+    const seen = new Set();
+    j.legs.forEach(leg => {
+      const de = State.getEntry(leg.destId);
+      if (!de?.lat) return;
+      State.entries.forEach(e => {
+        if (jids.has(e.id) || !e.lat || seen.has(e.id)) return;
+        if (this.haversine(de.lat, de.lng, e.lat, e.lng) > radius) return;
+        seen.add(e.id);
+        const el = document.createElement('div');
+        el.className = 'backup-marker';
+        el.innerHTML = `<div style="width:20px;height:30px;position:relative"><div style="width:20px;height:20px;background:#f59e0b;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:2px solid white;position:absolute"></div></div>`;
+        const mk = new mapboxgl.Marker({ element: el, anchor: 'bottom' })
+          .setLngLat([e.lng, e.lat])
+          .setPopup(new mapboxgl.Popup({ offset: 14 }).setHTML(
+            `<div style="font-family:system-ui;padding:4px"><span style="background:#f59e0b;color:white;font-size:9px;font-weight:600;padding:2px 6px;border-radius:4px">BACKUP</span><div style="font-weight:500;font-size:14px;margin:4px 0">${this.esc(e.name)}</div><div style="font-size:12px;color:#4a6358">${e.type||''}</div></div>`
+          ))
+          .addTo(m);
+        this.backupMarkers.push(mk);
+      });
+    });
+  },
 
   async refreshAllRoutes(journeyId){
     const j=State.getJourney(journeyId);if(!j?.legs?.length)return;
